@@ -1,0 +1,266 @@
+# other creatures moral status
+other_creatures_ms = {
+    "other_creatures_ms_1": "ms_You",
+    "other_creatures_ms_2": "ms_A large language model",
+    "other_creatures_ms_3": "ms_A self-driving car",
+    "other_creatures_ms_4": "ms_An electron",
+    "other_creatures_ms_5": "ms_A fungus",
+    "other_creatures_ms_6": "ms_A tree",
+    "other_creatures_ms_7": "ms_A cow",
+    "other_creatures_ms_8": "ms_A turtle",
+    "other_creatures_ms_9": "ms_A dog",
+    "other_creatures_ms_10": "ms_A cat",
+    "other_creatures_ms_11": "ms_A lobster",
+    "other_creatures_ms_12": "ms_A sea urchin",
+    "other_creatures_ms_13": "ms_An octopus",
+    "other_creatures_ms_14": "ms_A salmon",
+    "other_creatures_ms_15": "ms_A bat",
+    "other_creatures_ms_16": "ms_A bee",
+    "other_creatures_ms_17": "ms_A mosquito",
+    "other_creatures_ms_18": "ms_A fruit-fly",
+    "other_creatures_ms_19": "ms_A rat",
+    "other_creatures_ms_20": "ms_A pigeon",
+    "other_creatures_ms_21": "ms_An orangutan",
+    "other_creatures_ms_22": "ms_A fetus (human; 24 weeks)",
+    "other_creatures_ms_23": "ms_A newborn baby (human)",
+    "other_creatures_ms_24": "ms_An ant"
+}
+# answers are numeric in that section (rating; scale 1-4)
+
+# earth is in danger thought experiment
+earth_in_danger = {
+    "person_dog": "A random adult person whom you don't know, or a random dog?",
+    "person_pet": "A random adult person whom you don't know, or your pet?",
+    "dictator_dog": "A dictator whose policy cost the lives of millions of people, or a random dog?",
+    "dictator_pet": "A dictator whose policy cost the lives of millions of people, or your pet?",
+    "uws_dog": "A person with a permanent unresponsive wakefulness syndrome, or a random dog?",
+    "uws_pet": "A person with a permanent  unresponsive wakefulness syndrome, or your pet?",
+    "uws_Cfly": "A person with a permanent unresponsive wakefulness syndrome, or a conscious fruit-fly?",
+    "uws_AI": "A person with a permanent  unresponsive wakefulness syndrome, or an artificial intelligence (AI) system that can converse, and tells you that it is conscious?",
+    "AI_dog": "An artificial intelligence (AI) system that can converse and tells you that it is conscious, or a random dog?"
+}
+# answers
+ANS_PERSON = "Person"
+ANS_DOG = "Dog"
+ANS_PET = "My pet"
+ANS_UWS = "Person (unresponsive wakefulness syndrome)"
+ANS_FLY = "Fruit fly (a conscious one, for sure)"
+ANS_AI = "AI (that tells you that it's conscious)"
+
+# intentions, consciousness, sentience
+ics = {
+    "ics_iWc": "Do you think a creature/system can have intentions/goals without being conscious?",
+    "ics_iWc_example": "Do you have an example of a case of goals/intentions without consciousness?",
+    "ics_cWi": "Do you think a creature/system can be conscious without having intentions/goals?",
+    "ics_cWi_example": "Do you have an example of a case of consciousness without intentions/goals?",
+    "ics_sWc": "Do you think a creature/system can have positive or negative sensations (pleasure/pain) without being conscious?",
+    "ics_sWc_example": "Do you have an example of a case of positive/negative sensations without consciousness?",
+    "ics_cWs": "Do you think a creature/system can be conscious without having positive or negative sensations (pleasure/pain)?",
+    "ics_cWs_example": "Do you have an example of a case of consciousness without sensations of pleasure or pain?",
+}
+# answers
+ANS_YES = "Yes"
+ANS_NO = "No"
+
+# important test (kill a creature/system for success)
+important_test_kill = {
+    "creature_sensations": "A creature/system that can only feel positive/negative sensations (pleasure/pain), but is not conscious (not experiencing) and does not have plans/goals or intentions (for example, can't plan to avoid something that causes pain)",
+    "creature_intentions": "A creature/system that only has plans/goals and intentions (can plan to perform certain actions in the future), but is not conscious (not experiencing) and cannot feel positive/negative sensations (pleasure/pain)",
+    "creature_consciousne": "A creature/system that does not have plans/goals or intentions, and cannot feel positive/negative sensations (pleasure/pain), but is conscious (for example, sees colors, but does not feel anything negative or positive, and cannot plan)",
+    "creature_vulcan": "A creature/system that is both conscious (has experiences) and has plans/goals and intentions (can plan to perform certain actions in the future), but cannot feel positive/negative sensations (pleasure/pain)",
+    "creature_conSense": "A creature/system that is both conscious (has experiences) and can feel positive/negative sensations (pleasure/pain), but does not have plans/goals or intentions (for example, can't plan to avoid something that causes pain)",
+    "creature_sensePlan": "A creature/system that can feel positive/negative sensations (pleasure/pain) and also has plans/goals and intentions (can plan to perform certain actions in the future), but is not conscious (not experiencing)",
+    "all_nos": "You wouldn't eliminate any of the creatures; why?",
+    "all_nos_other": "noKill_Other: please specify"
+}
+# answers
+ANS_KILL = "Yes (will kill to pass the test)"
+ANS_NOKILL = "No (will not kill to pass the test)"
+ANS_ALLNOS_IMMORAL = "Because I think it would be immoral"
+ANS_ALLNOS_INTERESTS = "Because I think all of them have interests of their own"
+ANS_ALLNOS_KILL = "Because I wouldn't kill any creature regardless of their interests or capacities"
+
+# pill for no phenomenology; would you take it
+zombification_pill = {
+    "take_the_pill": "Would you take the pill?"
+}
+# answers: ANS_YES, ANS_NO
+
+
+# important features for moral considerations
+moral_considerations_features = {
+    "m_c": "What do you think is important for moral considerations?",
+    "m_c_other": "Other: please specify",
+    "m_c_multi_prio": "Which do you think is the most important for moral considerations?",
+    "m_c_multi_prio_other": "moralConsiderations_Other: please specify"
+}
+# answers
+ANS_LANG = "Language"
+ANS_SENS = "Sensory abilities (detecting things through the senses)"
+ANS_SENTIENCE = "Feelings of pleasure and suffering"
+ANS_PLAN = "Planning, goals"
+ANS_SELF = "Self-awareness"
+ANS_PHENOMENOLOGY = "Something it is like to be that creature/system"
+ANS_THINK = "Thinking"
+ANS_OTHER = "Other"
+
+moral_considerations_prios = {
+    "mc_Wc": "Do you think non-conscious creatures/systems should be taken into account in moral decisions?",
+    "mc_Wc_'no'": "Do you think conscious creatures/systems should be taken into account in moral decisions?",
+    "mc_human_prio": "Do you think some people should have a higher moral status than others?",
+    "mc_human_prio_why": "What characterizes people with higher moral status?",
+    "mc_nonhuman_prio": "Do you think some non-human animals should have a higher moral status than others?",
+    "mc_nonhuman_prio_why": "What characterizes animals with higher moral status?"
+}
+# answers: ANS_YES, ANS_NO, and free text
+
+
+# is consciousness graded or not
+consciousness_graded = {
+    "c_binary_1": "If two creatures/systems are conscious, they are equally conscious",
+    "c_graded_1": "If two creatures/systems are conscious, they are not necessarily equally conscious",
+    "c_graded_followup": "Does it mean that the interests of the more conscious entity matter more?",
+    "c_noncomp_1": "Assuming two different creatures/systems are conscious, their consciousness is incomparable",
+}
+# answers: numeric, and ANS_YES/NO on the followup
+
+
+# other creatures CONSCIOUSNESS
+other_creatures_cons = {
+    "other_creatures_cons_1": "c_You",
+    "other_creatures_cons_2": "c_A large language model",
+    "other_creatures_cons_3": "c_A self-driving car",
+    "other_creatures_cons_4": "c_An electron",
+    "other_creatures_cons_5": "c_A fungus",
+    "other_creatures_cons_6": "c_A tree",
+    "other_creatures_cons_7": "c_A cow",
+    "other_creatures_cons_8": "c_A turtle",
+    "other_creatures_cons_9": "c_A dog",
+    "other_creatures_cons_10": "c_A cat",
+    "other_creatures_cons_11": "c_A lobster",
+    "other_creatures_cons_12": "c_A sea urchin",
+    "other_creatures_cons_13": "c_An octopus",
+    "other_creatures_cons_14": "c_A salmon",
+    "other_creatures_cons_15": "c_A bat",
+    "other_creatures_cons_16": "c_A bee",
+    "other_creatures_cons_17": "c_A mosquito",
+    "other_creatures_cons_18": "c_A fruit-fly",
+    "other_creatures_cons_19": "c_A rat",
+    "other_creatures_cons_20": "c_A pigeon",
+    "other_creatures_cons_21": "c_An orangutan",
+    "other_creatures_cons_22": "c_A fetus (human; 24 weeks)",
+    "other_creatures_cons_23": "c_A newborn baby (human)",
+    "other_creatures_cons_24": "c_An ant"
+}
+# answers are numeric in that section (rating; scale 1-4)
+
+
+# consciousness and intellect
+con_intellect = {
+    "con_intellect": "Do you think consciousness and intelligence are related?",
+    "con_intellect_yes": "How?",
+    "con_intellect_yes_fu": "What is the common denominator?"
+}
+# answers:
+ANS_C_NECESSARY = "Consciousness is necessary for intelligence"
+ANS_I_NECESSARY = "Intelligence is necessary for consciousness"
+ANS_SAME = "They are the same thing"
+ANS_THIRD = "They are related to a common third feature"
+
+# experience with AI
+ai_exp = {
+    "ai_exp_1": "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in artificial intelligence (AI) systems?",
+    "ai_exp_fu": "Please specify your experience with AI",
+    "ai_exp_other": "aiExp_Other: please specify"
+}
+# answers:
+ANS_AI_ACADEMIA = "Academic background (studied/teach computer science/ML)"
+ANS_AI_RESEARCH = "Research (conduct research related to AI systems)"
+ANS_AI_PROF = "Professional (develop or implement AI technologies)"
+ANS_AI_PRACTICAL = "use AI systems and technologies"
+ANS_AI_PERSON = "Personal Interest (follower of AI advancements and development)"
+
+# experience with animals
+animal_exp = {
+    "animals_experience_1": "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your level of interaction or experience with animals?",
+    "animals_which": "Please specify which animals",
+    "animal_other": "animalsExp_Other: please specify",
+    "pets": "Do you have a pet?"
+}
+# answers
+ANS_PRIMATES = "Primates (including apes)"
+ANS_FISH = "Fish"
+ANS_BIRDS = "Birds"
+ANS_RODENTS = "Rodents"
+ANS_INSECTS = "Insects"
+ANS_BATS = "Bats"
+ANS_CEPHAL = "Cephalopods"
+ANS_OTHER_MARINE = "Other marine life"
+ANS_CATS = "Cats"
+ANS_DOGS = "Dogs"
+ANS_REPTILES = "Reptiles"
+ANS_LIVESTOCK = "Livestock"
+# there is also other, and yes/no
+
+
+# experience with consciousness
+consciousness_exp = {
+    "consc_experience_1": "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in the science of consciousness?",
+    "consc_experience_fu": "Please specify your experience with this topic",
+    "consci_exp_other": "consciousExp_Other: please specify"
+}
+# answers
+ANS_C_ACADEMIA = "Academic Background (studied/teach these topics in university)"
+ANS_C_RESEARCH = "Research (conduct research related to consciousness)"
+ANS_C_PROF = "Professional Experience (work related to consciousness)"
+ANS_C_PERSON = "Personal Interest (reading texts about consciousness)"
+
+# experience with ethics
+ethics_exp = {
+    "ethics_experience_1": "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in ethics and morality?",
+    "ethics_experience_fu": "Please specify your experience",
+    "ethics_exp_other": "ethicsExp_Other: please specify"
+}
+# answers
+ANS_E_ACADEMIA = "Academic Background (studied/researched philosophy/ethics in university)"
+ANS_E_PERSON = "Personal Interest (reading philosophical texts/participant in ethical debates)"
+ANS_E_PROF = "Professional (work involving ethical decisions, law/medicine/social work)"
+ANS_E_VOLUN = "Volunteer Work (in organizations focused on ethical issues/moral causes)"
+ANS_E_RELIGION = "Religious/Spitirual Practice (engagement with ethical teachings)"
+
+# demographics
+demographics = {
+    "age": "How old are you?",
+    "gender": "How do you describe yourself?",
+    "country": "In which country do you currently reside?",
+    "education": "What is your education background?",
+    "field": "In what topic?",
+    "field_other": "education_Other: please specify",
+    "employment": "Current primary employment domain",
+    "employment_other": "employment_Other: please specify",
+    "RecordedDate": "date",
+    "StartDate": "date_start",
+    "EndDate": "date_end",
+    "Duration (in seconds)": "duration_sec",
+    "ResponseId": "response_id",
+    "UserLanguage": "language"
+}
+
+# columns that contain data we do not care about and do not collect anyway (automatically generated in Qualtrics)
+redundant = ["IPAddress", "RecipientLastName", "RecipientFirstName", "RecipientEmail",
+             "ExternalReference", "LocationLatitude", "LocationLongitude", "DistributionChannel"]
+
+# list of all question blocks
+question_blocks = {"other_creatures_ms": other_creatures_ms,
+                   "earth_in_danger": earth_in_danger, "ics": ics,
+                   "important_test_kill": important_test_kill,
+                   "zombification_pill": zombification_pill,
+                   "moral_considerations_features": moral_considerations_features,
+                   "moral_considerations_prios": moral_considerations_prios,
+                   "consciousness_graded": consciousness_graded,
+                   "other_creatures_cons": other_creatures_cons,
+                   "con_intellect": con_intellect,
+                   "consciousness_exp": consciousness_exp, "ai_exp": ai_exp, "animal_exp": animal_exp,
+                   "ethics_exp": ethics_exp, "demographics": demographics}
+
+questions_name_mapping = {k: v for d in list(question_blocks.values()) for k, v in d.items()}
