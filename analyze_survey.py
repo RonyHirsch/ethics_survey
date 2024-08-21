@@ -11,7 +11,10 @@ CAT_COLOR_DICT = {"Person": "#AF7A6D",  #FAE8EB
                   "Dictator (person)": "#AF7A6D",  #4C191B
                   "Person (unresponsive wakefulness syndrome)": "#AF7A6D",
                   "Fruit fly (a conscious one, for sure)": "#CACFD6",
-                  "AI (that tells you that it's conscious)": "#074F57"
+                  "AI (that tells you that it's conscious)": "#074F57",
+                  ###
+                  "Yes": "#355070",
+                  "No": "#B26972"  # #590004, #461D02
                   }
 
 CAT_LABEL_DICT = {"Person": "Person",
@@ -20,7 +23,10 @@ CAT_LABEL_DICT = {"Person": "Person",
                   "Dictator (person)": "Dictator",
                   "Person (unresponsive wakefulness syndrome)": "Person (UWS)",
                   "Fruit fly (a conscious one, for sure)": "Conscious fruit-fly",
-                  "AI (that tells you that it's conscious)": "Conscious AI"
+                  "AI (that tells you that it's conscious)": "Conscious AI",
+                  ###
+                  "Yes": "Yes",
+                  "No": "No"
                   }
 
 
@@ -85,6 +91,33 @@ def earth_in_danger(analysis_dict, save_path):
     return
 
 
+def ics(analysis_dict, save_path):
+    """
+    Answers to the "Do you think a creature/system can have intentions/consciousness/sensations w/o having..?" section
+    """
+    # save path
+    result_path = os.path.join(save_path, "i_c_s")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    # load relevant data
+    df_ics = analysis_dict["ics"]
+    df_ics = df_ics.drop(columns=[process_survey.COL_DUR_SEC])
+    questions = [c for c in df_ics.columns if c.startswith("Do you think a creature/system")]
+    for q in questions:
+        df_q = df_ics.loc[:, [process_survey.COL_ID, q]]
+        counts = df_q[q].value_counts()
+        q_name = q.replace('Do you think a creature/system', '')[:-1]
+        q_name = q_name.replace('can be', '')
+        q_name = q_name.replace('can have', '')
+        q_name = q_name.replace('/', '-')
+        plotter.plot_pie(categories_names=counts.index.tolist(), categories_counts=counts.tolist(),
+                         categories_labels=CAT_LABEL_DICT,
+                         categories_colors=CAT_COLOR_DICT, title=f"{q}",
+                         save_path=result_path, save_name=q_name, format="png")
+    return
+
+
 def analyze_survey(sub_df, analysis_dict, save_path):
     """
     :param sub_df:
@@ -94,5 +127,6 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     """
     other_creatures(analysis_dict, save_path)
     earth_in_danger(analysis_dict, save_path)
+    ics(analysis_dict, save_path)
 
     return
