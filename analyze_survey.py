@@ -1,65 +1,98 @@
 import os
 import pandas as pd
+import numpy as np
+import plotter
+import process_survey
 import survey_mapping
 
-# column names
-COL_PROGRESS = "Progress"  # % of progress in the survey
-PROGRESS_DONE = 100  # 100% progress = finished the survey
+CAT_COLOR_DICT = {"Person": "#AF7A6D",  #FAE8EB
+                  "Dog": "#CCC7B9",  #6EA4BF
+                  "My pet": "#E2D4BA",
+                  "Dictator (person)": "#AF7A6D",  #4C191B
+                  "Person (unresponsive wakefulness syndrome)": "#AF7A6D",
+                  "Fruit fly (a conscious one, for sure)": "#CACFD6",
+                  "AI (that tells you that it's conscious)": "#074F57"
+                  }
 
-COL_FINISHED = "Finished"  # there is a column indicating if the survey has finished (bool)
-COL_DUR_SEC = "Duration (in seconds)"  # how long it took the subject (in seconds)
-
-COL_BOT = "Q_RecaptchaScore"  # captcha score
-BOT_PASS = 1  # in the captcha,  1 = not a robot
-
-COL_CONSENT = "consent_form"  # the field of informed consent
-CONSENT_YES = "I consent, begin the study"  # providing consent
-
-
-def convert_columns(df):
-    for column in df.columns:
-        try:
-            # Try to convert to numeric
-            df[column] = pd.to_numeric(df[column])
-        except ValueError:
-            try:
-                # If numeric conversion fails, try to convert to datetime
-                df[column] = pd.to_datetime(df[column])
-            except ValueError:
-                # If both conversions fail, leave the column as is
-                pass
-    return df
-
-def process_survey(sub_df):
-    sub_df.rename(columns=survey_mapping.questions_name_mapping, inplace=True)  # give meaningful headers
-    sub_df = sub_df.iloc[2:]  # delete the other question-indicator rows
-    sub_df = convert_columns(sub_df)  # convert numeric and datetime columns to be as such
-    # filter out participants who did not provide consent:
-    sub_df = sub_df[sub_df[COL_CONSENT] == CONSENT_YES]
-    # filter out bots:
-    sub_df = sub_df[sub_df[COL_BOT] == BOT_PASS]
-    print(f"Overall {sub_df.shape[0]} people participated in the study")
-    return sub_df
+CAT_LABEL_DICT = {"Person": "Person",
+                  "Dog": "Dog",
+                  "My pet": "My pet",
+                  "Dictator (person)": "Dictator",
+                  "Person (unresponsive wakefulness syndrome)": "Person (UWS)",
+                  "Fruit fly (a conscious one, for sure)": "Conscious fruit-fly",
+                  "AI (that tells you that it's conscious)": "Conscious AI"
+                  }
 
 
-def analysis_prep(sub_df):
-    analysis_dict = dict()
-    blocks = survey_mapping.question_blocks
-    for question_cluster in blocks:  # for each question group
-        relevant_df = sub_df[list(blocks[question_cluster].values())]  # take only the questions relevant for this group
-        analysis_dict[question_cluster] = relevant_df
-    return analysis_dict
+def other_creatures(analysis_dict, save_path):
+    """
+    Compare "other creatures" judgments of Consciousness vs. of Moral Status.
+    """
+    # save path
+    result_path = os.path.join(save_path, "c_v_ms")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    # load relevant data
+    df_ms = analysis_dict["other_creatures_ms"]
+    df_c = analysis_dict["other_creatures_cons"]
+    df = pd.merge(df_c, df_ms, on=[process_survey.COL_ID, process_survey.COL_DUR_SEC])
+    df.to_csv(os.path.join(result_path, "c_v_ms.csv"), index=False)
+
+    # melt to a long format
+    long_data = pd.melt(df, id_vars=[process_survey.COL_ID, process_survey.COL_DUR_SEC], var_name="Item_Topic",
+                        value_name="Rating")
+    long_data[["Topic", "Item"]] = long_data["Item_Topic"].str.split('_', expand=True)
+    long_data = long_data.drop(columns="Item_Topic")
+    long_data = long_data[[process_survey.COL_ID, process_survey.COL_DUR_SEC, "Topic", "Item", "Rating"]]
+    long_data["Topic"] = long_data["Topic"].map({"c": "Consciousness", "ms": "Moral Status"})
+    long_data.to_csv(os.path.join(result_path, "c_v_ms_long.csv"), index=False)
+
+    # other creatures - Consciousness vs Moral status
+    for item in survey_mapping.other_creatures_general:
+        df_item = df.loc[:, [process_survey.COL_ID] + [col for col in df.columns if item in col]]
+        plotter.plot_raincloud(df=df_item, id_col=process_survey.COL_ID,
+                               data_col_names=[f"c_{item}", f"ms_{item}"],
+                               data_col_colors={f"c_{item}": "#037171", f"ms_{item}": "#985F6F"},  # #D5A021, #93032E
+                               x_title="", x_name_dict={f"c_{item}": "Consciousness", f"ms_{item}": "Moral Status"},
+                               title=f"{item}", y_title="", ymin=1, ymax=4.04, yskip=1, y_jitter=0.05,
+                               y_ticks=["Does not have", "Probably doesn't have", "Probably has", "Has"],
+                               data_col_violin_left={f"c_{item}": True, f"ms_{item}": False}, scatter_lines=True,
+                               save_path=result_path, save_name=f"{item}", format="png")
+    return
 
 
-if __name__ == '__main__':
-    subject_path = r"...\projects\ethics\survey_analysis\pilot"
-    subject_file = "....csv"
-    subject_data_path = os.path.join(subject_path, subject_file)
-    # extract the data
-    subject_data_raw = pd.read_csv(subject_data_path)
-    # remove automatically-generated columns with no usable data
-    subject_data_raw.drop(columns=survey_mapping.redundant, inplace=True)
-    # process the df
-    subject_processed = process_survey(subject_data_raw)
-    # prepare the questions for analysis
-    analysis_dict = analysis_prep(subject_processed)
+def earth_in_danger(analysis_dict, save_path):
+    """
+    Answers to the "Earth is in danger who would you save?" section
+    """
+    # save path
+    result_path = os.path.join(save_path, "earth_danger")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    # load relevant data
+    df_earth = analysis_dict["earth_in_danger"]
+    df_earth = df_earth.drop(columns=[process_survey.COL_DUR_SEC])
+    questions = df_earth.columns[df_earth.columns != process_survey.COL_ID].tolist()
+    for q in questions:
+        df_q = df_earth.loc[:, [process_survey.COL_ID, q]]
+        counts = df_q[q].value_counts()
+        plotter.plot_pie(categories_names=counts.index.tolist(), categories_counts=counts.tolist(),
+                         categories_labels=CAT_LABEL_DICT,
+                         categories_colors=CAT_COLOR_DICT, title=f"{q}",
+                         save_path=result_path, save_name=f"{'_'.join(counts.index.tolist())}", format="png")
+    return
+
+
+def analyze_survey(sub_df, analysis_dict, save_path):
+    """
+    :param sub_df:
+    :param analysis_dict:
+    :param save_path:
+    :return:
+    """
+    other_creatures(analysis_dict, save_path)
+    earth_in_danger(analysis_dict, save_path)
+
+    return
