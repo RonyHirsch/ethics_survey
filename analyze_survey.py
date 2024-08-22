@@ -118,6 +118,33 @@ def ics(analysis_dict, save_path):
     return
 
 
+def kill_for_test(analysis_dict, save_path):
+    """
+    Answers to the "Do you think a creature/system can have intentions/consciousness/sensations w/o having..?" section
+    """
+    # save path
+    result_path = os.path.join(save_path, "kill_for_test")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    # load relevant data
+    df_test = analysis_dict["important_test_kill"]
+    df_test = df_test.drop(columns=[process_survey.COL_DUR_SEC])
+    questions = [c for c in df_test.columns if c.startswith("A creature/system that")]
+    for q in questions:
+        q_name = survey_mapping.important_test_kill_tokens[q]
+        df_q = df_test.loc[:, [process_survey.COL_ID, q]]
+        counts = df_q[q].value_counts()
+        labels = {l: l.replace(' to pass the test', '') for l in counts.index.tolist()}
+        colors = {l: CAT_COLOR_DICT[l.split(' ', 1)[0]] for l in counts.index.tolist()}
+        plotter.plot_pie(categories_names=counts.index.tolist(), categories_counts=counts.tolist(),
+                         categories_labels=labels,
+                         categories_colors=colors, title=f"{q}",
+                         save_path=result_path, save_name=q_name, format="png")
+
+    return
+
+
 def analyze_survey(sub_df, analysis_dict, save_path):
     """
     :param sub_df:
@@ -128,5 +155,6 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     other_creatures(analysis_dict, save_path)
     earth_in_danger(analysis_dict, save_path)
     ics(analysis_dict, save_path)
+    kill_for_test(analysis_dict, save_path)
 
     return

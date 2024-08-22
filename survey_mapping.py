@@ -101,6 +101,16 @@ important_test_kill = {
     "all_nos": "You wouldn't eliminate any of the creatures; why?",
     "all_nos_other": "noKill_Other: please specify"
 }
+
+important_test_kill_tokens = {
+    "A creature/system that can only feel positive/negative sensations (pleasure/pain), but is not conscious (not experiencing) and does not have plans/goals or intentions (for example, can't plan to avoid something that causes pain)": "Sensations sans Consciousness & Intentions",
+    "A creature/system that only has plans/goals and intentions (can plan to perform certain actions in the future), but is not conscious (not experiencing) and cannot feel positive/negative sensations (pleasure/pain)": "Intentions sans Consciousness & Sensations",
+    "A creature/system that does not have plans/goals or intentions, and cannot feel positive/negative sensations (pleasure/pain), but is conscious (for example, sees colors, but does not feel anything negative or positive, and cannot plan)": "Consciouenss sans Sensations & Intentions",
+    "A creature/system that is both conscious (has experiences) and has plans/goals and intentions (can plan to perform certain actions in the future), but cannot feel positive/negative sensations (pleasure/pain)": "Vulcan (Consciousness & Intentions, sans Sensations)",
+    "A creature/system that is both conscious (has experiences) and can feel positive/negative sensations (pleasure/pain), but does not have plans/goals or intentions (for example, can't plan to avoid something that causes pain)": "Consciousness & Sensations, sans Intentions",
+    "A creature/system that can feel positive/negative sensations (pleasure/pain) and also has plans/goals and intentions (can plan to perform certain actions in the future), but is not conscious (not experiencing)": "Sensations & Intentions, sans Consciousness"
+}
+
 # answers
 ANS_KILL = "Yes (will kill to pass the test)"
 ANS_NOKILL = "No (will not kill to pass the test)"
