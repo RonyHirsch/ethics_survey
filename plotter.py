@@ -12,7 +12,8 @@ def plot_raincloud(df, id_col, data_col_names, data_col_colors, save_path, save_
                    x_title, x_name_dict, title,
                    y_title, ymin, ymax, yskip, y_ticks=None, y_jitter=0,
                    data_col_violin_left=None, violin_alpha=0.65, violin_width=0.5, group_spacing=0.5,
-                   marker_spread=0.1, marker_size=100, marker_alpha=0.25, scatter_lines=True, format="svg"):
+                   marker_spread=0.1, marker_size=100, marker_alpha=0.25, scatter_lines=True, format="svg",
+                   size_inches_x=15, size_inches_y=12):
     # ids
     ids = df[id_col].unique().tolist()
     # X axis params
@@ -99,7 +100,7 @@ def plot_raincloud(df, id_col, data_col_names, data_col_colors, save_path, save_
 
     # save plot
     figure = plt.gcf()  # get current figure
-    figure.set_size_inches(15, 12)
+    figure.set_size_inches(size_inches_x, size_inches_y)
     if format == "svg":
         plt.savefig(os.path.join(save_path, f"{save_name}.svg"), format="svg", dpi=1000, bbox_inches='tight', pad_inches=0.01)
     if format == "png":
@@ -109,10 +110,13 @@ def plot_raincloud(df, id_col, data_col_names, data_col_colors, save_path, save_
     return
 
 
-def plot_pie(categories_names, categories_counts, categories_colors, categories_labels, title,
-             save_path, save_name, format="svg"):
+def plot_pie(categories_names, categories_counts, categories_colors, title,
+             save_path, save_name, format="svg", categories_labels=None):
     categories_colors_list = [categories_colors[cat] for cat in categories_names]
-    categories_labels_list = [categories_labels[cat] for cat in categories_names]
+    if categories_labels is not None:
+        categories_labels_list = [categories_labels[cat] for cat in categories_names]
+    else:
+        categories_labels_list = categories_names
 
     # pie order
     startangle = 180 - (categories_counts[0] / sum(categories_counts)) * 180
