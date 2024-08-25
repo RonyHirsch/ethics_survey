@@ -312,7 +312,7 @@ def consciousness_intelligence(analysis_dict, save_path):
 
     con_intellect = analysis_dict["con_intellect"]
     con_intellect = con_intellect.drop(columns=[process_survey.COL_DUR_SEC])
-    question ="Do you think consciousness and intelligence are related?"
+    question = "Do you think consciousness and intelligence are related?"
     category_counts = con_intellect[question].value_counts()
     plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
                      categories_colors=CAT_COLOR_DICT, title=f"{question}",
@@ -337,6 +337,33 @@ def consciousness_intelligence(analysis_dict, save_path):
     return
 
 
+def demographics(analysis_dict, save_path):
+    """
+    Answers to the cluster of questions about participant demographics
+    """
+    # save path
+    result_path = os.path.join(save_path, "demographics")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    demographic_colors = {"Male": "#084887",
+                          "Female": "#F58A07",
+                          "Non-binary": "#A3ADCC",
+                          "Prefer not to say": "#E7A391",
+                          "Genderqueer": "#805FBF"
+                          }
+
+    con_demo = analysis_dict["demographics"]
+    con_demo = con_demo.drop(columns=[process_survey.COL_DUR_SEC])
+    # gender
+    gender = "How do you describe yourself?"
+    category_counts = con_demo[gender].value_counts()
+    plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
+                     categories_colors=demographic_colors, title=f"{gender}",
+                     save_path=result_path, save_name=f"gender", format="png")
+    return
+
+
 def analyze_survey(sub_df, analysis_dict, save_path):
     """
     :param sub_df:
@@ -344,6 +371,7 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     :param save_path:
     :return:
     """
+    demographics(analysis_dict, save_path)
     other_creatures(analysis_dict, save_path)
     earth_in_danger(analysis_dict, save_path)
     ics(analysis_dict, save_path)
