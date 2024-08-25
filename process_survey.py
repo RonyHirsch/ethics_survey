@@ -70,7 +70,9 @@ def process_values(sub_df):
     However, Qualtrics allowed them to also select "0". Therefore, we will code "0" as "1": does not have".
     """
     other_creature_cols = [col for col in sub_df.columns for item in survey_mapping.other_creatures_general if item in col]
-    sub_df[other_creature_cols] = sub_df[other_creature_cols].replace(0, 1)
+    additional_cols = ["If two creatures/systems are conscious, they are equally conscious"]
+    cols = other_creature_cols + additional_cols
+    sub_df[cols] = sub_df[cols].replace(0, 1)
     return sub_df
 
 
@@ -96,12 +98,11 @@ if __name__ == '__main__':
     subject_data_raw = pd.read_csv(subject_data_path)
     # remove automatically-generated columns with no usable data
     subject_data_raw.drop(columns=survey_mapping.redundant, inplace=True)
-    # if sample is paid, there are a few more columns to take care of to ensure de-identification
-    subject_data_raw.drop(columns=survey_mapping.prolific_redundant, inplace=True, errors="ignore")
 
     # process the df
     subject_processed = process_survey(subject_data_raw)
+    subject_processed.to_csv(os.path.join(save_path, "processed_data.csv"), index=False)
     # prepare the questions for analysis
-    analysis_dict = analysis_prep(subject_processed)
+    subject_dict = analysis_prep(subject_processed)
     # analyze survey
-    analyze_survey.analyze_survey(subject_processed, analysis_dict, save_path)
+    analyze_survey.analyze_survey(subject_processed, subject_dict, save_path)

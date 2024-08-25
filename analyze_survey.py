@@ -301,6 +301,42 @@ def graded_consciousness(analysis_dict, save_path):
     return
 
 
+def consciousness_intelligence(analysis_dict, save_path):
+    """
+    Answers to the cluster of questions about the relationship between consciousness and intelligence
+    """
+    # save path
+    result_path = os.path.join(save_path, "consciousness_intelligence")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    con_intellect = analysis_dict["con_intellect"]
+    con_intellect = con_intellect.drop(columns=[process_survey.COL_DUR_SEC])
+    question ="Do you think consciousness and intelligence are related?"
+    category_counts = con_intellect[question].value_counts()
+    plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
+                     categories_colors=CAT_COLOR_DICT, title=f"{question}",
+                     save_path=result_path, save_name=f"{question.replace('?', '').replace('/', '-')}", format="png")
+
+    follow_up = "How?"
+    con_intellect_how = con_intellect[con_intellect[follow_up].notnull()]
+    category_counts = con_intellect_how[follow_up].value_counts()
+    category_colors = {survey_mapping.ANS_C_NECESSARY: "#F7F0F5",
+                       survey_mapping.ANS_I_NECESSARY: "#DECBB7",
+                       survey_mapping.ANS_SAME: "#8F857D",
+                       survey_mapping.ANS_THIRD: "#5C5552",
+                       }
+    plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
+                     categories_colors=category_colors, title=f"{follow_up}",
+                     save_path=result_path, save_name=f"{follow_up.replace('?', '').replace('/', '-')}", format="png")
+
+    common_denominator = "What is the common denominator?"
+    con_intellect_d = con_intellect[con_intellect[common_denominator].notnull()]
+    con_intellect_d.to_csv(os.path.join(result_path, "common_denominator.csv"), index=False)
+
+    return
+
+
 def analyze_survey(sub_df, analysis_dict, save_path):
     """
     :param sub_df:
@@ -316,5 +352,6 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     moral_consideration_features(analysis_dict, save_path)
     moral_considreation_prios(analysis_dict, save_path)
     graded_consciousness(analysis_dict, save_path)
+    consciousness_intelligence(analysis_dict, save_path)
 
     return
