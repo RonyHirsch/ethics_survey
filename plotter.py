@@ -2,6 +2,7 @@ import os
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 # Modify the default font settings
 mpl.rcParams['font.family'] = 'sans-serif'  # Change to serif fonts
@@ -110,9 +111,13 @@ def plot_raincloud(df, id_col, data_col_names, data_col_colors, save_path, save_
     return
 
 
-def plot_pie(categories_names, categories_counts, categories_colors, title,
-             save_path, save_name, format="svg", categories_labels=None):
-    categories_colors_list = [categories_colors[cat] for cat in categories_names]
+def plot_pie(categories_names, categories_counts, title,
+             save_path, save_name, format="svg", categories_colors=None, categories_labels=None):
+    if categories_colors is not None:
+        categories_colors_list = [categories_colors[cat] for cat in categories_names]
+    else:
+        categories_colors_list = sns.color_palette("colorblind", len(categories_names))
+
     if categories_labels is not None:
         categories_labels_list = [categories_labels[cat] for cat in categories_names]
     else:

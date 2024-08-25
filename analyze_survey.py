@@ -355,12 +355,40 @@ def demographics(analysis_dict, save_path):
 
     con_demo = analysis_dict["demographics"]
     con_demo = con_demo.drop(columns=[process_survey.COL_DUR_SEC])
+
     # gender
     gender = "How do you describe yourself?"
     category_counts = con_demo[gender].value_counts()
     plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
                      categories_colors=demographic_colors, title=f"{gender}",
                      save_path=result_path, save_name=f"gender", format="png")
+
+    # country
+    country = "In which country do you currently reside?"
+    category_counts = con_demo[country].value_counts()
+    plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
+                     categories_colors=None, title=f"{country}",
+                     save_path=result_path, save_name=f"country", format="png")
+
+    # education
+    education = "What is your education background?"
+    category_counts = con_demo[education].value_counts()
+    plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
+                     categories_colors=None, title=f"{education}",
+                     save_path=result_path, save_name=f"education", format="png")
+    # education field
+    field = "In what topic?"
+    category_counts = con_demo[field].value_counts()
+    plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
+                     categories_colors=None, title=f"{field}",
+                     save_path=result_path, save_name=f"field", format="png")
+
+    # employment
+    employment = "Current primary employment domain"
+    category_counts = con_demo[employment].value_counts()
+    plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
+                     categories_colors=None, title=f"{employment}",
+                     save_path=result_path, save_name=f"employment", format="png")
     return
 
 
