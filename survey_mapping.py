@@ -25,6 +25,31 @@ other_creatures_general = [
     "An ant"
 ]
 
+other_creatures_isNonHumanAnimal = {"You": 0,
+                                    "A large language model": 0,
+                                    "A self-driving car": 0,
+                                    "An electron": 0,
+                                    "A fungus": 0,
+                                    "A tree": 0,
+                                    "A cow": 1,
+                                    "A turtle": 1,
+                                    "A dog": 1,
+                                    "A cat": 1,
+                                    "A lobster": 1,
+                                    "A sea urchin": 1,
+                                    "An octopus": 1,
+                                    "A salmon": 1,
+                                    "A bat": 1,
+                                    "A bee": 1,
+                                    "A mosquito": 1,
+                                    "A fruit-fly": 1,
+                                    "A rat": 1,
+                                    "A pigeon": 1,
+                                    "An orangutan": 1,
+                                    "A fetus (human; 24 weeks)": 0,
+                                    "A newborn baby (human)": 0,
+                                    "An ant": 1}
+
 # other creatures moral status
 other_creatures_ms = {
     "other_creatures_ms_1": "ms_You",
@@ -56,24 +81,66 @@ other_creatures_ms = {
 # answers are numeric in that section (rating; scale 1-4)
 
 # earth is in danger thought experiment
+
+Q_PERSON_DOG = "A random adult person whom you don't know, or a random dog?"
+Q_PERSON_PET = "A random adult person whom you don't know, or your pet?"
+Q_DICTATOR_DOG = "A dictator whose policy cost the lives of millions of people, or a random dog?"
+Q_DICTATOR_PET = "A dictator whose policy cost the lives of millions of people, or your pet?"
+Q_UWS_DOG = "A person with a permanent unresponsive wakefulness syndrome, or a random dog?"
+Q_UWS_PET = "A person with a permanent  unresponsive wakefulness syndrome, or your pet?"
+Q_UWS_FLY = "A person with a permanent unresponsive wakefulness syndrome, or a conscious fruit-fly?"
+Q_UWS_AI = "A person with a permanent  unresponsive wakefulness syndrome, or an artificial intelligence (AI) system that can converse, and tells you that it is conscious?"
+Q_AI_DOG = "An artificial intelligence (AI) system that can converse and tells you that it is conscious, or a random dog?"
+
 earth_in_danger = {
-    "person_dog": "A random adult person whom you don't know, or a random dog?",
-    "person_pet": "A random adult person whom you don't know, or your pet?",
-    "dictator_dog": "A dictator whose policy cost the lives of millions of people, or a random dog?",
-    "dictator_pet": "A dictator whose policy cost the lives of millions of people, or your pet?",
-    "uws_dog": "A person with a permanent unresponsive wakefulness syndrome, or a random dog?",
-    "uws_pet": "A person with a permanent  unresponsive wakefulness syndrome, or your pet?",
-    "uws_Cfly": "A person with a permanent unresponsive wakefulness syndrome, or a conscious fruit-fly?",
-    "uws_AI": "A person with a permanent  unresponsive wakefulness syndrome, or an artificial intelligence (AI) system that can converse, and tells you that it is conscious?",
-    "AI_dog": "An artificial intelligence (AI) system that can converse and tells you that it is conscious, or a random dog?"
+    "person_dog": Q_PERSON_DOG,
+    "person_pet": Q_PERSON_PET,
+    "dictator_dog": Q_DICTATOR_DOG,
+    "dictator_pet": Q_DICTATOR_PET,
+    "uws_dog": Q_UWS_DOG,
+    "uws_pet": Q_UWS_PET,
+    "uws_Cfly": Q_UWS_FLY,
+    "uws_AI": Q_UWS_AI,
+    "AI_dog": Q_AI_DOG
 }
 # answers
 ANS_PERSON = "Person"
 ANS_DOG = "Dog"
 ANS_PET = "My pet"
+ANS_DICTATOR = "Dictator (person)"
 ANS_UWS = "Person (unresponsive wakefulness syndrome)"
 ANS_FLY = "Fruit fly (a conscious one, for sure)"
 ANS_AI = "AI (that tells you that it's conscious)"
+
+# CATEGORICAL!! not ordinal
+EARTH_DANGER_MAP = {ANS_PERSON: 1,
+                    ANS_DOG: 2,
+                    ANS_PET: 3,
+                    ANS_DICTATOR: 4,
+                    ANS_UWS: 5,
+                    ANS_FLY: 6,
+                    ANS_AI: 7}
+
+EARTH_DANGER_MAP_PERSON_DOG = {ANS_PERSON: 1, ANS_DOG: 0}
+EARTH_DANGER_MAP_PERSON_PET = {ANS_PERSON: 1, ANS_PET: 0}
+EARTH_DANGER_MAP_DICTATOR_DOG = {ANS_DICTATOR: 1, ANS_DOG: 0}
+EARTH_DANGER_MAP_DICTATOR_PET = {ANS_DICTATOR: 1, ANS_PET: 0}
+EARTH_DANGER_MAP_UWS_DOG = {ANS_UWS: 1, ANS_DOG: 0}
+EARTH_DANGER_MAP_UWS_PET = {ANS_UWS: 1, ANS_PET: 0}
+EARTH_DANGER_MAP_UWS_FLY = {ANS_UWS: 1, ANS_FLY: 0}
+EARTH_DANGER_MAP_UWS_AI = {ANS_UWS: 1, ANS_AI: 0}
+EARTH_DANGER_MAP_AI_DOG = {ANS_DOG: 1, ANS_AI: 0}
+
+EARTH_DANGER_QA_MAP = {Q_PERSON_DOG: EARTH_DANGER_MAP_PERSON_DOG,
+                       Q_PERSON_PET: EARTH_DANGER_MAP_PERSON_PET,
+                       Q_DICTATOR_DOG: EARTH_DANGER_MAP_DICTATOR_DOG,
+                       Q_DICTATOR_PET: EARTH_DANGER_MAP_DICTATOR_PET,
+                       Q_UWS_DOG: EARTH_DANGER_MAP_UWS_DOG,
+                       Q_UWS_PET: EARTH_DANGER_MAP_UWS_PET,
+                       Q_UWS_FLY: EARTH_DANGER_MAP_UWS_FLY,
+                       Q_UWS_AI: EARTH_DANGER_MAP_UWS_AI,
+                       Q_AI_DOG: EARTH_DANGER_MAP_AI_DOG}
+
 
 # intentions, consciousness, sentience
 ics = {
@@ -89,6 +156,7 @@ ics = {
 # answers
 ANS_YES = "Yes"
 ANS_NO = "No"
+ANS_YESNO_MAP = {ANS_YES: 1, ANS_NO: 0}
 
 # important test (kill a creature/system for success)
 important_test_kill = {
@@ -114,6 +182,7 @@ important_test_kill_tokens = {
 # answers
 ANS_KILL = "Yes (will kill to pass the test)"
 ANS_NOKILL = "No (will not kill to pass the test)"
+ANS_KILLING_MAP = {ANS_KILL: 1, ANS_NOKILL: 0}
 ANS_ALLNOS_IMMORAL = "Because I think it would be immoral"
 ANS_ALLNOS_INTERESTS = "Because I think all of them have interests of their own"
 ANS_ALLNOS_KILL = "Because I wouldn't kill any creature regardless of their interests or capacities"
@@ -154,11 +223,15 @@ moral_considerations_prios = {
 
 
 # is consciousness graded or not
+Q_GRADED_EQUAL = "If two creatures/systems are conscious, they are equally conscious"
+Q_GRADED_UNEQUAL = "If two creatures/systems are conscious, they are not necessarily equally conscious"
+Q_GRADED_MATTERMORE = "Does it mean that the interests of the more conscious entity matter more?"
+Q_GRADED_INCOMP = "Assuming two different creatures/systems are conscious, their consciousness is incomparable"
 consciousness_graded = {
-    "c_binary_1": "If two creatures/systems are conscious, they are equally conscious",
-    "c_graded_1": "If two creatures/systems are conscious, they are not necessarily equally conscious",
-    "c_graded_followup": "Does it mean that the interests of the more conscious entity matter more?",
-    "c_noncomp_1": "Assuming two different creatures/systems are conscious, their consciousness is incomparable",
+    "c_binary_1": Q_GRADED_EQUAL,
+    "c_graded_1": Q_GRADED_UNEQUAL,
+    "c_graded_followup": Q_GRADED_MATTERMORE,
+    "c_noncomp_1": Q_GRADED_INCOMP,
 }
 # answers: numeric, and ANS_YES/NO on the followup
 
@@ -207,8 +280,9 @@ ANS_SAME = "They are the same thing"
 ANS_THIRD = "They are related to a common third feature"
 
 # experience with AI
+Q_AI_EXP = "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in artificial intelligence (AI) systems?"
 ai_exp = {
-    "ai_exp_1": "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in artificial intelligence (AI) systems?",
+    "ai_exp_1": Q_AI_EXP,
     "ai_exp_fu": "Please specify your experience with AI",
     "ai_exp_other": "aiExp_Other: please specify"
 }
@@ -220,8 +294,9 @@ ANS_AI_PRACTICAL = "use AI systems and technologies"
 ANS_AI_PERSON = "Personal Interest (follower of AI advancements and development)"
 
 # experience with animals
+Q_ANIMAL_EXP = "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your level of interaction or experience with animals?"
 animal_exp = {
-    "animals_experience_1": "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your level of interaction or experience with animals?",
+    "animals_experience_1": Q_ANIMAL_EXP,
     "animals_which": "Please specify which animals",
     "animal_other": "animalsExp_Other: please specify",
     "pets": "Do you have a pet?"
@@ -243,8 +318,9 @@ ANS_LIVESTOCK = "Livestock"
 
 
 # experience with consciousness
+Q_CONSC_EXP = "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in the science of consciousness?"
 consciousness_exp = {
-    "consc_experience_1": "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in the science of consciousness?",
+    "consc_experience_1": Q_CONSC_EXP,
     "consc_experience_fu": "Please specify your experience with this topic",
     "consci_exp_other": "consciousExp_Other: please specify"
 }
@@ -255,8 +331,9 @@ ANS_C_PROF = "Professional Experience (work related to consciousness)"
 ANS_C_PERSON = "Personal Interest (reading texts about consciousness)"
 
 # experience with ethics
+Q_ETHICS_EXP = "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in ethics and morality?"
 ethics_exp = {
-    "ethics_experience_1": "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in ethics and morality?",
+    "ethics_experience_1": Q_ETHICS_EXP,
     "ethics_experience_fu": "Please specify your experience",
     "ethics_exp_other": "ethicsExp_Other: please specify"
 }
@@ -266,6 +343,12 @@ ANS_E_PERSON = "Personal Interest (reading philosophical texts/participant in et
 ANS_E_PROF = "Professional (work involving ethical decisions, law/medicine/social work)"
 ANS_E_VOLUN = "Volunteer Work (in organizations focused on ethical issues/moral causes)"
 ANS_E_RELIGION = "Religious/Spitirual Practice (engagement with ethical teachings)"
+
+
+Q_EXP_DICT = {Q_CONSC_EXP: "exp_consciousness",
+              Q_ETHICS_EXP: "exp_ethics",
+              Q_ANIMAL_EXP: "exp_animals",
+              Q_AI_EXP: "exp_ai"}
 
 # demographics
 demographics = {
@@ -284,6 +367,19 @@ demographics = {
     "ResponseId": "response_id",
     "UserLanguage": "language"
 }
+
+# education_options
+EDU_NONE = "No formal education"
+EDU_PRIM = "Primary education"
+EDU_SECD = "Secondary education (hold a high-school diploma or equivalent)"
+EDU_POSTSEC = "Post-secondary education (hold a bachelor's or associate degree)"
+EDU_GRAD = "Graduate education (hold a master's degree or doctoral degree)"
+
+EDU_MAP = {EDU_NONE: 1,
+           EDU_PRIM: 2,
+           EDU_SECD: 3,
+           EDU_POSTSEC: 4,
+           EDU_GRAD: 5}
 
 # columns that contain data we do not care about and do not collect anyway (automatically generated in Qualtrics)
 redundant = ["IPAddress", "RecipientLastName", "RecipientFirstName", "RecipientEmail",

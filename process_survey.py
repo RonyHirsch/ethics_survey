@@ -1,4 +1,6 @@
 import os
+
+import numpy as np
 import pandas as pd
 import survey_mapping
 import analyze_survey
@@ -54,13 +56,20 @@ def analysis_prep(sub_df):
     blocks = survey_mapping.question_blocks
     for question_cluster in blocks:  # for each question group
         # we add identified column & duration column to be able to cross information
-        columns = [COL_ID, COL_DUR_SEC] + list(blocks[question_cluster].values())
+        questions = list(blocks[question_cluster].values())
+        if COL_ID in questions:  # avoid redundancy
+            questions.remove(COL_ID)
+        columns = [COL_ID] + questions
         relevant_df = sub_df[columns]  # take only the questions relevant for this group
         analysis_dict[question_cluster] = relevant_df
     return analysis_dict
 
 
 def process_values(sub_df):
+    """
+    CORRECT FOR TECHNICAL GLITCHES
+    """
+
     """
     When asked to rate how much they think a creature has moral status / consciousness, options were:
     1 = "Does not have",
@@ -73,6 +82,88 @@ def process_values(sub_df):
     additional_cols = ["If two creatures/systems are conscious, they are equally conscious"]
     cols = other_creature_cols + additional_cols
     sub_df[cols] = sub_df[cols].replace(0, 1)
+
+    """
+    When asked about their experience level on a scale from 1 to 5, the options were:
+    1 = "No experience, 2, 3, 4, 5
+    """
+    exp_cols = [survey_mapping.Q_AI_EXP, survey_mapping.Q_ANIMAL_EXP, survey_mapping.Q_CONSC_EXP, survey_mapping.Q_ETHICS_EXP]
+    for col in exp_cols:
+        sub_df[col] = sub_df[col].replace(np.nan, 1)
+        sub_df[col] = sub_df[col].replace(0, 1)
+
+
+    """
+    When asked about employment, some responded "Other" but then in the specifics, they wrote something that 
+    DOES appear in the options
+    """
+    curr_job_col = "Current primary employment domain"
+    job_other = "employment_Other: please specify"
+
+    other_dict = {"Homemaker": "Homemaker/caregiver",
+                  "care": "Homemaker/caregiver",
+                  "Nanny": "Homemaker/caregiver",
+                  "homemaker": "Homemaker/caregiver",
+
+                  "not employed": "Unemployed",
+                  "unemployed": "Unemployed",
+                  "Unemployed": "Unemployed",
+                  "I am Unemployed": "Unemployed",
+                  "N/a": "Unemployed",
+                  "disabled and unable to work": "Unemployed",
+                  "enemployed": "Unemployed",
+                  "unemployed, looking for a job": "Unemployed",
+                  "Unemployed but searching for a job.": "Unemployed",
+                  "Disabled": "Unemployed",
+                  "Unemployed, looking": "Unemployed",
+                  "looking for work": "Unemployed",
+                  "No current employment": "Unemployed",
+                  "not currently employed": "Unemployed",
+                  "I'm a NEET.": "Unemployed",
+                  "Unemployed now": "Unemployed",
+                  "Looking for work": "Unemployed",
+                  "I am currently unemployed.": "Unemployed",
+
+                  "Admin": "Administrative/clerical",
+                  "HUMAN RESOURCES": "Administrative/clerical",
+                  "hr": "Administrative/clerical",
+
+                  "non-profit org": "Non-profit/volunteering",
+
+                  "Financial accounting": "Business/finance",
+
+                  "Veterinary Medicine": "Healthcare/medicine",
+                  "Dietetics": "Healthcare/medicine",
+
+                  "Mixed IT & CS": "Tech/software development and engineering/IT",
+
+                  "Service industry": "Customer services",
+                  "IT support": "Customer services",
+                  "part time service at a cafe": "Customer services",
+
+                  "Consultant in big companies and a lot of other tasks.": "Management/consulting",
+                  "Consulting": "Management/consulting",
+
+                  "Telecommunications": "Media/communications",
+                  "Language Services": "Media/communications",
+
+                  "Trader": "Construction/trades",
+                  "self-employed e-commerce operator": "Construction/trades",
+                  "Forex and Commodities Trading": "Construction/trades",
+
+                  "Real Estate": "Retail/sales",
+
+                  "graphic designer": "Arts/entertainment",
+                  "art and media - cultural producer, creative entrepreneur, content creator, human/youth developer,": "Arts/entertainment",
+                  "Design": "Arts/entertainment",
+
+                  "Transportation": "Transportation/logistics",
+
+                  }
+
+    # convert "Others" to existing options
+    sub_df[curr_job_col] = sub_df.apply(lambda row: other_dict.get(row[job_other].strip(), row[curr_job_col]) if row[curr_job_col] == "Other" else row[curr_job_col], axis=1)
+    #print(sub_df[sub_df[curr_job_col] == "Other"][job_other].tolist())
     return sub_df
 
 
@@ -88,6 +179,31 @@ def process_survey(sub_df):
     print(f"After filtering out suspected bots: {sub_df.shape[0]} participants")
     sub_df = process_values(sub_df)
     return sub_df
+
+
+def correct_prolific(df, prolific_data_path, save_path):
+    prolific_df = pd.read_csv(prolific_data_path)
+
+    """
+    Age
+    """
+
+    prolific_df_relevant = prolific_df.loc[:, ["Participant id", "Age"]]
+    prolific_df_relevant.rename(columns={"Participant id": "PROLIFIC_PID"}, inplace=True)
+
+    merged_df = pd.merge(df, prolific_df_relevant, on="PROLIFIC_PID", how="left")
+    merged_df["age_verification"] = (merged_df["How old are you?"].astype(float) == merged_df["Age"].astype(float)).astype(int)
+
+    mismatch = merged_df[merged_df["age_verification"]==0][["PROLIFIC_PID", "How old are you?", "Age"]]
+    mismatch.to_csv(os.path.join(save_path, "age_liars.csv"), index=False)
+    print(f"{mismatch.shape[0]} had a mismatch between reported age and Prolific age; took Prolific age")
+
+    merged_df.loc[merged_df["age_verification"] == 0, "How old are you?"] = merged_df["Age"]
+    merged_df.drop(columns=["Age", "age_verification"], inplace=True)
+
+    merged_df["How old are you?"] = merged_df["How old are you?"].astype(int)
+
+    return merged_df
 
 
 if __name__ == '__main__':

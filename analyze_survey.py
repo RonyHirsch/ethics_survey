@@ -1,9 +1,13 @@
 import os
 import pandas as pd
+import re
 import numpy as np
+from functools import reduce
+from sklearn.preprocessing import LabelEncoder
 import plotter
 import process_survey
 import survey_mapping
+import helper_funcs
 
 CAT_COLOR_DICT = {"Person": "#AF7A6D",  #FAE8EB
                   "Dog": "#CCC7B9",  #6EA4BF
@@ -30,10 +34,7 @@ CAT_LABEL_DICT = {"Person": "Person",
                   }
 
 
-def other_creatures(analysis_dict, save_path):
-    """
-    Compare "other creatures" judgments of Consciousness vs. of Moral Status.
-    """
+def other_creatures(analysis_dict, save_path, sort_together=True):
     # save path
     result_path = os.path.join(save_path, "c_v_ms")
     if not os.path.isdir(result_path):
@@ -42,29 +43,152 @@ def other_creatures(analysis_dict, save_path):
     # load relevant data
     df_ms = analysis_dict["other_creatures_ms"]
     df_c = analysis_dict["other_creatures_cons"]
-    df = pd.merge(df_c, df_ms, on=[process_survey.COL_ID, process_survey.COL_DUR_SEC])
+    df = pd.merge(df_c, df_ms, on=[process_survey.COL_ID])
+
     df.to_csv(os.path.join(result_path, "c_v_ms.csv"), index=False)
 
+    # codes and relevant stuff
+    items = survey_mapping.other_creatures_general  # all rated items
+    topic_name_map = {"c": "Consciousness", "ms": "Moral Status"}
+
     # melt to a long format
-    long_data = pd.melt(df, id_vars=[process_survey.COL_ID, process_survey.COL_DUR_SEC], var_name="Item_Topic",
+    long_data = pd.melt(df, id_vars=[process_survey.COL_ID], var_name="Item_Topic",
                         value_name="Rating")
     long_data[["Topic", "Item"]] = long_data["Item_Topic"].str.split('_', expand=True)
-    long_data = long_data.drop(columns="Item_Topic")
-    long_data = long_data[[process_survey.COL_ID, process_survey.COL_DUR_SEC, "Topic", "Item", "Rating"]]
-    long_data["Topic"] = long_data["Topic"].map({"c": "Consciousness", "ms": "Moral Status"})
-    long_data.to_csv(os.path.join(result_path, "c_v_ms_long.csv"), index=False)
+    long_data = long_data.drop(columns=["Item_Topic"])
+    long_data = long_data[[process_survey.COL_ID, "Topic", "Item", "Rating"]]
+    long_data["Topic"] = long_data["Topic"].map(topic_name_map)
 
-    # other creatures - Consciousness vs Moral status
-    for item in survey_mapping.other_creatures_general:
-        df_item = df.loc[:, [process_survey.COL_ID] + [col for col in df.columns if item in col]]
-        plotter.plot_raincloud(df=df_item, id_col=process_survey.COL_ID,
-                               data_col_names=[f"c_{item}", f"ms_{item}"],
-                               data_col_colors={f"c_{item}": "#037171", f"ms_{item}": "#985F6F"},  # #D5A021, #93032E
-                               x_title="", x_name_dict={f"c_{item}": "Consciousness", f"ms_{item}": "Moral Status"},
-                               title=f"{item}", y_title="", ymin=1, ymax=4.04, yskip=1, y_jitter=0.05,
-                               y_ticks=["Does not have", "Probably doesn't have", "Probably has", "Has"],
-                               data_col_violin_left={f"c_{item}": True, f"ms_{item}": False}, scatter_lines=True,
-                               save_path=result_path, save_name=f"{item}", format="png")
+    # add some demographic numerical columns
+    animal_experience_df = analysis_dict["animal_exp"].loc[:, [process_survey.COL_ID, survey_mapping.Q_ANIMAL_EXP]].rename(columns={survey_mapping.Q_ANIMAL_EXP: "exp_animals"}, inplace=False)
+    ai_experience_df = analysis_dict["ai_exp"].loc[:, [process_survey.COL_ID, survey_mapping.Q_AI_EXP]].rename(columns={survey_mapping.Q_AI_EXP: "exp_ai"}, inplace=False)
+    ethics_experience_df = analysis_dict["ethics_exp"].loc[:, [process_survey.COL_ID, survey_mapping.Q_ETHICS_EXP]].rename(columns={survey_mapping.Q_ETHICS_EXP: "exp_ethics"}, inplace=False)
+    con_experience_df = analysis_dict["consciousness_exp"].loc[:, [process_survey.COL_ID, survey_mapping.Q_CONSC_EXP]].rename(columns={survey_mapping.Q_CONSC_EXP: "exp_consc"}, inplace=False)
+    demos_df = analysis_dict["demographics"].loc[:, [process_survey.COL_ID, "How old are you?"]].rename(columns={"How old are you?": "age"}, inplace=False)
+
+    result_df = long_data
+    for dataframe in [animal_experience_df, ai_experience_df, ethics_experience_df, con_experience_df, demos_df]:
+        result_df = pd.merge(result_df, dataframe, on=[process_survey.COL_ID])
+
+    result_df.to_csv(os.path.join(result_path, "c_v_ms_long.csv"), index=False)
+
+    # plot aggregated data
+
+    result_df["non_human_animal"] = result_df["Item"].map(survey_mapping.other_creatures_isNonHumanAnimal)
+
+    for exp in ["exp_animals", "exp_ai", "exp_ethics", "exp_consc"]:
+        for topic in ["Consciousness", "Moral Status"]:
+            top_df = result_df[result_df["Topic"] == topic]
+            exp_name = exp.split("_")[-1]
+            plotter.plot_density(df=top_df, x_col="Rating", x_col_name=f"{topic} Rating",
+                                 hue_col=exp, hue_col_name=f"Experience with {exp_name}",
+                                 save_name=f"{exp}_{topic.lower()}", save_path=result_path)
+
+    # turn categorical columns into numeric ones for linear modelling
+    for col in ["Topic", "Item"]:
+        label_encoder_country = LabelEncoder()
+        result_df[col] = label_encoder_country.fit_transform(result_df[col])
+
+    result_df.to_csv(os.path.join(result_path, "c_v_ms_long_coded.csv"), index=False)
+
+
+    """
+    Look at the ratings individually for each item 
+    """
+
+    rating_color_list = ["#DB5461", "#fb9a99", "#70a0a4", "#26818B"]
+    rating_labels = ["Does Not Have", "Probably Doesn't Have", "Probably Has", "Has"]
+
+    sorting_method = None
+
+    for topic_code, topic_name in topic_name_map.items():  # Consciousness, Moral Status
+        df_topic = df.loc[:, [col for col in df.columns if col.startswith(f"{topic_code}_")]]
+        df_topic.columns = df_topic.columns.str.replace(f'^{topic_code}_', '', regex=True)  # get rid of topix prefix
+        df_topic.columns = df_topic.columns.str.replace(r'^.*? ', '', regex=True).str.title()  # get rid of "A ..."
+        items_sansA = [s.split(' ', 1)[-1].title() if ' ' in s else s for s in items]  # do the same for items
+
+        # Prepare data for each column in the dataframe, they represent the items
+        stats = {}
+        for col in items_sansA:
+            stats[col] = helper_funcs.compute_stats(df_topic[col])
+
+        # Create DataFrame for plotting
+        plot_data = {}
+        for item, (proportions, mean_rating, std_dev) in stats.items():
+            plot_data[item] = {
+                'Proportion': proportions,
+                'Mean': mean_rating,
+                'Std Dev': std_dev
+            }
+
+        # Define plot size and number of subplots
+        num_plots = len(df_topic.columns)
+        #rating_color_list = ["#e31a1c", "#fb9a99", "#a6cee3", "#1f78b4"]
+
+
+        if sorting_method is None:
+            # Sort the data by the proportion of "4" rating (Python 3.7+ dictionaries maintain the insertion order of keys)
+            #sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]['Proportion'].get(4, 0), reverse=True)
+
+            # Sort the data by the MEAN rating (Python 3.7+ dictionaries maintain the insertion order of keys)
+            sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]['Mean'], reverse=True)
+            if sort_together:  # if false, then it'll sort each of them by the previous condition independently
+                sorting_method = list(dict(sorted_plot_data).keys())  # this is the order now
+
+        else:  # sort the second column by the first one's order
+            sorted_plot_data = {key: plot_data[key] for key in sorting_method if key in plot_data}.items()
+
+        # plot
+        plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=num_plots, legend=rating_labels,
+                                             colors=rating_color_list, num_ratings=4,title=f"{topic_name.title()}",
+                                             save_path=result_path, save_name=f"{topic_name.lower()}_ratings")
+
+    """
+    Plot "other creatures" judgments of Consciousness vs. of Moral Status.
+    """
+
+    # prepare data for analyses
+    df_pivot = long_data.pivot_table(index="Item", columns="Topic", values="Rating", aggfunc="mean").fillna(0).reset_index(drop=False, inplace=False)
+
+    colors = [rating_color_list[0], rating_color_list[-1]]
+    individual_data = long_data.pivot_table(index=["response_id", "Item"], columns="Topic", values="Rating").reset_index(drop=False, inplace=False)
+    plotter.plot_scatter_xy(df=df_pivot, identity_col="Item",
+                            x_col="Consciousness", x_label="Consciousness", x_min=1, x_max=4, x_ticks=1,
+                            y_col="Moral Status", y_label="Moral Status", y_min=1, y_max=4, y_ticks=1,
+                            save_path=result_path, save_name=f"correlation_c_ms", annotate_id=True,
+                            palette_bounds=colors, format="png", corr_line=True,
+                            individual_df=individual_data, id_col="response_id")
+
+    """
+    CONNECTION TO GRADED CONSCIOUSNESS
+    connect between the consciousness and moral status scores, and people's beliefs about graded consciousness
+    """
+
+    # load the relevant data
+    df_graded = analysis_dict["consciousness_graded"]
+    x = 3
+
+
+
+    """
+    CORRELATION ANALYSIS
+    Calculate for each item separately the correlation between its consciousness rating and its moral status rating. 
+    """
+    helper_funcs.corr_per_item(df=df, items=items, save_path=result_path)
+
+
+    """
+    LCA ANALYSIS
+    Latent Class Analysis (LCA) on the ratings of consciousness and moral status. 
+    """
+    # PCA (plotted with cluster analysis)
+    # helper_funcs.perform_PCA(df_pivot=df_pivot, save_path=result_path)
+
+    df.drop(columns=["response_id"], inplace=True)  # no need for participants' IDs at this point
+    for col in df.columns.tolist():
+        df[col] = df[col].astype(int)
+    helper_funcs.lca_analysis(df=df, n_classes=3, save_path=result_path)
+
     return
 
 
@@ -79,8 +203,68 @@ def earth_in_danger(analysis_dict, save_path):
 
     # load relevant data
     df_earth = analysis_dict["earth_in_danger"]
-    df_earth = df_earth.drop(columns=[process_survey.COL_DUR_SEC])
     questions = df_earth.columns[df_earth.columns != process_survey.COL_ID].tolist()
+
+    df_earth_coded = df_earth.copy()
+    for col in questions:
+        """
+        The map should convert values into 0/1s for the PCA and Kmeans clustering. 
+        PCA is a technique that works with numeric data to capture variance. 
+        It projects the data into lower dimensions based on linear combinations of the features, so we can't use 
+        categorizations (and map them to numbers as the model might falsely interpret these numeric encodings as 
+        having ordinal relationships. 
+        
+        The same goes for Kmeans clustering, it relies on distance measures like Euclidean distance to determine 
+        cluster centers, so if using arbitrary numbers for categories, the model will interpret these numbers as having 
+        some sort of distance relationship. 
+        
+        So we will convert everything into binary. However, in order to keep interpretability, I will choose the
+        0's and 1's myself (and not simple map each column into binary arbitratily. 
+        """
+        col_map = survey_mapping.EARTH_DANGER_QA_MAP[col]
+        df_earth_coded[col] = df_earth_coded[col].map(col_map)
+    df_earth_coded.set_index([process_survey.COL_ID], inplace=True)
+    pca_df = helper_funcs.perform_PCA(df_pivot=df_earth_coded, save_path=result_path,
+                                      components=2, clusters=2, label_map=survey_mapping.EARTH_DANGER_QA_MAP)
+    pca_df.reset_index(drop=False, inplace=True)
+
+    # in the pca_df we also get the results of the KMeans clustering we performed.
+    # then, we want to examine if there are any demographics that are shared within each cluster.
+    df_zombie["Would you take the pill?"] = df_zombie["Would you take the pill?"].map({"Yes": 1, "No": 0})
+    df_list = [df_demog, df_animalexp, df_ethicsexp, df_aiexp, df_cexp, df_zombie]
+    unified_df = reduce(lambda x, y: x.merge(y, on=process_survey.COL_ID), df_list)
+    unified_df_cluster = pd.merge(unified_df, pca_df[[process_survey.COL_ID, "Cluster"]],
+                                  on=process_survey.COL_ID, how="left")
+    unified_df_cluster.rename(columns=survey_mapping.Q_EXP_DICT, inplace=True)
+    unified_df_cluster.to_csv(os.path.join(result_path, "clusters_with_demographic.csv"), index=False)
+
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    from matplotlib_venn import venn2
+
+    overlap = unified_df_cluster.groupby(["Cluster", "Would you take the pill?"]).size().unstack(fill_value=0)
+    print("Count of overlap:\n", overlap)
+    count_A1_B1 = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 1) & (unified_df_cluster["Would you take the pill?"] == 1)])
+    count_A1_B0 = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 1) & (unified_df_cluster["Would you take the pill?"] == 0)])
+    count_A0_B0 = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 0) & (unified_df_cluster["Would you take the pill?"] == 0)])
+    count_A0_B1 = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 0) & (unified_df_cluster["Would you take the pill?"] == 1)])
+
+    only_A = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 1) & (unified_df_cluster["Would you take the pill?"] == 0)])
+    only_B = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 0) & (unified_df_cluster["Would you take the pill?"] == 1)])
+    both_A_and_B = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 1) & (unified_df_cluster["Would you take the pill?"] == 1)])
+    only_neither = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 0) & (unified_df_cluster["Would you take the pill?"] == 0)])
+    print(f"Rows where A=1 and B=0: {only_A}")
+    print(f"Rows where A=0 and B=1: {only_B}")
+    print(f"Rows where A=1 and B=1: {both_A_and_B}")
+    print(f"Rows where A=0 and B=0: {only_neither}")
+
+    total_rows = len(unified_df_cluster)
+    proportions = pd.DataFrame({
+        'Pill=No': [only_A / total_rows, only_neither / total_rows],
+        'Pill=Yes': [both_A_and_B / total_rows, only_B / total_rows]
+    }, index=['Cluster=1', 'Cluster=0'])
+    sns.heatmap(proportions, annot=True, cmap='Blues', cbar=True, fmt='.2f')
+
     for q in questions:
         df_q = df_earth.loc[:, [process_survey.COL_ID, q]]
         counts = df_q[q].value_counts()
@@ -197,6 +381,9 @@ def zombie_pill(analysis_dict, save_path):
     plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
                      categories_colors=CAT_COLOR_DICT, title=f"Would you take the pill?",
                      save_path=result_path, save_name="take_the_pill", format="png")
+
+
+
     return
 
 
@@ -272,31 +459,41 @@ def graded_consciousness(analysis_dict, save_path):
         os.mkdir(result_path)
 
     c_graded = analysis_dict["consciousness_graded"]
-    c_graded = c_graded.drop(columns=[process_survey.COL_DUR_SEC])
-    ratings = [c for c in c_graded.columns if c.startswith("If two") or c.startswith("Assuming")]
-    rating_colors = {"If two creatures/systems are conscious, they are equally conscious": "#540D6E",
-                     "If two creatures/systems are conscious, they are not necessarily equally conscious": "#EE4266",
-                     "Assuming two different creatures/systems are conscious, their consciousness is incomparable": "#FFD23F"}
-    rating_names = {"If two creatures/systems are conscious, they are equally conscious": f"If two creatures/systems are conscious\nthey are equally conscious",
-                    "If two creatures/systems are conscious, they are not necessarily equally conscious": f"If two creatures/systems are conscious\nthey are not necessarily equally conscious",
-                     "Assuming two different creatures/systems are conscious, their consciousness is incomparable": f"Assuming two different creatures/systems are conscious\ntheir consciousness is incomparable"}
-    rating_violins = {"If two creatures/systems are conscious, they are equally conscious": True,
-                     "If two creatures/systems are conscious, they are not necessarily equally conscious": True,
-                     "Assuming two different creatures/systems are conscious, their consciousness is incomparable": True}
-    plotter.plot_raincloud(df=c_graded, id_col=process_survey.COL_ID,
-                           data_col_names=ratings,
-                           data_col_colors=rating_colors,
-                           x_title="", x_name_dict=rating_names,
-                           title=f"", y_title="How much do you agree?", ymin=1, ymax=4.04, yskip=1, y_jitter=0.05,
-                           y_ticks=None, group_spacing=1.0, size_inches_x=20,
-                           data_col_violin_left=rating_violins, scatter_lines=True,
-                           save_path=result_path, save_name=f"consciousness_graded", format="png")
 
-    question = "Does it mean that the interests of the more conscious entity matter more?"
-    category_counts = c_graded[question].value_counts()
-    plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
-                     categories_colors=CAT_COLOR_DICT, title=f"{question}",
-                     save_path=result_path, save_name=f"{question.replace('?', '').replace('/', '-')}", format="png")
+    """
+    Plot the answers to the rating questions (agreement) in a stacked bar plot
+    """
+    rating_color_list = ["#DB5461", "#fb9a99", "#70a0a4", "#26818B"]
+    rating_labels = ["1", "2", "3", "4"]
+    rating_questions = [survey_mapping.Q_GRADED_EQUAL, survey_mapping.Q_GRADED_UNEQUAL, survey_mapping.Q_GRADED_INCOMP]
+    stats = {}
+    for col in rating_questions:
+        stats[col] = helper_funcs.compute_stats(c_graded[col])
+    # Create DataFrame for plotting
+    plot_data = {}
+    for item, (proportions, mean_rating, std_dev) in stats.items():
+        plot_data[item] = {
+            'Proportion': proportions,
+            'Mean': mean_rating,
+            'Std Dev': std_dev
+        }
+    # Sort the data by the MEAN rating (Python 3.7+ dictionaries maintain the insertion order of keys)
+    sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]['Mean'], reverse=True)
+    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=3, legend=rating_labels,
+                                         colors=rating_color_list, num_ratings=4, title=f"How Much do you Agree?",
+                                         save_path=result_path, save_name=f"consciousness_graded_ratings",
+                                         text_width=39)
+
+
+
+    """
+    Relations to variability in Consciousness Ratings
+    """
+    other_creatures_c = analysis_dict["other_creatures_cons"]
+    other_creatures_c["c_ratings_variability"] = other_creatures_c[other_creatures_c.columns[1:]].std(axis=1)
+    std_df = other_creatures_c[[process_survey.COL_ID, "c_ratings_variability"]]
+    merged_df = pd.merge(c_graded, std_df, on=process_survey.COL_ID)
+    # TODO: STOPPED HERE
 
     return
 
@@ -311,7 +508,6 @@ def consciousness_intelligence(analysis_dict, save_path):
         os.mkdir(result_path)
 
     con_intellect = analysis_dict["con_intellect"]
-    con_intellect = con_intellect.drop(columns=[process_survey.COL_DUR_SEC])
     question = "Do you think consciousness and intelligence are related?"
     category_counts = con_intellect[question].value_counts()
     plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
@@ -346,49 +542,436 @@ def demographics(analysis_dict, save_path):
     if not os.path.isdir(result_path):
         os.mkdir(result_path)
 
-    demographic_colors = {"Male": "#084887",
-                          "Female": "#F58A07",
-                          "Non-binary": "#A3ADCC",
-                          "Prefer not to say": "#E7A391",
-                          "Genderqueer": "#805FBF"
-                          }
-
     con_demo = analysis_dict["demographics"]
-    con_demo = con_demo.drop(columns=[process_survey.COL_DUR_SEC])
 
-    # gender
-    gender = "How do you describe yourself?"
-    category_counts = con_demo[gender].value_counts()
-    plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
-                     categories_colors=demographic_colors, title=f"{gender}",
-                     save_path=result_path, save_name=f"gender", format="png")
+    """
+    Age
+    """
 
-    # country
+    age = "How old are you?"
+    age_counts = con_demo[age].value_counts()
+    age_counts_df = age_counts.reset_index(drop=False, inplace=False)
+    age_counts_df_sorted = age_counts_df.sort_values(age, ascending=True)
+    plotter.plot_histogram(df=age_counts_df_sorted, category_col=age, data_col="count",
+                           save_path=result_path, save_name=f"age", format="svg")
+
+    age_props = con_demo[age].value_counts(normalize=True)
+    age_props_df = age_props.reset_index(drop=False, inplace=False)
+    age_props_df["proportion"] = 100 * age_props_df["proportion"]
+
+    merged_df = pd.merge(age_counts_df, age_props_df, on=age)
+    merged_df.to_csv(os.path.join(result_path, "age.csv"), index=False)
+
+
+    """
+    Country of Residence
+    """
+
     country = "In which country do you currently reside?"
     category_counts = con_demo[country].value_counts()
-    plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
-                     categories_colors=None, title=f"{country}",
-                     save_path=result_path, save_name=f"country", format="png")
+    country_proportions = con_demo[country].value_counts(normalize=True).reset_index(drop=False, inplace=False)
+    country_proportions["proportion"] = 100 * country_proportions["proportion"]  # turn to % s
 
-    # education
+    # country & continent world map proportions
+    plotter.plot_world_map_proportion(country_proportions_df=country_proportions, data_column=country,
+                                      save_path=result_path)
+
+    """ 
+    Gender
+    """
+
+    gender_order = ["Female", "Male", "Non-binary", "Genderqueer", "Prefer not to say"]
+    color_list = ["#8F8F8F"] * len(gender_order)
+
+    gender = "How do you describe yourself?"
+    category_counts = con_demo[gender].value_counts()
+
+    #gender_order = ["Male", "Non-binary", "Prefer not to say", "Genderqueer", "Female"]
+    #gender_color_dict = plotter.diverging_palette(color_order=gender_order, left=225, right=45)
+    #plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
+    #                 categories_colors=gender_color_dict, title=f"{gender}", pie_direction=90, edge_color="none",
+    #                 save_path=result_path, save_name=f"gender", format="png", annot_props=False, annot_groups=False,
+    #                 legend=True, legend_order=gender_order, legend_vertical=False)
+
+    category_props = con_demo[gender].value_counts(normalize=True)
+    category_props_df = category_props.reset_index(drop=False, inplace=False)
+    category_props_df["proportion"] = 100 * category_props_df["proportion"]
+    category_props_df_ordered = category_props_df.sort_values("proportion", ascending=False)
+    plotter.plot_categorical_bars(categories_prop_df=category_props_df_ordered,
+                                  category_col=gender, y_min=0, y_max=60, y_skip=10,
+                                  data_col="proportion",
+                                  categories_colors=color_list,
+                                  save_path=result_path, save_name=f"gender", format="svg")
+
+    category_counts_df = category_counts.reset_index(drop=False, inplace=False)
+    merged_df = pd.merge(category_counts_df, category_props_df_ordered, on=gender)
+    merged_df.to_csv(os.path.join(result_path, "gender.csv"), index=False)
+
+
+    """ 
+    Education
+    """
     education = "What is your education background?"
-    category_counts = con_demo[education].value_counts()
-    plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
-                     categories_colors=None, title=f"{education}",
-                     save_path=result_path, save_name=f"education", format="png")
+    education_order = [survey_mapping.EDU_NONE, survey_mapping.EDU_PRIM, survey_mapping.EDU_SECD,
+                       survey_mapping.EDU_POSTSEC, survey_mapping.EDU_GRAD]
+    education_labels = {edu: edu.replace(" education", "") for edu in education_order[1:]}
+    education_labels[survey_mapping.EDU_NONE] = survey_mapping.EDU_NONE
+    education_labels = {edu: re.sub(r'\(.*?\)', '', education_labels[edu]) for edu in education_labels.keys()}  # remove parantheses
+
+    education_color_dict = {survey_mapping.EDU_NONE: "#AAD2BA",
+                            survey_mapping.EDU_PRIM: "#7BA084",
+                            survey_mapping.EDU_SECD: "#6B8F71",
+                            survey_mapping.EDU_POSTSEC: "#58735B",
+                            survey_mapping.EDU_GRAD: "#445745"}
+
+    education_counts = con_demo[education].value_counts().reset_index(drop=False, inplace=False)
+    #education_counts.to_csv(os.path.join(result_path, "education.csv"), index=False)
+
+    education_counts_list = [education_counts.loc[education_counts[f"{education}"] == e, "count"].tolist()[0] for e in education_order]
+
+    #plotter.plot_pie(categories_names=education_order, categories_counts=education_counts_list,
+    #                 categories_labels=education_labels, categories_colors=education_color_dict,
+    #                 pie_direction=270, annot_groups=False, annot_props=False, edge_color="none",
+    #                 legend=True, legend_vertical=False, legend_order=[education_labels[e] for e in education_order],
+    #                 title=f"{education}", save_path=result_path, save_name=f"education", format="png")
+
+
+
+    education_props = con_demo[education].value_counts(normalize=True)
+    education_props_df = education_props.reset_index(drop=False, inplace=False)
+    education_props_df["proportion"] = 100 * education_props_df["proportion"]
+
+    order_dict = {survey_mapping.EDU_NONE: 4,
+                  survey_mapping.EDU_PRIM: 3,
+                  survey_mapping.EDU_SECD: 2,
+                  survey_mapping.EDU_POSTSEC: 1,
+                  survey_mapping.EDU_GRAD: 0}
+
+    education_props_df_ordered = education_props_df.sort_values(by=education, key=lambda x: x.map(order_dict))
+    education_props_df_ordered[f"{education}_label"] = education_props_df_ordered[education].replace(education_labels, inplace=False)
+    education_props_df_ordered.reset_index(drop=True, inplace=True)
+    plotter.plot_categorical_bars(categories_prop_df=education_props_df_ordered,
+                                  category_col=f"{education}_label", y_min=0, y_max=50, y_skip=10,
+                                  data_col="proportion",
+                                  categories_colors=color_list,
+                                  save_path=result_path, save_name=f"education", format="svg")
+
+    merged_df = pd.merge(education_counts, education_props_df_ordered, on=education)
+    merged_df.to_csv(os.path.join(result_path, "education.csv"), index=False)
+
     # education field
     field = "In what topic?"
-    category_counts = con_demo[field].value_counts()
-    plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
-                     categories_colors=None, title=f"{field}",
+
+    # people could have selected multiple values here, so handle it to count the right number of each option
+    education_field_df = con_demo.copy()
+    education_field_df[field] = education_field_df[field].str.split(',')
+    exploded_df = education_field_df.explode(field)
+    category_counts = exploded_df[field].value_counts()
+
+    # list names of topics where enough of the population have replied
+    topic_props = category_counts.reset_index(drop=False, inplace=False)
+    topic_props["proportion"] = (topic_props["count"] / topic_props["count"].sum()) * 100
+    topic_props.to_csv(os.path.join(result_path, "education_topic.csv"), index=False)
+
+    threshold = 1.5
+    substantial_df = topic_props.loc[topic_props["proportion"] > threshold]
+    substantial_list = substantial_df[field].tolist()
+
+    topic_color_dict = {"Computer science / IT": "#1c3b60",
+                        "Engineering": "#355171",
+                        "Mathematics": "#4f6683",
+                        "Statistics": "#687c95",
+                        "Physics": "#496280",
+                        "Astronomy": "#607690",
+                        "Chemistry": "#7789a0",
+
+                        "Biochemistry": "#2d5c73",
+                        "Biomedical engineering": "#37718e",
+                        "Biology / biotechnology": "#4b7f99",
+                        "Neuroscience": "#5f8da5",
+                        "Health sciences / public health": "#739cb0",
+                        "Nutrition": "#87aabb",
+
+                        "Dentistry": "#497264",
+                        "Nursing": "#5b8e7d",
+                        "Medicine": "#7ca597",
+
+                        "Agriculture": "#828e6e",
+                        "Environmental science": "#a3b18a",
+                        "Earth sciences / geography": "#acb996",
+
+                        "Philosophy": "#c78a5f",
+                        "Psychology": "#e09c6b",
+                        "Anthropology": "#f9ad77",
+                        "Sociology": "#fab585",
+                        "Social work": "#fabd92",
+                        "Religious studies": "#fbc6a0",
+                        "Veterinary medicine": "#fbcead",
+
+                        "Architecture": "#f1597d",
+                        "Urban planning / civil engineering": "#f1597d",
+                        "Art / Art history / fine arts": "#f26c8c",
+                        "Graphic design / UX / UI": "#f47e9a",
+                        "Music": "#f591a9",
+                        "Literature": "#f7a3b7",
+                        "Linguistics": "#f9b5c5",
+
+                        "History": "#b3493f",
+                        "Journalism": "#c75146",
+                        "International relations / political sciences": "#cd6259",
+                        "Law": "#d2746b",
+                        "Management": "#d8857e",
+                        "Business / economics": "#dd9790",
+                        "Finance / accounting": "#e3a8a3",
+                        "Marketing": "#e9b9b5",
+                        "Communications / media": "#eecbc8",
+
+                        "Other": "#8D99AE"
+                        }
+    topic_order = list(topic_color_dict.keys())  # ordered dicts are supported in this Python version
+
+    plotter.plot_pie(categories_names=topic_order, categories_counts=[category_counts[topic] for topic in topic_order],
+                     categories_colors=topic_color_dict, title=f"{field}",
+                     pie_direction=180, annot_groups=True, annot_group_selection=substantial_list,
+                     annot_props=False, edge_color="none",
                      save_path=result_path, save_name=f"field", format="png")
 
-    # employment
+    """
+    Employment
+    """
+
     employment = "Current primary employment domain"
-    category_counts = con_demo[employment].value_counts()
-    plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
-                     categories_colors=None, title=f"{employment}",
+    employment_counts = con_demo[employment].value_counts()
+
+    employment_colors = {"Tech/software development and engineering/IT": "#302F4D",
+                         "Engineering/architecture": "#302F4D",
+                         "Science/research": "#0e3747",
+                         "Healthcare/medicine": "#124559",
+                         "Public services/government": "#1E4F62",
+                         "Non-profit/volunteering": "#29596B",
+                         "Social services/counseling": "#356375",
+                         "Farming/agriculture": "#406D7E",
+                         "Transportation/logistics": "#4c7787",
+                         "Construction/trades": "#597d8b",
+                         "Manufacturing/production": "#6e8791",
+                         "Business/finance": "#7c8f97",
+                         "Administrative/clerical": "#8b9a9d",
+                         "Customer services": "#99a6a4",
+                         "Hospitality/tourism": "#a8b3ab",
+                         "Retail/sales": "#b8b0ad",
+                         "Marketing/advertising": "#d0a8a0",
+                         "Media/communications": "#e3a392",
+                         "Arts/entertainment": "#eab19b",
+                         "Legal/paralegal": "#f0b09c",
+                         "Management/consulting": "#ffbf9f",
+                         "Homemaker/caregiver": "#ffc7b9",
+                         "Student (full time)": "#e19d8b",
+                         "Retired": "#d1897a",
+                         "Other": "#c77a69",
+                         "Unemployed": "white"
+                         }
+    employment_order = list(employment_colors.keys())
+    employment_props = employment_counts.reset_index(drop=False, inplace=False)
+    employment_props["proportion"] = (employment_props["count"] / employment_props["count"].sum()) * 100
+    employment_props.to_csv(os.path.join(result_path, "emplyment.csv"), index=False)
+
+    threshold = 1.5
+    substantial_df = employment_props.loc[employment_props["proportion"] > threshold]
+    substantial_list = substantial_df[employment].tolist()
+    plotter.plot_pie(categories_names=employment_order, categories_counts=[employment_counts[employment] for employment in employment_order],
+                     categories_colors=employment_colors, title=f"{employment}", edge_color="none",
+                     pie_direction=180, annot_groups=True, annot_group_selection=substantial_list, annot_props=False,
                      save_path=result_path, save_name=f"employment", format="png")
+
+    return
+
+
+def gender_cross(analysis_dict, save_path):
+    """
+    Crosses between gender and other answers
+    """
+
+    gender = "How do you describe yourself?"
+    gender_order = ["Male", "Non-binary", "Prefer not to say", "Genderqueer", "Female"]
+    gender_color_dict = plotter.diverging_palette(color_order=gender_order, left=225, right=45)
+
+    # save path
+    result_path = os.path.join(save_path, "effect_gender")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    # gender cross with consciousness / moral status ratings
+    gender_df = analysis_dict["demographics"].loc[:, [process_survey.COL_ID, gender]]
+
+    long_data = pd.read_csv(os.path.join(save_path, "c_v_ms", "c_v_ms_long.csv"))
+    cross_df = pd.merge(long_data, gender_df, on=process_survey.COL_ID, how='left')
+    cross_df.to_csv(os.path.join(result_path, "gender_c_v_ms.csv"), index=False)
+
+    for topic in cross_df["Topic"].unique().tolist():
+        df_topic = cross_df[cross_df["Topic"] == topic]
+        df_topic_meanPerSub = df_topic.groupby(["response_id"], as_index=False)["Rating"].mean()
+        df_topic_meanPerSub_crossed = pd.merge(df_topic_meanPerSub, gender_df, on=process_survey.COL_ID, how='left')
+        plotter.plot_scatter(df=df_topic_meanPerSub_crossed, data_col="Rating", category_col=gender,
+                             category_order=gender_order, category_color_dict=gender_color_dict, title_text=f"{gender}",
+                             x_label="", y_label=f"Mean {topic} Rating", vertical_jitter=0,
+                             y_min=1, y_max=4, y_skip=1, save_path=result_path, save_name=f"gender_{topic.lower()}")
+        df_topic.to_csv(os.path.join(result_path, f"gender_{topic.lower()}.csv"), index=False)
+
+    return
+
+
+def experience(analysis_dict, save_path):
+    ethics = analysis_dict["ethics_exp"]
+    animals = analysis_dict["animal_exp"]
+    ai = analysis_dict["ai_exp"]
+    consciousness = analysis_dict["consciousness_exp"]
+
+    # save path
+    result_path = os.path.join(save_path, "experience")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+
+    """
+    Does experience with animals affect answers related to animal C / MS ? 
+    """
+
+    animals = animals.apply(helper_funcs.replace_animal_other, axis=1)  # replace "Other" if categories do exist
+
+    # first of all, general animal info
+    animal_q = "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your level of interaction or experience with animals?"
+
+    stats = {animal_q: helper_funcs.compute_stats(animals[animal_q])}
+    plot_data = {}
+    for item, (proportions, mean_rating, std_dev) in stats.items():
+        plot_data[item] = {
+            'Proportion': proportions,
+            'Mean': mean_rating,
+            'Std Dev': std_dev
+        }
+    sorted_plot_data = {key: plot_data[key] for key in list(dict(plot_data).keys()) if key in plot_data}.items()
+    rating_labels = ["1 (None)", "2", "3", "4", "5 (Extremely)"]
+    rating_color_list = ["#E7E7E7", "#B7CED0", "#87B4B9", "#569BA2", "#26818B"]
+    topic_name = "experience with animals"
+    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=1, legend=rating_labels,
+                                         ytick_visible=False, title=f"{topic_name.title()}",
+                                         colors=rating_color_list, num_ratings=5,
+                                         save_path=result_path, save_name=f"{topic_name.lower()}_ratings")
+
+    # If animal experience >= 3, which animals?
+    which_animal = animals["Please specify which animals"].str.split(',').explode()
+    animal_counts = which_animal.value_counts()
+
+    animal_colors = {"Primates (including apes)": "#FFD380",
+                     "Dogs": "#FF9122",
+                     "Cats": "#FF7C43",
+                     "Birds": "#FB675D",
+                     "Rabbits": "#f95d6a",
+                     "Livestock": "#F95D6A",
+                     "Bears": "#E0547D",
+                     "Rodents": "#D45087",
+                     "Bats": "#BA518E",
+                     "Reptiles": "#A05195",
+                     "Snails": "#665191",
+                     "Insects": "#544F8A",
+                     "Frogs": "#414D83",
+                     "Fish": "#2F4B7C",
+                     "Cephalopods": "#18456C",
+                     "Other marine life": "#003F5C",
+                     "Other": "#00202E"
+                     }
+
+    animal_order = list(animal_colors.keys())
+    animal_props = animal_counts.reset_index(drop=False, inplace=False)
+    animal_props["proportion"] = (animal_props["count"] / animal_props["count"].sum()) * 100
+    animal_props.to_csv(os.path.join(result_path, "exp_animal_types.csv"), index=False)
+
+    # annotate only important ones
+    threshold = 1.5
+    substantial_list = animal_props.loc[animal_props["proportion"] > threshold, "Please specify which animals"].tolist()
+
+    plotter.plot_pie(categories_names=animal_order, categories_counts=[animal_counts[animal] for animal in animal_order],
+                     categories_colors=animal_colors, title=f"Animal Experience (3+)", edge_color="none",
+                     pie_direction=180, annot_groups=True, annot_group_selection=substantial_list, annot_props=False,
+                     save_path=result_path, save_name="exp_animal_types", format="png")
+
+    return
+
+
+def relationship_across(sub_df, analysis_dict, save_path):
+    # save path
+    result_path = os.path.join(save_path, "clustering")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    """
+    Ordinal
+    """
+
+    # get ms columns
+    ms_cols = [c for c in analysis_dict["other_creatures_ms"].columns.tolist() if "ms_" in c]
+
+    # get c columns
+    c_cols = [c for c in analysis_dict["other_creatures_cons"].columns.tolist() if "c_" in c]
+
+    # map education columns
+    education_q = "What is your education background?"
+    sub_df[education_q] = sub_df[education_q].map(survey_mapping.EDU_MAP)
+
+    # ordinal columns
+    ordinal_cols = ms_cols + c_cols + [education_q, survey_mapping.Q_AI_EXP,
+                                       survey_mapping.Q_ANIMAL_EXP,
+                                       survey_mapping.Q_CONSC_EXP,
+                                       survey_mapping.Q_ETHICS_EXP]
+
+    """
+    Categorical 
+    """
+    gender = "How do you describe yourself?"
+    country = "In which country do you currently reside?"
+    most_important = "What do you think is important for moral considerations?"
+
+    cat_cols = [gender, country, most_important]
+    for col in cat_cols:
+        label_encoder_country = LabelEncoder()
+        sub_df[col] = label_encoder_country.fit_transform(sub_df[col])
+
+    # earth in danger
+    earth_cols = [c for c in analysis_dict["earth_in_danger"].columns.tolist() if "A" in c]
+    for c in earth_cols:
+        sub_df[c] = sub_df[c].map(survey_mapping.EARTH_DANGER_MAP)
+
+    cat_cols.extend(earth_cols)
+
+
+    """
+    Binary
+    """
+
+    # get kill columns
+    kill_cols = [c for c in analysis_dict["important_test_kill"].columns.tolist() if "A creature/system" in c]
+    for c in kill_cols:
+        sub_df[c] = sub_df[c].map(survey_mapping.ANS_KILLING_MAP)
+
+    moral_prios_cols = [c for c in analysis_dict["moral_considerations_prios"].columns.tolist() if "Do you think" in c]
+    moral_prios_cols.remove("Do you think conscious creatures/systems should be taken into account in moral decisions?")
+    for c in moral_prios_cols:
+        sub_df[c] = sub_df[c].map(survey_mapping.ANS_YESNO_MAP)
+
+    intellect_col = "Do you think consciousness and intelligence are related?"
+    zombie_col = "Would you take the pill?"
+    other_bin_cols = [intellect_col, zombie_col]
+    for c in other_bin_cols:
+        sub_df[c] = sub_df[c].map(survey_mapping.ANS_YESNO_MAP)
+
+    bin_cols = kill_cols + moral_prios_cols + other_bin_cols
+
+    helper_funcs.perform_kmodes(df=sub_df,
+                                numeric_cols=["How old are you?"],
+                                ordinal_cols=ordinal_cols,
+                                categorical_cols=cat_cols,
+                                binary_cols=bin_cols,
+                                save_path=result_path)
     return
 
 
@@ -399,15 +982,20 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     :param save_path:
     :return:
     """
-    demographics(analysis_dict, save_path)
-    other_creatures(analysis_dict, save_path)
+    graded_consciousness(analysis_dict, save_path)
+    #relationship_across(sub_df, analysis_dict, save_path)
+    #gender_cross(analysis_dict, save_path)  # move to after the individuals
+    #demographics(analysis_dict, save_path)
+    #experience(analysis_dict, save_path)
+    #other_creatures(analysis_dict, save_path)
     earth_in_danger(analysis_dict, save_path)
     ics(analysis_dict, save_path)
     kill_for_test(analysis_dict, save_path)
     zombie_pill(analysis_dict, save_path)
     moral_consideration_features(analysis_dict, save_path)
     moral_considreation_prios(analysis_dict, save_path)
-    graded_consciousness(analysis_dict, save_path)
+
     consciousness_intelligence(analysis_dict, save_path)
 
     return
+
