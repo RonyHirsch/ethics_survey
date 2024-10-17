@@ -9,10 +9,10 @@ import process_survey
 import survey_mapping
 import helper_funcs
 
-CAT_COLOR_DICT = {"Person": "#AF7A6D",  #FAE8EB
-                  "Dog": "#CCC7B9",  #6EA4BF
+CAT_COLOR_DICT = {"Person": "#AF7A6D",  # FAE8EB
+                  "Dog": "#CCC7B9",  # 6EA4BF
                   "My pet": "#E2D4BA",
-                  "Dictator (person)": "#AF7A6D",  #4C191B
+                  "Dictator (person)": "#AF7A6D",  # 4C191B
                   "Person (unresponsive wakefulness syndrome)": "#AF7A6D",
                   "Fruit fly (a conscious one, for sure)": "#CACFD6",
                   "AI (that tells you that it's conscious)": "#074F57",
@@ -60,11 +60,19 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
     long_data["Topic"] = long_data["Topic"].map(topic_name_map)
 
     # add some demographic numerical columns
-    animal_experience_df = analysis_dict["animal_exp"].loc[:, [process_survey.COL_ID, survey_mapping.Q_ANIMAL_EXP]].rename(columns={survey_mapping.Q_ANIMAL_EXP: "exp_animals"}, inplace=False)
-    ai_experience_df = analysis_dict["ai_exp"].loc[:, [process_survey.COL_ID, survey_mapping.Q_AI_EXP]].rename(columns={survey_mapping.Q_AI_EXP: "exp_ai"}, inplace=False)
-    ethics_experience_df = analysis_dict["ethics_exp"].loc[:, [process_survey.COL_ID, survey_mapping.Q_ETHICS_EXP]].rename(columns={survey_mapping.Q_ETHICS_EXP: "exp_ethics"}, inplace=False)
-    con_experience_df = analysis_dict["consciousness_exp"].loc[:, [process_survey.COL_ID, survey_mapping.Q_CONSC_EXP]].rename(columns={survey_mapping.Q_CONSC_EXP: "exp_consc"}, inplace=False)
-    demos_df = analysis_dict["demographics"].loc[:, [process_survey.COL_ID, "How old are you?"]].rename(columns={"How old are you?": "age"}, inplace=False)
+    animal_experience_df = analysis_dict["animal_exp"].loc[:,
+                           [process_survey.COL_ID, survey_mapping.Q_ANIMAL_EXP]].rename(
+        columns={survey_mapping.Q_ANIMAL_EXP: "exp_animals"}, inplace=False)
+    ai_experience_df = analysis_dict["ai_exp"].loc[:, [process_survey.COL_ID, survey_mapping.Q_AI_EXP]].rename(
+        columns={survey_mapping.Q_AI_EXP: "exp_ai"}, inplace=False)
+    ethics_experience_df = analysis_dict["ethics_exp"].loc[:,
+                           [process_survey.COL_ID, survey_mapping.Q_ETHICS_EXP]].rename(
+        columns={survey_mapping.Q_ETHICS_EXP: "exp_ethics"}, inplace=False)
+    con_experience_df = analysis_dict["consciousness_exp"].loc[:,
+                        [process_survey.COL_ID, survey_mapping.Q_CONSC_EXP]].rename(
+        columns={survey_mapping.Q_CONSC_EXP: "exp_consc"}, inplace=False)
+    demos_df = analysis_dict["demographics"].loc[:, [process_survey.COL_ID, "How old are you?"]].rename(
+        columns={"How old are you?": "age"}, inplace=False)
 
     result_df = long_data
     for dataframe in [animal_experience_df, ai_experience_df, ethics_experience_df, con_experience_df, demos_df]:
@@ -90,7 +98,6 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
         result_df[col] = label_encoder_country.fit_transform(result_df[col])
 
     result_df.to_csv(os.path.join(result_path, "c_v_ms_long_coded.csv"), index=False)
-
 
     """
     Look at the ratings individually for each item 
@@ -123,12 +130,11 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
 
         # Define plot size and number of subplots
         num_plots = len(df_topic.columns)
-        #rating_color_list = ["#e31a1c", "#fb9a99", "#a6cee3", "#1f78b4"]
-
+        # rating_color_list = ["#e31a1c", "#fb9a99", "#a6cee3", "#1f78b4"]
 
         if sorting_method is None:
             # Sort the data by the proportion of "4" rating (Python 3.7+ dictionaries maintain the insertion order of keys)
-            #sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]['Proportion'].get(4, 0), reverse=True)
+            # sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]['Proportion'].get(4, 0), reverse=True)
 
             # Sort the data by the MEAN rating (Python 3.7+ dictionaries maintain the insertion order of keys)
             sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]['Mean'], reverse=True)
@@ -140,18 +146,20 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
 
         # plot
         plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=num_plots, legend=rating_labels,
-                                             colors=rating_color_list, num_ratings=4,title=f"{topic_name.title()}",
+                                             colors=rating_color_list, num_ratings=4, title=f"{topic_name.title()}",
                                              save_path=result_path, save_name=f"{topic_name.lower()}_ratings")
 
     """
-    Plot "other creatures" judgments of Consciousness vs. of Moral Status.
+    Plot "other creatures" judgments of Consciousness vs. of Moral Status. >> PER ITEM
     """
 
     # prepare data for analyses
-    df_pivot = long_data.pivot_table(index="Item", columns="Topic", values="Rating", aggfunc="mean").fillna(0).reset_index(drop=False, inplace=False)
+    df_pivot = long_data.pivot_table(index="Item", columns="Topic", values="Rating", aggfunc="mean").fillna(
+        0).reset_index(drop=False, inplace=False)
 
     colors = [rating_color_list[0], rating_color_list[-1]]
-    individual_data = long_data.pivot_table(index=["response_id", "Item"], columns="Topic", values="Rating").reset_index(drop=False, inplace=False)
+    individual_data = long_data.pivot_table(index=["response_id", "Item"], columns="Topic",
+                                            values="Rating").reset_index(drop=False, inplace=False)
     plotter.plot_scatter_xy(df=df_pivot, identity_col="Item",
                             x_col="Consciousness", x_label="Consciousness", x_min=1, x_max=4, x_ticks=1,
                             y_col="Moral Status", y_label="Moral Status", y_min=1, y_max=4, y_ticks=1,
@@ -160,22 +168,36 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
                             individual_df=individual_data, id_col="response_id")
 
     """
+    Cluster people based on their rating tendencies of different entities' consciousness and moral status >> PER PERSON
+    """
+    df_nosub = df.iloc[:, 1:]  # only rating cols
+
+    label_maps = {**survey_mapping.MS_RATINGS, **survey_mapping.C_RATINGS}
+
+    pca_df = helper_funcs.perform_PCA(df_pivot=df_nosub, save_path=result_path, save_name="people", components=2,
+                                      clusters=2,
+                                      label_map=label_maps, binary=False, threshold=2.5)
+    pca_df[process_survey.COL_ID] = df.iloc[:, 0]
+
+    demog_df = analysis_dict["demographics"]
+
+    unified_df = pd.merge(pca_df, demog_df, on=process_survey.COL_ID)
+    unified_df.to_csv(os.path.join(result_path, f"people_PCA_result_with_demographics.csv"), index=False)
+
+    """
     CONNECTION TO GRADED CONSCIOUSNESS
     connect between the consciousness and moral status scores, and people's beliefs about graded consciousness
     """
 
-    # load the relevant data
+    # load the relevant data  # TODO: STOPPED HERE
     df_graded = analysis_dict["consciousness_graded"]
     x = 3
-
-
 
     """
     CORRELATION ANALYSIS
     Calculate for each item separately the correlation between its consciousness rating and its moral status rating. 
     """
     helper_funcs.corr_per_item(df=df, items=items, save_path=result_path)
-
 
     """
     LCA ANALYSIS
@@ -223,8 +245,9 @@ def earth_in_danger(analysis_dict, save_path):
         """
         col_map = survey_mapping.EARTH_DANGER_QA_MAP[col]
         df_earth_coded[col] = df_earth_coded[col].map(col_map)
+
     df_earth_coded.set_index([process_survey.COL_ID], inplace=True)
-    pca_df = helper_funcs.perform_PCA(df_pivot=df_earth_coded, save_path=result_path,
+    pca_df = helper_funcs.perform_PCA(df_pivot=df_earth_coded, save_path=result_path, save_name="items",
                                       components=2, clusters=2, label_map=survey_mapping.EARTH_DANGER_QA_MAP)
     pca_df.reset_index(drop=False, inplace=True)
 
@@ -244,15 +267,23 @@ def earth_in_danger(analysis_dict, save_path):
 
     overlap = unified_df_cluster.groupby(["Cluster", "Would you take the pill?"]).size().unstack(fill_value=0)
     print("Count of overlap:\n", overlap)
-    count_A1_B1 = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 1) & (unified_df_cluster["Would you take the pill?"] == 1)])
-    count_A1_B0 = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 1) & (unified_df_cluster["Would you take the pill?"] == 0)])
-    count_A0_B0 = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 0) & (unified_df_cluster["Would you take the pill?"] == 0)])
-    count_A0_B1 = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 0) & (unified_df_cluster["Would you take the pill?"] == 1)])
+    count_A1_B1 = len(unified_df_cluster[
+                          (unified_df_cluster["Cluster"] == 1) & (unified_df_cluster["Would you take the pill?"] == 1)])
+    count_A1_B0 = len(unified_df_cluster[
+                          (unified_df_cluster["Cluster"] == 1) & (unified_df_cluster["Would you take the pill?"] == 0)])
+    count_A0_B0 = len(unified_df_cluster[
+                          (unified_df_cluster["Cluster"] == 0) & (unified_df_cluster["Would you take the pill?"] == 0)])
+    count_A0_B1 = len(unified_df_cluster[
+                          (unified_df_cluster["Cluster"] == 0) & (unified_df_cluster["Would you take the pill?"] == 1)])
 
-    only_A = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 1) & (unified_df_cluster["Would you take the pill?"] == 0)])
-    only_B = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 0) & (unified_df_cluster["Would you take the pill?"] == 1)])
-    both_A_and_B = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 1) & (unified_df_cluster["Would you take the pill?"] == 1)])
-    only_neither = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 0) & (unified_df_cluster["Would you take the pill?"] == 0)])
+    only_A = len(unified_df_cluster[
+                     (unified_df_cluster["Cluster"] == 1) & (unified_df_cluster["Would you take the pill?"] == 0)])
+    only_B = len(unified_df_cluster[
+                     (unified_df_cluster["Cluster"] == 0) & (unified_df_cluster["Would you take the pill?"] == 1)])
+    both_A_and_B = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 1) & (
+                unified_df_cluster["Would you take the pill?"] == 1)])
+    only_neither = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 0) & (
+                unified_df_cluster["Would you take the pill?"] == 0)])
     print(f"Rows where A=1 and B=0: {only_A}")
     print(f"Rows where A=0 and B=1: {only_B}")
     print(f"Rows where A=1 and B=1: {both_A_and_B}")
@@ -328,7 +359,8 @@ def kill_for_test(analysis_dict, save_path):
                          save_path=result_path, save_name=q_name, format="png")
 
     # those who answered all "No's"
-    all_nos = df_test[df_test["You wouldn't eliminate any of the creatures; why?"].notnull()]  # all people who answered "No" to ALL options
+    all_nos = df_test[df_test[
+        "You wouldn't eliminate any of the creatures; why?"].notnull()]  # all people who answered "No" to ALL options
     all_nos_prop = 100 * all_nos.shape[0] / df_test.shape[0]
     rest_prop = 100 * (df_test.shape[0] - all_nos.shape[0]) / df_test.shape[0]
     cat_names = ["Won't kill any", "Kill at least one"]
@@ -356,7 +388,7 @@ def kill_for_test(analysis_dict, save_path):
     all_selections = all_nos["You wouldn't eliminate any of the creatures; why?"].str.split(',').explode()
     category_counts = all_selections.value_counts()
 
-    #category_counts = all_nos["You wouldn't eliminate any of the creatures; why?"].value_counts()
+    # category_counts = all_nos["You wouldn't eliminate any of the creatures; why?"].value_counts()
 
     plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
                      categories_colors=colors, title=f"You wouldn't eliminate any of the creatures; why?",
@@ -382,8 +414,6 @@ def zombie_pill(analysis_dict, save_path):
                      categories_colors=CAT_COLOR_DICT, title=f"Would you take the pill?",
                      save_path=result_path, save_name="take_the_pill", format="png")
 
-
-
     return
 
 
@@ -407,8 +437,71 @@ def moral_consideration_features(analysis_dict, save_path):
               }
 
     ms_features = analysis_dict["moral_considerations_features"]
-    ms_features = ms_features.drop(columns=[process_survey.COL_DUR_SEC])
-    questions = [c for c in ms_features.columns if c.startswith("What do you think") or c.startswith("Which do you think")]
+
+    ms_features_copy = ms_features[[process_survey.COL_ID, "What do you think is important for moral considerations?"]]
+
+    def create_feature_dummies(row):
+        return {feature: 1 if feature in row else 0 for feature in survey_mapping.ALL_FEATURES}
+
+    dummies_df = ms_features_copy["What do you think is important for moral considerations?"].apply(create_feature_dummies).apply(pd.Series)
+
+    """
+    this is the proportion of selecting each category NORMALIZED by the TOTAL NUMBER of RESPONSES (i.e., the number
+    of options all participants marked). A X% in this means that X% of all responses were [this] feature. 
+    [this basically treats subjects as making single-selections, splitting each multi-selection subject into the 
+    corresponding number of "single" dummy subjects, so that we can compare it to the "most important feature" below]
+    """
+    # proportion several = how many of all people selected a given feature
+    proportions_several = (dummies_df.mean() * 100).to_frame(name="Proportion_all").reset_index(drop=False, inplace=False)
+    proportions_several = proportions_several.sort_values("Proportion_all", ascending=False).reset_index(drop=True,
+                                                                                                         inplace=False)
+    category_order = proportions_several["index"].tolist()
+
+    # if participants selected only one to begin with, we didn't ask them to select which they think is the most important
+    # see it here :
+    # filtered_data = ms_features[ms_features["Which do you think is the most important for moral considerations?"].isna()]
+    ms_features["Which do you think is the most important for moral considerations?"] = ms_features[
+        "Which do you think is the most important for moral considerations?"]. \
+        fillna(ms_features["What do you think is important for moral considerations?"])
+    # now after we have the most important, plot it
+    most_important = ms_features[
+        [process_survey.COL_ID, "Which do you think is the most important for moral considerations?"]]
+    """
+    what the below means, is counting the proportions of selecting a single feature. Note that these are amts, 
+    and we do not treat within-subject things here. 
+    """
+    # proportions_one  = how many of all people selected this feature as the most important one
+    proportions_one = (most_important["Which do you think is the most important for moral considerations?"].value_counts(
+                    normalize=True) * 100).to_frame(name="Proportion_one").reset_index(drop=False, inplace=False)
+    proportions_one.rename(columns={"Which do you think is the most important for moral considerations?": "index"},
+                           inplace=True)
+    proportions_one["index"] = pd.Categorical(proportions_one["index"], categories=category_order,
+                                              ordered=True)  # match order
+    proportions_one = proportions_one.sort_values("index").reset_index(drop=True, inplace=False)
+
+    # diff = out of all the people who selected feature X as *one* of the important features,
+    # how many didn't select it as *the most* important one = the bigger it is, the more people
+    # who selected it did not select it as THE most important
+    df_diff = pd.DataFrame()
+    df_diff["index"] = category_order
+    df_diff["Proportion_diff"] = proportions_several["Proportion_all"] - proportions_one["Proportion_one"]
+
+    df_unified = reduce(lambda left, right: pd.merge(left, right, on=["index"],
+                                                     how="outer"), [proportions_several, proportions_one, df_diff])
+
+    colors = ["#FFBF00", "#F47F38", "#E83F6F", "#855A8A", "#546798", "#2274A5", "#2A848A", "#32936F", "#99C9B7"]
+    plotter.plot_categorical_bars_layered(categories_prop_df=df_unified, category_col="index",
+                                          full_data_col="Proportion_all", partial_data_col="Proportion_one",
+                                          categories_colors=colors, save_path=result_path,
+                                          save_name="important_features", format="png", y_min=0, y_max=101,
+                                          y_skip=10, inch_w=20, inch_h=12)
+
+    c = 3
+
+
+
+    questions = [c for c in ms_features.columns if
+                 c.startswith("What do you think") or c.startswith("Which do you think")]
     for q in questions:
         df_q = ms_features.loc[:, [process_survey.COL_ID, q]]
         if q == "What do you think is important for moral considerations?":
@@ -484,7 +577,48 @@ def graded_consciousness(analysis_dict, save_path):
                                          save_path=result_path, save_name=f"consciousness_graded_ratings",
                                          text_width=39)
 
+    """
+    Relations to expertise
+    """
 
+    animal_experience_df = analysis_dict["animal_exp"].loc[:,
+                           [process_survey.COL_ID, survey_mapping.Q_ANIMAL_EXP]].rename(
+        columns={survey_mapping.Q_ANIMAL_EXP: "exp_animals"}, inplace=False)
+    ai_experience_df = analysis_dict["ai_exp"].loc[:, [process_survey.COL_ID, survey_mapping.Q_AI_EXP]].rename(
+        columns={survey_mapping.Q_AI_EXP: "exp_ai"}, inplace=False)
+    ethics_experience_df = analysis_dict["ethics_exp"].loc[:,
+                           [process_survey.COL_ID, survey_mapping.Q_ETHICS_EXP]].rename(
+        columns={survey_mapping.Q_ETHICS_EXP: "exp_ethics"}, inplace=False)
+    con_experience_df = analysis_dict["consciousness_exp"].loc[:,
+                        [process_survey.COL_ID, survey_mapping.Q_CONSC_EXP]].rename(
+        columns={survey_mapping.Q_CONSC_EXP: "exp_consc"}, inplace=False)
+
+    df_experience_list = [animal_experience_df, con_experience_df, ethics_experience_df, ai_experience_df]
+    df_experience_merged = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID], how="outer"),
+                                  df_experience_list)
+    df_graded_exp = pd.merge(c_graded, df_experience_merged, on=process_survey.COL_ID)
+    df_graded_exp.to_csv(os.path.join(result_path, "graded_experience.csv"))
+
+    """
+    Does it mean the interests of the more conscious creature matter more?
+    """
+    all_count = df_graded_exp.shape[0]  # total N
+    df_graded_exp_filtered = df_graded_exp[(df_graded_exp[survey_mapping.Q_GRADED_MATTERMORE] == survey_mapping.ANS_YES)
+                                           | (df_graded_exp[
+                                                  survey_mapping.Q_GRADED_MATTERMORE] == survey_mapping.ANS_NO)]
+    not_equal_count = df_graded_exp_filtered.shape[0]  # only those who think C is not equal saw this question
+    yes_count = \
+    df_graded_exp_filtered[df_graded_exp_filtered[survey_mapping.Q_GRADED_MATTERMORE] == survey_mapping.ANS_YES].shape[
+        0]
+    yes_prop = 100 * (yes_count / not_equal_count)
+    no_count = \
+    df_graded_exp_filtered[df_graded_exp_filtered[survey_mapping.Q_GRADED_MATTERMORE] == survey_mapping.ANS_NO].shape[0]
+    no_prop = 100 * (no_count / not_equal_count)
+
+    df_graded_extra = pd.DataFrame({"N": [all_count], "N_interestQ": [not_equal_count],
+                                    "Yes_interestQ": [yes_count], "Yes_interestQ_prop": [yes_prop],
+                                    "No_interestQ": [no_count], "No_interestQ_prop": [no_prop]})
+    df_graded_extra.to_csv(os.path.join(result_path, "graded_experience_interests.csv"))
 
     """
     Relations to variability in Consciousness Ratings
@@ -562,7 +696,6 @@ def demographics(analysis_dict, save_path):
     merged_df = pd.merge(age_counts_df, age_props_df, on=age)
     merged_df.to_csv(os.path.join(result_path, "age.csv"), index=False)
 
-
     """
     Country of Residence
     """
@@ -586,9 +719,9 @@ def demographics(analysis_dict, save_path):
     gender = "How do you describe yourself?"
     category_counts = con_demo[gender].value_counts()
 
-    #gender_order = ["Male", "Non-binary", "Prefer not to say", "Genderqueer", "Female"]
-    #gender_color_dict = plotter.diverging_palette(color_order=gender_order, left=225, right=45)
-    #plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
+    # gender_order = ["Male", "Non-binary", "Prefer not to say", "Genderqueer", "Female"]
+    # gender_color_dict = plotter.diverging_palette(color_order=gender_order, left=225, right=45)
+    # plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
     #                 categories_colors=gender_color_dict, title=f"{gender}", pie_direction=90, edge_color="none",
     #                 save_path=result_path, save_name=f"gender", format="png", annot_props=False, annot_groups=False,
     #                 legend=True, legend_order=gender_order, legend_vertical=False)
@@ -607,7 +740,6 @@ def demographics(analysis_dict, save_path):
     merged_df = pd.merge(category_counts_df, category_props_df_ordered, on=gender)
     merged_df.to_csv(os.path.join(result_path, "gender.csv"), index=False)
 
-
     """ 
     Education
     """
@@ -616,7 +748,8 @@ def demographics(analysis_dict, save_path):
                        survey_mapping.EDU_POSTSEC, survey_mapping.EDU_GRAD]
     education_labels = {edu: edu.replace(" education", "") for edu in education_order[1:]}
     education_labels[survey_mapping.EDU_NONE] = survey_mapping.EDU_NONE
-    education_labels = {edu: re.sub(r'\(.*?\)', '', education_labels[edu]) for edu in education_labels.keys()}  # remove parantheses
+    education_labels = {edu: re.sub(r'\(.*?\)', '', education_labels[edu]) for edu in
+                        education_labels.keys()}  # remove parantheses
 
     education_color_dict = {survey_mapping.EDU_NONE: "#AAD2BA",
                             survey_mapping.EDU_PRIM: "#7BA084",
@@ -625,17 +758,16 @@ def demographics(analysis_dict, save_path):
                             survey_mapping.EDU_GRAD: "#445745"}
 
     education_counts = con_demo[education].value_counts().reset_index(drop=False, inplace=False)
-    #education_counts.to_csv(os.path.join(result_path, "education.csv"), index=False)
+    # education_counts.to_csv(os.path.join(result_path, "education.csv"), index=False)
 
-    education_counts_list = [education_counts.loc[education_counts[f"{education}"] == e, "count"].tolist()[0] for e in education_order]
+    education_counts_list = [education_counts.loc[education_counts[f"{education}"] == e, "count"].tolist()[0] for e in
+                             education_order]
 
-    #plotter.plot_pie(categories_names=education_order, categories_counts=education_counts_list,
+    # plotter.plot_pie(categories_names=education_order, categories_counts=education_counts_list,
     #                 categories_labels=education_labels, categories_colors=education_color_dict,
     #                 pie_direction=270, annot_groups=False, annot_props=False, edge_color="none",
     #                 legend=True, legend_vertical=False, legend_order=[education_labels[e] for e in education_order],
     #                 title=f"{education}", save_path=result_path, save_name=f"education", format="png")
-
-
 
     education_props = con_demo[education].value_counts(normalize=True)
     education_props_df = education_props.reset_index(drop=False, inplace=False)
@@ -648,7 +780,8 @@ def demographics(analysis_dict, save_path):
                   survey_mapping.EDU_GRAD: 0}
 
     education_props_df_ordered = education_props_df.sort_values(by=education, key=lambda x: x.map(order_dict))
-    education_props_df_ordered[f"{education}_label"] = education_props_df_ordered[education].replace(education_labels, inplace=False)
+    education_props_df_ordered[f"{education}_label"] = education_props_df_ordered[education].replace(education_labels,
+                                                                                                     inplace=False)
     education_props_df_ordered.reset_index(drop=True, inplace=True)
     plotter.plot_categorical_bars(categories_prop_df=education_props_df_ordered,
                                   category_col=f"{education}_label", y_min=0, y_max=50, y_skip=10,
@@ -778,7 +911,8 @@ def demographics(analysis_dict, save_path):
     threshold = 1.5
     substantial_df = employment_props.loc[employment_props["proportion"] > threshold]
     substantial_list = substantial_df[employment].tolist()
-    plotter.plot_pie(categories_names=employment_order, categories_counts=[employment_counts[employment] for employment in employment_order],
+    plotter.plot_pie(categories_names=employment_order,
+                     categories_counts=[employment_counts[employment] for employment in employment_order],
                      categories_colors=employment_colors, title=f"{employment}", edge_color="none",
                      pie_direction=180, annot_groups=True, annot_group_selection=substantial_list, annot_props=False,
                      save_path=result_path, save_name=f"employment", format="png")
@@ -830,7 +964,6 @@ def experience(analysis_dict, save_path):
     result_path = os.path.join(save_path, "experience")
     if not os.path.isdir(result_path):
         os.mkdir(result_path)
-
 
     """
     Does experience with animals affect answers related to animal C / MS ? 
@@ -890,7 +1023,8 @@ def experience(analysis_dict, save_path):
     threshold = 1.5
     substantial_list = animal_props.loc[animal_props["proportion"] > threshold, "Please specify which animals"].tolist()
 
-    plotter.plot_pie(categories_names=animal_order, categories_counts=[animal_counts[animal] for animal in animal_order],
+    plotter.plot_pie(categories_names=animal_order,
+                     categories_counts=[animal_counts[animal] for animal in animal_order],
                      categories_colors=animal_colors, title=f"Animal Experience (3+)", edge_color="none",
                      pie_direction=180, annot_groups=True, annot_group_selection=substantial_list, annot_props=False,
                      save_path=result_path, save_name="exp_animal_types", format="png")
@@ -943,7 +1077,6 @@ def relationship_across(sub_df, analysis_dict, save_path):
 
     cat_cols.extend(earth_cols)
 
-
     """
     Binary
     """
@@ -982,20 +1115,19 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     :param save_path:
     :return:
     """
-    graded_consciousness(analysis_dict, save_path)
-    #relationship_across(sub_df, analysis_dict, save_path)
-    #gender_cross(analysis_dict, save_path)  # move to after the individuals
-    #demographics(analysis_dict, save_path)
-    #experience(analysis_dict, save_path)
-    #other_creatures(analysis_dict, save_path)
-    earth_in_danger(analysis_dict, save_path)
-    ics(analysis_dict, save_path)
-    kill_for_test(analysis_dict, save_path)
-    zombie_pill(analysis_dict, save_path)
+    # graded_consciousness(analysis_dict, save_path)
+    # relationship_across(sub_df, analysis_dict, save_path)
+    # gender_cross(analysis_dict, save_path)  # move to after the individuals
+    # demographics(analysis_dict, save_path)
+    # experience(analysis_dict, save_path)
+    # other_creatures(analysis_dict, save_path)
+    # earth_in_danger(analysis_dict, save_path)
+    # ics(analysis_dict, save_path)
+    # kill_for_test(analysis_dict, save_path)
+    # zombie_pill(analysis_dict, save_path)
     moral_consideration_features(analysis_dict, save_path)
     moral_considreation_prios(analysis_dict, save_path)
 
     consciousness_intelligence(analysis_dict, save_path)
 
     return
-

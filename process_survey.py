@@ -207,17 +207,26 @@ def correct_prolific(df, prolific_data_path, save_path):
 
 
 if __name__ == '__main__':
-    subject_data_path = r"..\raw_data.csv"
-    save_path = r"..\processed"
+    subject_data_path = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\2024_08_20_paid sample\raw\raw_data.csv"
+    save_path = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\2024_08_20_paid sample\processed"
+    #subject_path = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\pilot"
+    #subject_file = "ethics_survey_June+8,+2024_11.29.csv"
 
     # extract the data
     subject_data_raw = pd.read_csv(subject_data_path)
     # remove automatically-generated columns with no usable data
     subject_data_raw.drop(columns=survey_mapping.redundant, inplace=True)
+    # if sample is paid, there are a few more columns to take care of to ensure de-identification
+    #subject_data_raw.drop(columns=survey_mapping.prolific_redundant, inplace=True, errors="ignore")
 
     # process the df
     subject_processed = process_survey(subject_data_raw)
+    # if sample is paid, cross some of the demographic data with Prolific to ensure correctness
+    subject_processed = correct_prolific(df=subject_processed,
+                                         save_path=save_path,
+                                         prolific_data_path=r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\2024_08_20_paid sample\raw\prolific_export_666701f76c6898bb61cdb6c0.csv")
     subject_processed.to_csv(os.path.join(save_path, "processed_data.csv"), index=False)
+
     # prepare the questions for analysis
     subject_dict = analysis_prep(subject_processed)
     # analyze survey

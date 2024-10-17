@@ -141,7 +141,6 @@ EARTH_DANGER_QA_MAP = {Q_PERSON_DOG: EARTH_DANGER_MAP_PERSON_DOG,
                        Q_UWS_AI: EARTH_DANGER_MAP_UWS_AI,
                        Q_AI_DOG: EARTH_DANGER_MAP_AI_DOG}
 
-
 # intentions, consciousness, sentience
 ics = {
     "ics_iWc": "Do you think a creature/system can have intentions/goals without being conscious?",
@@ -210,6 +209,7 @@ ANS_SELF = "Self-awareness"
 ANS_PHENOMENOLOGY = "Something it is like to be that creature/system"
 ANS_THINK = "Thinking"
 ANS_OTHER = "Other"
+ALL_FEATURES = [ANS_LANG, ANS_SENS, ANS_SENTIENCE, ANS_PLAN, ANS_SELF, ANS_PHENOMENOLOGY, ANS_THINK, ANS_OTHER]
 
 moral_considerations_prios = {
     "mc_Wc": "Do you think non-conscious creatures/systems should be taken into account in moral decisions?",
@@ -266,6 +266,58 @@ other_creatures_cons = {
 }
 # answers are numeric in that section (rating; scale 1-4)
 
+
+ANS_C_MS = {"Does not have": 1, "Has": 4}
+
+C_RATINGS = {"c_You": {"Consc - You": 1, "": 4},
+             "c_A large language model": {"Consc - LLM": 1, "": 4},
+             "c_A self-driving car": {"Consc - Self-driving car": 1, "": 4},
+             "c_An electron": {"Consc - Electron": 1, "": 4},
+             "c_A fungus": {"Consc - Fungus": 1, "": 4},
+             "c_A tree": {"Consc - Tree": 1, "": 4},
+             "c_A cow": {"Consc - Cow": 1, "": 4},
+             "c_A turtle": {"Consc - Turtle": 1, "": 4},
+             "c_A dog": {"Consc - Dog": 1, "": 4},
+             "c_A cat": {"Consc - Cat": 1, "": 4},
+             "c_A lobster": {"Consc - Lobster": 1, "": 4},
+             "c_A sea urchin": {"Consc - Urchin": 1, "": 4},
+             "c_An octopus": {"Consc - Octopus": 1, "": 4},
+             "c_A salmon": {"Consc - Salmon": 1, "": 4},
+             "c_A bat": {"Consc - Bat": 1, "": 4},
+             "c_A bee": {"Consc - Bee": 1, "": 4},
+             "c_A mosquito": {"Consc - Mosquito": 1, "": 4},
+             "c_A fruit-fly": {"Consc - Fruit fly": 1, "": 4},
+             "c_A rat": {"Consc - Rat": 1, "": 4},
+             "c_A pigeon": {"Consc - Pigeon": 1, "": 4},
+             "c_An orangutan": {"Consc - Orangutan": 1, "": 4},
+             "c_A fetus (human; 24 weeks)": {"Consc - Fetus": 1, "": 4},
+             "c_A newborn baby (human)": {"Consc - Newborn": 1, "": 4},
+             "c_An ant": {"Consc - Ant": 1, "": 4}}
+
+MS_RATINGS = {"ms_You": {"Moral St. - You": 1, "": 4},
+              "ms_A large language model": {"Moral St. - LLM": 1, "": 4},
+              "ms_A self-driving car": {"Moral St. - Self-driving car": 1, "": 4},
+              "ms_An electron": {"Moral St. - Electron": 1, "": 4},
+              "ms_A fungus": {"Moral St. - Fungus": 1, "": 4},
+              "ms_A tree": {"Moral St. - Tree": 1, "": 4},
+              "ms_A cow": {"Moral St. - Cow": 1, "": 4},
+              "ms_A turtle": {"Moral St. - Turtle": 1, "": 4},
+              "ms_A dog": {"Moral St. - Dog": 1, "": 4},
+              "ms_A cat": {"Moral St. - Cat": 1, "": 4},
+              "ms_A lobster": {"Moral St. - Lobster": 1, "": 4},
+              "ms_A sea urchin": {"Moral St. - Urchin": 1, "": 4},
+              "ms_An octopus": {"Moral St. - Octopus": 1, "": 4},
+              "ms_A salmon": {"Moral St. - Salmon": 1, "": 4},
+              "ms_A bat": {"Moral St. - Bat": 1, "": 4},
+              "ms_A bee": {"Moral St. - Bee": 1, "": 4},
+              "ms_A mosquito": {"Moral St. - Mosquito": 1, "": 4},
+              "ms_A fruit-fly": {"Moral St. - Fruitfly": 1, "": 4},
+              "ms_A rat": {"Moral St. - Rat": 1, "": 4},
+              "ms_A pigeon": {"Moral St. - Pigeon": 1, "": 4},
+              "ms_An orangutan": {"Moral St. - Orangutan": 1, "": 4},
+              "ms_A fetus (human; 24 weeks)": {"Moral St. - Fetus": 1, "": 4},
+              "ms_A newborn baby (human)": {"Moral St. - Newborn": 1, "": 4},
+              "ms_An ant": {"Moral St. - Ant": 1, "": 4}}
 
 # consciousness and intellect
 con_intellect = {
@@ -343,7 +395,6 @@ ANS_E_PERSON = "Personal Interest (reading philosophical texts/participant in et
 ANS_E_PROF = "Professional (work involving ethical decisions, law/medicine/social work)"
 ANS_E_VOLUN = "Volunteer Work (in organizations focused on ethical issues/moral causes)"
 ANS_E_RELIGION = "Religious/Spitirual Practice (engagement with ethical teachings)"
-
 
 Q_EXP_DICT = {Q_CONSC_EXP: "exp_consciousness",
               Q_ETHICS_EXP: "exp_ethics",

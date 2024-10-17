@@ -1,4 +1,5 @@
 import os
+import re
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
@@ -216,7 +217,7 @@ def plot_pie(categories_names, categories_counts, title, save_path, save_name,
     return
 
 
-def plot_pca_scatter_2d(df, hue, title, save_path, pal=None, format="png", annotate=True, size=150):
+def plot_pca_scatter_2d(df, hue, title, save_path, save_name, pal=None, format="png", annotate=True, size=150):
 
     if pal is None:
         sns.scatterplot(x='PC1', y='PC2', data=df, hue=hue, s=size,
@@ -239,22 +240,57 @@ def plot_pca_scatter_2d(df, hue, title, save_path, pal=None, format="png", annot
     # save plot
     figure = plt.gcf()  # get current figure
     figure.set_size_inches(15, 12)
-    plt.savefig(os.path.join(save_path, f"PCA_result.{format}"), format=f"{format}", dpi=1000, bbox_inches='tight',
+    plt.savefig(os.path.join(save_path, f"{save_name}_PCA_result.{format}"), format=f"{format}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
     plt.close()
     return
 
 
-def get_labels(label_dict):
+def get_labels(label_dict, min_val=0, max_val=1):
     """
     * A HELPER FUNCTION TO plot_binary_preferences *
     Get the labels for "0" and "1" tags in a nested dictionary structure,
     where key=some category name, and value=a dictionary where keys are 0, 1 and values are their labels
     """
-    label_0 = [key for key, value in label_dict.items() if value == 0][0]
-    label_1 = [key for key, value in label_dict.items() if value == 1][0]
+    label_0 = [key for key, value in label_dict.items() if value == min_val][0]
+    label_1 = [key for key, value in label_dict.items() if value == max_val][0]
     return label_0, label_1
+
+
+def plot_nonbinary_preferences(means, sems, colors, labels, label_map, title, min, max, thresh,
+                               save_name, save_path, format="png"):
+    fig, ax = plt.subplots(figsize=(16, 6))
+    y_pos = np.arange(len(means))
+
+    # Plot dots with error bars and differential colors
+    for i, (avg, sem, color) in enumerate(zip(means, sems, colors)):
+        # plot a dashed line
+        ax.hlines(y=y_pos[i], xmin=min-0.05, xmax=max+0.05, color="lightgray", linestyle='--', linewidth=1)
+        # plot the actual data
+        ax.errorbar(avg, y_pos[i], xerr=sem, fmt='o', color=color, markersize=8,
+                    ecolor="black", elinewidth=2, capsize=4)
+
+    ax.axvline(thresh, color="black", linewidth=1)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(["" for i in labels])
+    ax.set_xlabel("No Preference", fontsize=15)
+    ax.set_title(title, fontsize=15)
+    ax.invert_yaxis()
+    ax.set_xlim([min, max])
+    for i, label in enumerate(labels):
+        label_0, label_1 = get_labels(label_map[label], min_val=min, max_val=max)
+        ax.text(min-0.05, i, label_0, va='center', ha='right', fontsize=15, color='black')
+        ax.text(max+0.05, i, label_1, va='center', ha='left', fontsize=15, color='black')
+
+    # save plot
+    figure = plt.gcf()  # get current figure
+    figure.set_size_inches(15, 13)
+    plt.savefig(os.path.join(save_path, f"{save_name}.{format}"), format=f"{format}", dpi=1000, bbox_inches='tight',
+                pad_inches=0.01)
+    del figure
+    plt.close()
+    return
 
 
 def plot_binary_preferences(means, sems, colors, labels, label_map, title, save_name, save_path, format="png"):
@@ -267,7 +303,7 @@ def plot_binary_preferences(means, sems, colors, labels, label_map, title, save_
     # Plot dots with error bars and differential colors
     for i, (avg, sem, color) in enumerate(zip(means, sems, colors)):
         # plot a dashed line
-        ax.hlines(y=y_pos[i], xmin=-1.05, xmax=1.05, color='lightgray', linestyle='--', linewidth=1)
+        ax.hlines(y=y_pos[i], xmin=-1.05, xmax=1.05, color="lightgray", linestyle='--', linewidth=1)
         # plot the actual data
         ax.errorbar(avg, y_pos[i], xerr=sem, fmt='o', color=color, markersize=8,
                     ecolor="black", elinewidth=2, capsize=4)
@@ -397,8 +433,42 @@ def plot_histogram(df, category_col, data_col, save_path, save_name, format="svg
     return
 
 
+def plot_categorical_bars_layered(categories_prop_df, category_col, full_data_col, partial_data_col, categories_colors,
+                                  save_path, save_name, format="svg", y_min=0, y_max=100, y_skip=10,
+                                  inch_w=15, inch_h=12):
+    plt.figure(figsize=(8, 6))
+    sns.set_style("ticks")
+    plt.rcParams['font.family'] = "Calibri"
+
+    categories = list()
+    for index, row in categories_prop_df.iterrows():
+        categories.append(row[category_col])
+        # full data
+        plt.bar(row[category_col], row[full_data_col], color=categories_colors[index], label="" if index == 0 else "",
+                alpha=0.4)
+        # partial data
+        plt.bar(row[category_col], row[partial_data_col], color=categories_colors[index],
+                label="" if index == 0 else "", alpha=1.0)
+
+    plt.yticks([y for y in np.arange(y_min, y_max, y_skip)], fontsize=16)
+
+    wrapped_labels = [textwrap.fill(label, width=10) for label in categories]
+    plt.xticks(ticks=np.arange(len(wrapped_labels)), labels=wrapped_labels, fontsize=16)
+    plt.xlabel(category_col.title(), fontsize=20)
+
+    # save plot
+    figure = plt.gcf()  # get current figure
+    figure.set_size_inches(inch_w, inch_h)
+    plt.savefig(os.path.join(save_path, f"{save_name}.{format}"), format=f"{format}", dpi=1000, bbox_inches='tight',
+                pad_inches=0.01)
+    del figure
+    plt.close()
+    return
+
+
 def plot_categorical_bars(categories_prop_df, category_col, data_col, categories_colors,
-                          save_path, save_name, format="svg", y_min=0, y_max=100, y_skip=10):
+                          save_path, save_name, format="svg", y_min=0, y_max=100, y_skip=10, delete_y=True,
+                          inch_w=15, inch_h=12, add_pcnt=True):
     plt.figure(figsize=(8, 6))
     sns.set_style("ticks")
     plt.rcParams['font.family'] = "Calibri"
@@ -408,28 +478,31 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
         barplot = sns.barplot(x=category_col, y=data_col, data=categories_prop_df, palette=categories_colors)
 
     # add percentages on top of each bar
-    for index, row in categories_prop_df.iterrows():
-        barplot.text(
-            index,  # X-coordinate (position of the bar)
-            row[data_col] + 1,  # Y-coordinate (slightly above the bar)
-            f"{row[data_col]:.2f}%",  # The text (percentage value)
-            color="black",  # Text color
-            ha="center",  # Horizontal alignment
-            fontsize=25  # Font size
-        )
+    if add_pcnt:
+        for index, row in categories_prop_df.iterrows():
+            barplot.text(
+                index,  # X-coordinate (position of the bar)
+                row[data_col] + 1,  # Y-coordinate (slightly above the bar)
+                f"{row[data_col]:.2f}%",  # The text (percentage value)
+                color="black",  # Text color
+                ha="center",  # Horizontal alignment
+                fontsize=25  # Font size
+            )
 
     # now delete y-axis
-    sns.despine(right=True, top=True, left=True)
-    plt.ylabel("")
-    plt.yticks([])
-
+    if delete_y:
+        sns.despine(right=True, top=True, left=True)
+        plt.ylabel("")
+        plt.yticks([])
+    else:
+        plt.yticks([y for y in np.arange(y_min, y_max, y_skip)], fontsize=16)
 
     plt.xticks(fontsize=16)
     plt.xlabel(category_col.title(), fontsize=20)
 
     # save plot
     figure = plt.gcf()  # get current figure
-    figure.set_size_inches(15, 12)
+    figure.set_size_inches(inch_w, inch_h)
     plt.savefig(os.path.join(save_path, f"{save_name}.{format}"), format=f"{format}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
