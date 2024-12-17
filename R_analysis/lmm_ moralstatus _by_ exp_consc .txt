@@ -1,0 +1,426 @@
+[1] "                "
+[1] "****************** moralstatus by exp_consc ******************"
+[1] "                "
+[1] "------  exp_consc  ------"
+[1] "Summary for exp_consc in moralstatus ratings"
+df_filtered[[col]]: 1
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  1.000   1.000   2.000   2.386   4.000   4.000 
+------------------------------------------------------------------------------------------------------------------------------ 
+df_filtered[[col]]: 2
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  1.000   1.000   3.000   2.523   4.000   4.000 
+------------------------------------------------------------------------------------------------------------------------------ 
+df_filtered[[col]]: 3
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  1.000   1.000   3.000   2.539   4.000   4.000 
+------------------------------------------------------------------------------------------------------------------------------ 
+df_filtered[[col]]: 4
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  1.000   1.000   3.000   2.529   4.000   4.000 
+------------------------------------------------------------------------------------------------------------------------------ 
+df_filtered[[col]]: 5
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  1.000   2.000   3.000   2.755   4.000   4.000 
+[1] "                "
+[1] "Description for exp_consc"
+df_filtered[[col]]: 1
+   vars    n mean   sd median trimmed  mad min max range skew kurtosis   se
+X1    1 2880 2.39 1.21      2    2.36 1.48   1   4     3 0.15    -1.54 0.02
+------------------------------------------------------------------------------------------------------------------------------ 
+df_filtered[[col]]: 2
+   vars    n mean   sd median trimmed  mad min max range  skew kurtosis   se
+X1    1 7632 2.52 1.19      3    2.53 1.48   1   4     3 -0.02    -1.52 0.01
+------------------------------------------------------------------------------------------------------------------------------ 
+df_filtered[[col]]: 3
+   vars    n mean   sd median trimmed  mad min max range  skew kurtosis   se
+X1    1 7416 2.54 1.18      3    2.55 1.48   1   4     3 -0.05     -1.5 0.01
+------------------------------------------------------------------------------------------------------------------------------ 
+df_filtered[[col]]: 4
+   vars    n mean   sd median trimmed  mad min max range  skew kurtosis   se
+X1    1 4008 2.53 1.18      3    2.54 1.48   1   4     3 -0.05    -1.49 0.02
+------------------------------------------------------------------------------------------------------------------------------ 
+df_filtered[[col]]: 5
+   vars    n mean   sd median trimmed  mad min max range  skew kurtosis   se
+X1    1 2064 2.75 1.21      3    2.82 1.48   1   4     3 -0.33    -1.47 0.03
+[1] "                "
+[1] "                "
+[1] "------Model------"
+[1] "Model for exp_consc in moralstatus ratings"
+[1] "Rating ~ exp_consc * Item + (1 | response_id)"
+[1] "                "
+Linear mixed model fit by maximum likelihood . t-tests use Satterthwaite's method ['lmerModLmerTest']
+Formula: formula
+   Data: df_filtered
+Control: lmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 1e+05))
+
+     AIC      BIC   logLik deviance df.resid 
+ 61012.6  61416.9 -30456.3  60912.6    23950 
+
+Scaled residuals: 
+    Min      1Q  Median      3Q     Max 
+-3.8590 -0.6650  0.0092  0.6681  4.0330 
+
+Random effects:
+ Groups      Name        Variance Std.Dev.
+ response_id (Intercept) 0.3568   0.5973  
+ Residual                0.6640   0.8148  
+Number of obs: 24000, groups:  response_id, 1000
+
+Fixed effects:
+                                          Estimate Std. Error         df t value Pr(>|t|)    
+(Intercept)                              2.503e+00  8.533e-02  6.299e+03  29.335  < 2e-16 ***
+exp_consc                               -4.572e-02  2.845e-02  6.299e+03  -1.607 0.108105    
+ItemA bee                                2.351e-01  9.733e-02  2.300e+04   2.416 0.015707 *  
+ItemA cat                                7.325e-01  9.733e-02  2.300e+04   7.527 5.40e-14 ***
+ItemA cow                                4.169e-01  9.733e-02  2.300e+04   4.283 1.85e-05 ***
+ItemA dog                                8.870e-01  9.733e-02  2.300e+04   9.114  < 2e-16 ***
+ItemA fetus (human; 24 weeks)            1.158e-01  9.733e-02  2.300e+04   1.190 0.234202    
+ItemA fruit-fly                         -1.081e+00  9.733e-02  2.300e+04 -11.111  < 2e-16 ***
+ItemA fungus                            -1.122e+00  9.733e-02  2.300e+04 -11.529  < 2e-16 ***
+ItemA large language model              -1.435e+00  9.733e-02  2.300e+04 -14.743  < 2e-16 ***
+ItemA lobster                           -1.540e-01  9.733e-02  2.300e+04  -1.582 0.113559    
+ItemA mosquito                          -1.122e+00  9.733e-02  2.300e+04 -11.531  < 2e-16 ***
+ItemA newborn baby (human)               1.005e+00  9.733e-02  2.300e+04  10.328  < 2e-16 ***
+ItemA pigeon                            -2.183e-02  9.733e-02  2.300e+04  -0.224 0.822505    
+ItemA rat                               -8.366e-02  9.733e-02  2.300e+04  -0.860 0.390002    
+ItemA salmon                            -9.302e-02  9.733e-02  2.300e+04  -0.956 0.339180    
+ItemA sea urchin                        -4.820e-01  9.733e-02  2.300e+04  -4.953 7.37e-07 ***
+ItemA self-driving car                  -1.701e+00  9.733e-02  2.300e+04 -17.477  < 2e-16 ***
+ItemA tree                              -3.120e-01  9.733e-02  2.300e+04  -3.205 0.001350 ** 
+ItemA turtle                             4.158e-01  9.733e-02  2.300e+04   4.272 1.94e-05 ***
+ItemAn ant                              -5.328e-01  9.733e-02  2.300e+04  -5.474 4.45e-08 ***
+ItemAn electron                         -1.536e+00  9.733e-02  2.300e+04 -15.786  < 2e-16 ***
+ItemAn octopus                           2.964e-01  9.733e-02  2.300e+04   3.046 0.002324 ** 
+ItemAn orangutan                         8.482e-01  9.733e-02  2.300e+04   8.715  < 2e-16 ***
+ItemYou                                  1.429e+00  9.733e-02  2.300e+04  14.678  < 2e-16 ***
+exp_consc:ItemA bee                      2.836e-02  3.245e-02  2.300e+04   0.874 0.382125    
+exp_consc:ItemA cat                      1.599e-02  3.245e-02  2.300e+04   0.493 0.622216    
+exp_consc:ItemA cow                      8.634e-02  3.245e-02  2.300e+04   2.661 0.007802 ** 
+exp_consc:ItemA dog                      1.726e-02  3.245e-02  2.300e+04   0.532 0.594824    
+exp_consc:ItemA fetus (human; 24 weeks)  1.953e-01  3.245e-02  2.300e+04   6.019 1.78e-09 ***
+exp_consc:ItemA fruit-fly                1.828e-01  3.245e-02  2.300e+04   5.633 1.79e-08 ***
+exp_consc:ItemA fungus                   1.277e-01  3.245e-02  2.300e+04   3.935 8.34e-05 ***
+exp_consc:ItemA large language model     3.570e-01  3.245e-02  2.300e+04  11.001  < 2e-16 ***
+exp_consc:ItemA lobster                  8.631e-02  3.245e-02  2.300e+04   2.660 0.007830 ** 
+exp_consc:ItemA mosquito                 1.353e-01  3.245e-02  2.300e+04   4.170 3.06e-05 ***
+exp_consc:ItemA newborn baby (human)     7.689e-02  3.245e-02  2.300e+04   2.369 0.017825 *  
+exp_consc:ItemA pigeon                   1.154e-01  3.245e-02  2.300e+04   3.555 0.000379 ***
+exp_consc:ItemA rat                     -4.651e-02  3.245e-02  2.300e+04  -1.433 0.151831    
+exp_consc:ItemA salmon                   6.078e-02  3.245e-02  2.300e+04   1.873 0.061091 .  
+exp_consc:ItemA sea urchin               1.172e-01  3.245e-02  2.300e+04   3.613 0.000304 ***
+exp_consc:ItemA self-driving car         3.811e-01  3.245e-02  2.300e+04  11.745  < 2e-16 ***
+exp_consc:ItemA tree                     2.096e-01  3.245e-02  2.300e+04   6.460 1.07e-10 ***
+exp_consc:ItemA turtle                   2.309e-02  3.245e-02  2.300e+04   0.712 0.476721    
+exp_consc:ItemAn ant                     1.125e-01  3.245e-02  2.300e+04   3.466 0.000530 ***
+exp_consc:ItemAn electron                2.968e-01  3.245e-02  2.300e+04   9.146  < 2e-16 ***
+exp_consc:ItemAn octopus                 1.675e-02  3.245e-02  2.300e+04   0.516 0.605838    
+exp_consc:ItemAn orangutan              -9.393e-02  3.245e-02  2.300e+04  -2.894 0.003802 ** 
+exp_consc:ItemYou                        3.505e-02  3.245e-02  2.300e+04   1.080 0.280172    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+[1] "                "
+[1] "                "
+[1] "------Effect Significance------"
+Type II Analysis of Variance Table with Satterthwaite's method
+                Sum Sq Mean Sq NumDF DenDF F value    Pr(>F)    
+exp_consc         7.84   7.839     1  1000  11.806 0.0006148 ***
+Item           2355.03 102.393    23 23000 154.211 < 2.2e-16 ***
+exp_consc:Item  405.20  17.617    23 23000  26.533 < 2.2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+Type II Analysis of Variance Table with Satterthwaite's method
+                Sum Sq Mean Sq NumDF DenDF F value     Pr(>F)  p_adjust
+exp_consc         7.84   7.839     1  1000  11.806 0.00061485 0.0018445
+Item           2355.03 102.393    23 23000 154.211 0.00000000 0.0000000
+exp_consc:Item  405.20  17.617    23 23000  26.533 0.00000000 0.0000000
+[1] "                "
+[1] "------Effect Sizes------"
+Type II Analysis of Variance Table with Satterthwaite's method
+                Sum Sq Mean Sq NumDF DenDF F value     Pr(>F)  p_adjust eta_squared   CI_low  CI_high
+exp_consc         7.84   7.839     1  1000  11.806 0.00061485 0.0018445    0.011668 0.002154 0.028342
+Item           2355.03 102.393    23 23000 154.211 0.00000000 0.0000000    0.133607 0.125042 0.140856
+exp_consc:Item  405.20  17.617    23 23000  26.533 0.00000000 0.0000000    0.025847 0.021091 0.029075
+[1] "                "
+[1] "------Bayes Factors------"
+Type II Analysis of Variance Table with Satterthwaite's method
+                Sum Sq Mean Sq NumDF DenDF F value     Pr(>F)  p_adjust eta_squared   CI_low  CI_high          BF
+exp_consc         7.84   7.839     1  1000  11.806 0.00061485 0.0018445    0.011668 0.002154 0.028342  3.0000e+00
+Item           2355.03 102.393    23 23000 154.211 0.00000000 0.0000000    0.133607 0.125042 0.140856         Inf
+exp_consc:Item  405.20  17.617    23 23000  26.533 0.00000000 0.0000000    0.025847 0.021091 0.029075 1.6291e+109
+[1] "                "
+[1] "------Post Hoc------"
+[1] "exp_consc"
+ exp_consc emmean     SE  df asymp.LCL asymp.UCL
+      2.78   2.53 0.0196 Inf      2.49      2.57
+
+Results are averaged over the levels of: Item 
+Degrees-of-freedom method: asymptotic 
+Confidence level used: 0.95 
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Results are averaged over the levels of: Item 
+Degrees-of-freedom method: asymptotic 
+Confidence level used: 0.95 
+[1] "Item"
+ Item                      emmean     SE  df asymp.LCL asymp.UCL
+ A bat                       2.38 0.0319 Inf      2.31      2.44
+ A bee                       2.69 0.0319 Inf      2.63      2.75
+ A cat                       3.15 0.0319 Inf      3.09      3.22
+ A cow                       3.03 0.0319 Inf      2.97      3.10
+ A dog                       3.31 0.0319 Inf      3.25      3.37
+ A fetus (human; 24 weeks)   3.04 0.0319 Inf      2.97      3.10
+ A fruit-fly                 1.80 0.0319 Inf      1.74      1.87
+ A fungus                    1.61 0.0319 Inf      1.55      1.67
+ A large language model      1.93 0.0319 Inf      1.87      2.00
+ A lobster                   2.46 0.0319 Inf      2.40      2.52
+ A mosquito                  1.63 0.0319 Inf      1.57      1.69
+ A newborn baby (human)      3.60 0.0319 Inf      3.53      3.66
+ A pigeon                    2.67 0.0319 Inf      2.61      2.74
+ A rat                       2.16 0.0319 Inf      2.10      2.23
+ A salmon                    2.45 0.0319 Inf      2.39      2.51
+ A sea urchin                2.22 0.0319 Inf      2.16      2.28
+ A self-driving car          1.74 0.0319 Inf      1.67      1.80
+ A tree                      2.65 0.0319 Inf      2.58      2.71
+ A turtle                    2.86 0.0319 Inf      2.79      2.92
+ An ant                      2.16 0.0319 Inf      2.09      2.22
+ An electron                 1.66 0.0319 Inf      1.60      1.73
+ An octopus                  2.72 0.0319 Inf      2.66      2.78
+ An orangutan                2.96 0.0319 Inf      2.90      3.03
+ You                         3.90 0.0319 Inf      3.84      3.96
+
+Degrees-of-freedom method: asymptotic 
+Confidence level used: 0.95 
+ contrast                                           estimate     SE  df asymp.LCL asymp.UCL z.ratio p.value
+ A bat - A bee                                        -0.314 0.0364 Inf -0.450433  -0.17757  -8.617  <.0001
+ A bat - A cat                                        -0.777 0.0364 Inf -0.913433  -0.64057 -21.322  <.0001
+ A bat - A cow                                        -0.657 0.0364 Inf -0.793433  -0.52057 -18.029  <.0001
+ A bat - A dog                                        -0.935 0.0364 Inf -1.071433  -0.79857 -25.658  <.0001
+ A bat - A fetus (human; 24 weeks)                    -0.659 0.0364 Inf -0.795433  -0.52257 -18.084  <.0001
+ A bat - (A fruit-fly)                                 0.573 0.0364 Inf  0.436567   0.70943  15.724  <.0001
+ A bat - A fungus                                      0.767 0.0364 Inf  0.630567   0.90343  21.048  <.0001
+ A bat - A large language model                        0.442 0.0364 Inf  0.305567   0.57843  12.129  <.0001
+ A bat - A lobster                                    -0.086 0.0364 Inf -0.222433   0.05043  -2.360  1.0000
+ A bat - A mosquito                                    0.746 0.0364 Inf  0.609567   0.88243  20.471  <.0001
+ A bat - A newborn baby (human)                       -1.219 0.0364 Inf -1.355433  -1.08257 -33.451  <.0001
+ A bat - A pigeon                                     -0.299 0.0364 Inf -0.435433  -0.16257  -8.205  <.0001
+ A bat - A rat                                         0.213 0.0364 Inf  0.076567   0.34943   5.845  <.0001
+ A bat - A salmon                                     -0.076 0.0364 Inf -0.212433   0.06043  -2.086  1.0000
+ A bat - A sea urchin                                  0.156 0.0364 Inf  0.019567   0.29243   4.281  0.0051
+ A bat - (A self-driving car)                          0.641 0.0364 Inf  0.504567   0.77743  17.590  <.0001
+ A bat - A tree                                       -0.271 0.0364 Inf -0.407433  -0.13457  -7.437  <.0001
+ A bat - A turtle                                     -0.480 0.0364 Inf -0.616433  -0.34357 -13.172  <.0001
+ A bat - An ant                                        0.220 0.0364 Inf  0.083567   0.35643   6.037  <.0001
+ A bat - An electron                                   0.711 0.0364 Inf  0.574567   0.84743  19.511  <.0001
+ A bat - An octopus                                   -0.343 0.0364 Inf -0.479433  -0.20657  -9.412  <.0001
+ A bat - An orangutan                                 -0.587 0.0364 Inf -0.723433  -0.45057 -16.108  <.0001
+ A bat - You                                          -1.526 0.0364 Inf -1.662433  -1.38957 -41.876  <.0001
+ A bee - A cat                                        -0.463 0.0364 Inf -0.599433  -0.32657 -12.705  <.0001
+ A bee - A cow                                        -0.343 0.0364 Inf -0.479433  -0.20657  -9.412  <.0001
+ A bee - A dog                                        -0.621 0.0364 Inf -0.757433  -0.48457 -17.041  <.0001
+ A bee - A fetus (human; 24 weeks)                    -0.345 0.0364 Inf -0.481433  -0.20857  -9.467  <.0001
+ A bee - (A fruit-fly)                                 0.887 0.0364 Inf  0.750567   1.02343  24.341  <.0001
+ A bee - A fungus                                      1.081 0.0364 Inf  0.944567   1.21743  29.664  <.0001
+ A bee - A large language model                        0.756 0.0364 Inf  0.619567   0.89243  20.746  <.0001
+ A bee - A lobster                                     0.228 0.0364 Inf  0.091567   0.36443   6.257  <.0001
+ A bee - A mosquito                                    1.060 0.0364 Inf  0.923567   1.19643  29.088  <.0001
+ A bee - A newborn baby (human)                       -0.905 0.0364 Inf -1.041433  -0.76857 -24.835  <.0001
+ A bee - A pigeon                                      0.015 0.0364 Inf -0.121433   0.15143   0.412  1.0000
+ A bee - A rat                                         0.527 0.0364 Inf  0.390567   0.66343  14.462  <.0001
+ A bee - A salmon                                      0.238 0.0364 Inf  0.101567   0.37443   6.531  <.0001
+ A bee - A sea urchin                                  0.470 0.0364 Inf  0.333567   0.60643  12.898  <.0001
+ A bee - (A self-driving car)                          0.955 0.0364 Inf  0.818567   1.09143  26.207  <.0001
+ A bee - A tree                                        0.043 0.0364 Inf -0.093433   0.17943   1.180  1.0000
+ A bee - A turtle                                     -0.166 0.0364 Inf -0.302433  -0.02957  -4.555  0.0014
+ A bee - An ant                                        0.534 0.0364 Inf  0.397567   0.67043  14.654  <.0001
+ A bee - An electron                                   1.025 0.0364 Inf  0.888567   1.16143  28.128  <.0001
+ A bee - An octopus                                   -0.029 0.0364 Inf -0.165433   0.10743  -0.796  1.0000
+ A bee - An orangutan                                 -0.273 0.0364 Inf -0.409433  -0.13657  -7.492  <.0001
+ A bee - You                                          -1.212 0.0364 Inf -1.348433  -1.07557 -33.259  <.0001
+ A cat - A cow                                         0.120 0.0364 Inf -0.016433   0.25643   3.293  0.2736
+ A cat - A dog                                        -0.158 0.0364 Inf -0.294433  -0.02157  -4.336  0.0040
+ A cat - A fetus (human; 24 weeks)                     0.118 0.0364 Inf -0.018433   0.25443   3.238  0.3321
+ A cat - (A fruit-fly)                                 1.350 0.0364 Inf  1.213567   1.48643  37.046  <.0001
+ A cat - A fungus                                      1.544 0.0364 Inf  1.407567   1.68043  42.370  <.0001
+ A cat - A large language model                        1.219 0.0364 Inf  1.082567   1.35543  33.451  <.0001
+ A cat - A lobster                                     0.691 0.0364 Inf  0.554567   0.82743  18.962  <.0001
+ A cat - A mosquito                                    1.523 0.0364 Inf  1.386567   1.65943  41.793  <.0001
+ A cat - A newborn baby (human)                       -0.442 0.0364 Inf -0.578433  -0.30557 -12.129  <.0001
+ A cat - A pigeon                                      0.478 0.0364 Inf  0.341567   0.61443  13.117  <.0001
+ A cat - A rat                                         0.990 0.0364 Inf  0.853567   1.12643  27.167  <.0001
+ A cat - A salmon                                      0.701 0.0364 Inf  0.564567   0.83743  19.236  <.0001
+ A cat - A sea urchin                                  0.933 0.0364 Inf  0.796567   1.06943  25.603  <.0001
+ A cat - (A self-driving car)                          1.418 0.0364 Inf  1.281567   1.55443  38.912  <.0001
+ A cat - A tree                                        0.506 0.0364 Inf  0.369567   0.64243  13.885  <.0001
+ A cat - A turtle                                      0.297 0.0364 Inf  0.160567   0.43343   8.150  <.0001
+ A cat - An ant                                        0.997 0.0364 Inf  0.860567   1.13343  27.359  <.0001
+ A cat - An electron                                   1.488 0.0364 Inf  1.351567   1.62443  40.833  <.0001
+ A cat - An octopus                                    0.434 0.0364 Inf  0.297567   0.57043  11.910  <.0001
+ A cat - An orangutan                                  0.190 0.0364 Inf  0.053567   0.32643   5.214  0.0001
+ A cat - You                                          -0.749 0.0364 Inf -0.885433  -0.61257 -20.554  <.0001
+ A cow - A dog                                        -0.278 0.0364 Inf -0.414433  -0.14157  -7.629  <.0001
+ A cow - A fetus (human; 24 weeks)                    -0.002 0.0364 Inf -0.138433   0.13443  -0.055  1.0000
+ A cow - (A fruit-fly)                                 1.230 0.0364 Inf  1.093567   1.36643  33.753  <.0001
+ A cow - A fungus                                      1.424 0.0364 Inf  1.287567   1.56043  39.077  <.0001
+ A cow - A large language model                        1.099 0.0364 Inf  0.962567   1.23543  30.158  <.0001
+ A cow - A lobster                                     0.571 0.0364 Inf  0.434567   0.70743  15.669  <.0001
+ A cow - A mosquito                                    1.403 0.0364 Inf  1.266567   1.53943  38.500  <.0001
+ A cow - A newborn baby (human)                       -0.562 0.0364 Inf -0.698433  -0.42557 -15.422  <.0001
+ A cow - A pigeon                                      0.358 0.0364 Inf  0.221567   0.49443   9.824  <.0001
+ A cow - A rat                                         0.870 0.0364 Inf  0.733567   1.00643  23.874  <.0001
+ A cow - A salmon                                      0.581 0.0364 Inf  0.444567   0.71743  15.944  <.0001
+ A cow - A sea urchin                                  0.813 0.0364 Inf  0.676567   0.94943  22.310  <.0001
+ A cow - (A self-driving car)                          1.298 0.0364 Inf  1.161567   1.43443  35.619  <.0001
+ A cow - A tree                                        0.386 0.0364 Inf  0.249567   0.52243  10.592  <.0001
+ A cow - A turtle                                      0.177 0.0364 Inf  0.040567   0.31343   4.857  0.0003
+ A cow - An ant                                        0.877 0.0364 Inf  0.740567   1.01343  24.066  <.0001
+ A cow - An electron                                   1.368 0.0364 Inf  1.231567   1.50443  37.540  <.0001
+ A cow - An octopus                                    0.314 0.0364 Inf  0.177567   0.45043   8.617  <.0001
+ A cow - An orangutan                                  0.070 0.0364 Inf -0.066433   0.20643   1.921  1.0000
+ A cow - You                                          -0.869 0.0364 Inf -1.005433  -0.73257 -23.847  <.0001
+ A dog - A fetus (human; 24 weeks)                     0.276 0.0364 Inf  0.139567   0.41243   7.574  <.0001
+ A dog - (A fruit-fly)                                 1.508 0.0364 Inf  1.371567   1.64443  41.382  <.0001
+ A dog - A fungus                                      1.702 0.0364 Inf  1.565567   1.83843  46.705  <.0001
+ A dog - A large language model                        1.377 0.0364 Inf  1.240567   1.51343  37.787  <.0001
+ A dog - A lobster                                     0.849 0.0364 Inf  0.712567   0.98543  23.298  <.0001
+ A dog - A mosquito                                    1.681 0.0364 Inf  1.544567   1.81743  46.129  <.0001
+ A dog - A newborn baby (human)                       -0.284 0.0364 Inf -0.420433  -0.14757  -7.793  <.0001
+ A dog - A pigeon                                      0.636 0.0364 Inf  0.499567   0.77243  17.453  <.0001
+ A dog - A rat                                         1.148 0.0364 Inf  1.011567   1.28443  31.503  <.0001
+ A dog - A salmon                                      0.859 0.0364 Inf  0.722567   0.99543  23.572  <.0001
+ A dog - A sea urchin                                  1.091 0.0364 Inf  0.954567   1.22743  29.939  <.0001
+ A dog - (A self-driving car)                          1.576 0.0364 Inf  1.439567   1.71243  43.248  <.0001
+ A dog - A tree                                        0.664 0.0364 Inf  0.527567   0.80043  18.221  <.0001
+ A dog - A turtle                                      0.455 0.0364 Inf  0.318567   0.59143  12.486  <.0001
+ A dog - An ant                                        1.155 0.0364 Inf  1.018567   1.29143  31.695  <.0001
+ A dog - An electron                                   1.646 0.0364 Inf  1.509567   1.78243  45.169  <.0001
+ A dog - An octopus                                    0.592 0.0364 Inf  0.455567   0.72843  16.245  <.0001
+ A dog - An orangutan                                  0.348 0.0364 Inf  0.211567   0.48443   9.550  <.0001
+ A dog - You                                          -0.591 0.0364 Inf -0.727433  -0.45457 -16.218  <.0001
+ A fetus (human; 24 weeks) - (A fruit-fly)             1.232 0.0364 Inf  1.095567   1.36843  33.808  <.0001
+ A fetus (human; 24 weeks) - A fungus                  1.426 0.0364 Inf  1.289567   1.56243  39.132  <.0001
+ A fetus (human; 24 weeks) - A large language model    1.101 0.0364 Inf  0.964567   1.23743  30.213  <.0001
+ A fetus (human; 24 weeks) - A lobster                 0.573 0.0364 Inf  0.436567   0.70943  15.724  <.0001
+ A fetus (human; 24 weeks) - A mosquito                1.405 0.0364 Inf  1.268567   1.54143  38.555  <.0001
+ A fetus (human; 24 weeks) - A newborn baby (human)   -0.560 0.0364 Inf -0.696433  -0.42357 -15.367  <.0001
+ A fetus (human; 24 weeks) - A pigeon                  0.360 0.0364 Inf  0.223567   0.49643   9.879  <.0001
+ A fetus (human; 24 weeks) - A rat                     0.872 0.0364 Inf  0.735567   1.00843  23.929  <.0001
+ A fetus (human; 24 weeks) - A salmon                  0.583 0.0364 Inf  0.446567   0.71943  15.998  <.0001
+ A fetus (human; 24 weeks) - A sea urchin              0.815 0.0364 Inf  0.678567   0.95143  22.365  <.0001
+ A fetus (human; 24 weeks) - (A self-driving car)      1.300 0.0364 Inf  1.163567   1.43643  35.674  <.0001
+ A fetus (human; 24 weeks) - A tree                    0.388 0.0364 Inf  0.251567   0.52443  10.647  <.0001
+ A fetus (human; 24 weeks) - A turtle                  0.179 0.0364 Inf  0.042567   0.31543   4.912  0.0002
+ A fetus (human; 24 weeks) - An ant                    0.879 0.0364 Inf  0.742567   1.01543  24.121  <.0001
+ A fetus (human; 24 weeks) - An electron               1.370 0.0364 Inf  1.233567   1.50643  37.595  <.0001
+ A fetus (human; 24 weeks) - An octopus                0.316 0.0364 Inf  0.179567   0.45243   8.672  <.0001
+ A fetus (human; 24 weeks) - An orangutan              0.072 0.0364 Inf -0.064433   0.20843   1.976  1.0000
+ A fetus (human; 24 weeks) - You                      -0.867 0.0364 Inf -1.003433  -0.73057 -23.792  <.0001
+ (A fruit-fly) - A fungus                              0.194 0.0364 Inf  0.057567   0.33043   5.324  <.0001
+ (A fruit-fly) - A large language model               -0.131 0.0364 Inf -0.267433   0.00543  -3.595  0.0896
+ [ reached getOption("max.print") -- omitted 151 rows ]
+
+Degrees-of-freedom method: asymptotic 
+Confidence level used: 0.95 
+Conf-level adjustment: bonferroni method for 276 estimates 
+P value adjustment: bonferroni method for 276 tests 
+[1] "exp_consc:Item"
+Item = A bat:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = A bee:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = A cat:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = A cow:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = A dog:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = A fetus (human; 24 weeks):
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = A fruit-fly:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = A fungus:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = A large language model:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = A lobster:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = A mosquito:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = A newborn baby (human):
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = A pigeon:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = A rat:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = A salmon:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = A sea urchin:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = A self-driving car:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = A tree:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = A turtle:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = An ant:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = An electron:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = An octopus:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = An orangutan:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Item = You:
+ contrast  estimate SE df asymp.LCL asymp.UCL z.ratio p.value
+ (nothing)   nonEst NA NA        NA        NA      NA      NA
+
+Degrees-of-freedom method: asymptotic 
+Confidence level used: 0.95 
+[1] "                "

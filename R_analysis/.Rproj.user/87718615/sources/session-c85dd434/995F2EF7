@@ -1,0 +1,27 @@
+{
+    "id": "995F2EF7",
+    "path": "~/projects/ethics/survey_analysis/code/R_analysis/lmm_graded_consciousness.R",
+    "project_path": "lmm_graded_consciousness.R",
+    "type": "r_source",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1728717453137.0,
+    "source_on_save": false,
+    "relative_order": 4,
+    "properties": {
+        "tempName": "Untitled1",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "30,7",
+        "scrollLine": "23"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1728720675,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1728720675449,
+    "read_only": false,
+    "read_only_alternatives": []
+}
