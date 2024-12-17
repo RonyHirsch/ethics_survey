@@ -263,39 +263,14 @@ if __name__ == '__main__':
     # free sample
     free_sub_dict, paid_sub_df = processed_free_sample(subject_data_path=r"C:\Users\rony\Documents\ethics_survey_data\free\raw\ethics_free_labels.csv",
                                                        free_save_path=r"C:\Users\rony\Documents\ethics_survey_data\free\processed")
-    print("before")
     analyze_survey.analyze_survey(sub_df=paid_sub_df,
                                   analysis_dict=free_sub_dict,
                                   save_path=r"C:\Users\rony\Documents\ethics_survey_data\free\processed")
 
     # collapse both samples
-    print("after")
     total_df = pd.concat([prolific_sub_df, paid_sub_df], ignore_index=True)
     # unify the dicts as well
     total_dict = dict()
     for key in prolific_sub_dict.keys():
         total_dict[key] = pd.concat([prolific_sub_dict[key], free_sub_dict[key]], ignore_index=True)
     analyze_survey.analyze_survey(sub_df=total_df, analysis_dict=total_dict, save_path=r"C:\Users\rony\Documents\ethics_survey_data\all")
-
-    exit()
-
-    # extract the data
-    #subject_data_raw = pd.read_csv(subject_data_path)
-    # remove automatically-generated columns with no usable data
-    #subject_data_raw.drop(columns=survey_mapping.redundant, inplace=True)
-
-    # if sample is paid, there are a few more columns to take care of to ensure de-identification
-    #subject_data_raw.drop(columns=survey_mapping.prolific_redundant, inplace=True, errors="ignore")
-
-    # process the df
-    #subject_processed = process_survey(subject_data_raw)
-    # if sample is paid, cross some of the demographic data with Prolific to ensure correctness
-    #subject_processed = correct_prolific(df=subject_processed,
-    #                                     save_path=save_path,
-    #                                     prolific_data_path=r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\2024_08_20_paid sample\raw\prolific_export_666701f76c6898bb61cdb6c0.csv")
-    #subject_processed.to_csv(os.path.join(save_path, "processed_data.csv"), index=False)
-
-    # prepare the questions for analysis
-    #subject_dict = analysis_prep(subject_processed)
-    # analyze survey
-    #analyze_survey.analyze_survey(subject_processed, subject_dict, save_path)
