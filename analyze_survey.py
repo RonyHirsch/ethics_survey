@@ -495,23 +495,7 @@ def moral_consideration_features(analysis_dict, save_path):
                                           categories_colors=colors, save_path=result_path,
                                           save_name="important_features", format="png", y_min=0, y_max=101,
                                           y_skip=10, inch_w=20, inch_h=12)
-
-    c = 3
-
-
-
-    questions = [c for c in ms_features.columns if
-                 c.startswith("What do you think") or c.startswith("Which do you think")]
-    for q in questions:
-        df_q = ms_features.loc[:, [process_survey.COL_ID, q]]
-        if q == "What do you think is important for moral considerations?":
-            all_selections = df_q[q].str.split(r',(?! )').explode()
-            category_counts = all_selections.value_counts()
-        else:
-            category_counts = df_q[q].value_counts()
-        plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
-                         categories_colors=colors, title=f"{q}",
-                         save_path=result_path, save_name=f"{q.replace('?', '')}", format="png")
+    df_unified.to_csv(os.path.join(result_path, "important_features.csv"), index=False)
     return
 
 
@@ -525,7 +509,6 @@ def moral_considreation_prios(analysis_dict, save_path):
         os.mkdir(result_path)
 
     ms_prios = analysis_dict["moral_considerations_prios"]
-    ms_prios = ms_prios.drop(columns=[process_survey.COL_DUR_SEC])
     questions = [c for c in ms_prios.columns if c.startswith("Do you think")]
     for q in questions:
         df_q = ms_prios.loc[:, [process_survey.COL_ID, q]]
@@ -1125,7 +1108,7 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     # ics(analysis_dict, save_path)
     # kill_for_test(analysis_dict, save_path)
     # zombie_pill(analysis_dict, save_path)
-    moral_consideration_features(analysis_dict, save_path)
+    #moral_consideration_features(analysis_dict, save_path)
     moral_considreation_prios(analysis_dict, save_path)
 
     consciousness_intelligence(analysis_dict, save_path)

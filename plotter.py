@@ -142,7 +142,10 @@ def plot_pie(categories_names, categories_counts, title, save_path, save_name,
              legend=False, legend_order=None, legend_vertical=True,
              edge_color="white"):
     if categories_colors is not None:
-        categories_colors_list = [categories_colors[cat] for cat in categories_names]
+        try:
+            categories_colors_list = [categories_colors[cat] for cat in categories_names]
+        except Exception:
+            c = 3
     else:
         categories_colors_list = sns.color_palette("colorblind", len(categories_names))
 

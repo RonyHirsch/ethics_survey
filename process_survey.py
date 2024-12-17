@@ -47,6 +47,10 @@ def bot_filter(sub_df):
         sub_df_filtered.reset_index(inplace=True, drop=True)
     else:
         sub_df_filtered = sub_df
+
+    # test 2: did these people even finish the entire study?
+    sub_df_filtered = sub_df_filtered[sub_df_filtered["Finished"] != "False"]
+    sub_df_filtered.reset_index(inplace=True, drop=True)
     return sub_df_filtered
 
 
@@ -192,42 +196,106 @@ def correct_prolific(df, prolific_data_path, save_path):
     prolific_df_relevant.rename(columns={"Participant id": "PROLIFIC_PID"}, inplace=True)
 
     merged_df = pd.merge(df, prolific_df_relevant, on="PROLIFIC_PID", how="left")
-    merged_df["age_verification"] = (merged_df["How old are you?"].astype(float) == merged_df["Age"].astype(float)).astype(int)
+    merged_df["age_verification"] = (merged_df["How old are you?"].replace("CONSENT_REVOKED", np.nan).astype(float) == merged_df["Age"].replace("CONSENT_REVOKED", np.nan).astype(float)).astype(int)
 
-    mismatch = merged_df[merged_df["age_verification"]==0][["PROLIFIC_PID", "How old are you?", "Age"]]
+    mismatch = merged_df[merged_df["age_verification"] == 0][["PROLIFIC_PID", "How old are you?", "Age"]]
     mismatch.to_csv(os.path.join(save_path, "age_liars.csv"), index=False)
     print(f"{mismatch.shape[0]} had a mismatch between reported age and Prolific age; took Prolific age")
 
     merged_df.loc[merged_df["age_verification"] == 0, "How old are you?"] = merged_df["Age"]
     merged_df.drop(columns=["Age", "age_verification"], inplace=True)
 
-    merged_df["How old are you?"] = merged_df["How old are you?"].astype(int)
+    # nans won't be converted into ints, which is why we convert to floats
+    merged_df["How old are you?"] = merged_df["How old are you?"].replace("CONSENT_REVOKED", np.nan).astype(float)
 
     return merged_df
 
 
-if __name__ == '__main__':
-    subject_data_path = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\2024_08_20_paid sample\raw\raw_data.csv"
-    save_path = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\2024_08_20_paid sample\processed"
-    #subject_path = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\pilot"
-    #subject_file = "ethics_survey_June+8,+2024_11.29.csv"
+def processed_paid_sample(subject_data_path, prolific_save_path, prolific_data_path):
 
     # extract the data
     subject_data_raw = pd.read_csv(subject_data_path)
     # remove automatically-generated columns with no usable data
     subject_data_raw.drop(columns=survey_mapping.redundant, inplace=True)
+
+    # process the df
+    subject_processed = process_survey(subject_data_raw)
+    # As the sample is paid, cross some of the demographic data with Prolific to ensure correctness
+    subject_processed = correct_prolific(df=subject_processed,
+                                         save_path=prolific_save_path,
+                                         prolific_data_path=prolific_data_path)
+    # As the sample is paid, there are a few more columns to take care of to ensure de-identification
+    subject_processed.drop(columns=survey_mapping.prolific_redundant, inplace=True, errors="ignore")
+    subject_processed.to_csv(os.path.join(prolific_save_path, "processed_data.csv"), index=False)
+
+    # prepare the questions for analysis
+    subject_dict = analysis_prep(subject_processed)
+    return subject_dict, subject_processed
+
+
+def processed_free_sample(subject_data_path, free_save_path):
+
+    # extract the data
+    subject_data_raw = pd.read_csv(subject_data_path)
+    # remove automatically-generated columns with no usable data
+    subject_data_raw.drop(columns=survey_mapping.redundant, inplace=True)
+
+    # process the df
+    subject_processed = process_survey(subject_data_raw)
+    subject_processed.to_csv(os.path.join(free_save_path, "processed_data.csv"), index=False)
+
+    # prepare the questions for analysis
+    subject_dict = analysis_prep(subject_processed)
+
+    return subject_dict, subject_processed
+
+
+if __name__ == '__main__':
+
+    # paid sample
+    prolific_sub_dict, prolific_sub_df = processed_paid_sample(subject_data_path=r"C:\Users\rony\Documents\ethics_survey_data\prolific\raw\prolific_paid_labels.csv",
+                                                               prolific_save_path=r"C:\Users\rony\Documents\ethics_survey_data\prolific\processed",
+                                                               prolific_data_path=r"C:\Users\rony\Documents\ethics_survey_data\prolific\raw\prolific_export_666701f76c6898bb61cdb6c0.csv")
+    analyze_survey.analyze_survey(sub_df=prolific_sub_df,
+                                  analysis_dict=prolific_sub_dict,
+                                  save_path=r"C:\Users\rony\Documents\ethics_survey_data\prolific\processed")
+
+    # free sample
+    free_sub_dict, paid_sub_df = processed_free_sample(subject_data_path=r"C:\Users\rony\Documents\ethics_survey_data\free\raw\ethics_free_labels.csv",
+                                                       free_save_path=r"C:\Users\rony\Documents\ethics_survey_data\free\processed")
+    print("before")
+    analyze_survey.analyze_survey(sub_df=paid_sub_df,
+                                  analysis_dict=free_sub_dict,
+                                  save_path=r"C:\Users\rony\Documents\ethics_survey_data\free\processed")
+
+    # collapse both samples
+    print("after")
+    total_df = pd.concat([prolific_sub_df, paid_sub_df], ignore_index=True)
+    # unify the dicts as well
+    total_dict = dict()
+    for key in prolific_sub_dict.keys():
+        total_dict[key] = pd.concat([prolific_sub_dict[key], free_sub_dict[key]], ignore_index=True)
+    analyze_survey.analyze_survey(sub_df=total_df, analysis_dict=total_dict, save_path=r"C:\Users\rony\Documents\ethics_survey_data\all")
+
+    exit()
+
+    # extract the data
+    #subject_data_raw = pd.read_csv(subject_data_path)
+    # remove automatically-generated columns with no usable data
+    #subject_data_raw.drop(columns=survey_mapping.redundant, inplace=True)
+
     # if sample is paid, there are a few more columns to take care of to ensure de-identification
     #subject_data_raw.drop(columns=survey_mapping.prolific_redundant, inplace=True, errors="ignore")
 
     # process the df
-    subject_processed = process_survey(subject_data_raw)
+    #subject_processed = process_survey(subject_data_raw)
     # if sample is paid, cross some of the demographic data with Prolific to ensure correctness
-    subject_processed = correct_prolific(df=subject_processed,
-                                         save_path=save_path,
-                                         prolific_data_path=r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\2024_08_20_paid sample\raw\prolific_export_666701f76c6898bb61cdb6c0.csv")
-    subject_processed.to_csv(os.path.join(save_path, "processed_data.csv"), index=False)
+    #subject_processed = correct_prolific(df=subject_processed,
+    #                                     save_path=save_path,
+    #                                     prolific_data_path=r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\2024_08_20_paid sample\raw\prolific_export_666701f76c6898bb61cdb6c0.csv")
+    #subject_processed.to_csv(os.path.join(save_path, "processed_data.csv"), index=False)
 
     # prepare the questions for analysis
-    subject_dict = analysis_prep(subject_processed)
+    #subject_dict = analysis_prep(subject_processed)
     # analyze survey
-    analyze_survey.analyze_survey(subject_processed, subject_dict, save_path)
+    #analyze_survey.analyze_survey(subject_processed, subject_dict, save_path)
