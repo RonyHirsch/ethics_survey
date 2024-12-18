@@ -726,9 +726,15 @@ def plot_scatter(df, data_col, category_col, category_color_dict, category_order
 
     # Plot means with standard deviations manually
     for i, category in enumerate(category_order):
-        mean = category_means[category]
-        std = category_stds[category]
-        sem = category_sems[category]
+        try:
+            mean = category_means[category]
+            std = category_stds[category]
+            sem = category_sems[category]
+        except Exception:  # this category does not exist (no one answered it)
+            mean = np.nan
+            std = np.nan
+            sem = np.nan
+
         plt.plot(i, mean, "o", color="black", markersize=10, label=f"Mean {category}", zorder=2)
         # yerr=sem or yerr=std, whichever we prefer
         plt.errorbar(i, mean, yerr=sem, fmt="o", color="black", capsize=7, zorder=2)
@@ -757,9 +763,23 @@ def plot_scatter(df, data_col, category_col, category_color_dict, category_order
 
 
 def plot_world_map_proportion(country_proportions_df, data_column, save_path):
+    """
+    :param country_proportions_df:
+    :param data_column:
+    :param save_path:
+    :return:
+    """
 
-    # load a world map
-    world = gpd.read_file(r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\code\ethics_survey\ne_110m_admin_0_countries\ne_110m_admin_0_countries.shp")
+    """
+    To load the world map I use here: (even though it's on the git repo as well)
+    - Go to: https://www.naturalearthdata.com/downloads/110m-cultural-vectors/
+    - Download the "Admin 0 – Countries" zip file
+    - Save it on your computer and extract it
+    - Then, map_shapfile_path should be the path to the '.shp' file in the unzipped folder
+    
+    """
+    map_shapfile_path = r"C:\Users\rony\Documents\github_projects\ethics_survey\ne_110m_admin_0_countries\ne_110m_admin_0_countries.shp"
+    world = gpd.read_file(map_shapfile_path)
     world = world[world["CONTINENT"] != "Antarctica"]  # remove Antarctica
     world = world[world["CONTINENT"] != "Seven seas (open ocean"]  # remove the seven seas
     world.loc[world["NAME"] == "Russia", "CONTINENT"] = "Eastern Europe"  # Russia is otherwise clustered with the whold of Europe

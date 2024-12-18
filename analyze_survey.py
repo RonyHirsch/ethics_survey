@@ -253,7 +253,13 @@ def earth_in_danger(analysis_dict, save_path):
 
     # in the pca_df we also get the results of the KMeans clustering we performed.
     # then, we want to examine if there are any demographics that are shared within each cluster.
+    df_zombie = analysis_dict["zombification_pill"]
     df_zombie["Would you take the pill?"] = df_zombie["Would you take the pill?"].map({"Yes": 1, "No": 0})
+    df_demog = analysis_dict["demographics"]
+    df_animalexp = analysis_dict["animal_exp"]
+    df_ethicsexp = analysis_dict["ethics_exp"]
+    df_aiexp = analysis_dict["ai_exp"]
+    df_cexp = analysis_dict["consciousness_exp"]
     df_list = [df_demog, df_animalexp, df_ethicsexp, df_aiexp, df_cexp, df_zombie]
     unified_df = reduce(lambda x, y: x.merge(y, on=process_survey.COL_ID), df_list)
     unified_df_cluster = pd.merge(unified_df, pca_df[[process_survey.COL_ID, "Cluster"]],
@@ -262,8 +268,6 @@ def earth_in_danger(analysis_dict, save_path):
     unified_df_cluster.to_csv(os.path.join(result_path, "clusters_with_demographic.csv"), index=False)
 
     import seaborn as sns
-    import matplotlib.pyplot as plt
-    from matplotlib_venn import venn2
 
     overlap = unified_df_cluster.groupby(["Cluster", "Would you take the pill?"]).size().unstack(fill_value=0)
     print("Count of overlap:\n", overlap)
@@ -317,7 +321,6 @@ def ics(analysis_dict, save_path):
 
     # load relevant data
     df_ics = analysis_dict["ics"]
-    df_ics = df_ics.drop(columns=[process_survey.COL_DUR_SEC])
     questions = [c for c in df_ics.columns if c.startswith("Do you think a creature/system")]
     for q in questions:
         df_q = df_ics.loc[:, [process_survey.COL_ID, q]]
@@ -344,7 +347,6 @@ def kill_for_test(analysis_dict, save_path):
 
     # load relevant data
     df_test = analysis_dict["important_test_kill"]
-    df_test = df_test.drop(columns=[process_survey.COL_DUR_SEC])
     # all the options for killing (scenarios)
     questions = [c for c in df_test.columns if c.startswith("A creature/system that")]
     for q in questions:
@@ -408,7 +410,6 @@ def zombie_pill(analysis_dict, save_path):
 
     # load relevant data
     df_zombie = analysis_dict["zombification_pill"]
-    df_zombie = df_zombie.drop(columns=[process_survey.COL_DUR_SEC])
     category_counts = df_zombie["Would you take the pill?"].value_counts()
     plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
                      categories_colors=CAT_COLOR_DICT, title=f"Would you take the pill?",
@@ -607,7 +608,7 @@ def graded_consciousness(analysis_dict, save_path):
     Relations to variability in Consciousness Ratings
     """
     other_creatures_c = analysis_dict["other_creatures_cons"]
-    other_creatures_c["c_ratings_variability"] = other_creatures_c[other_creatures_c.columns[1:]].std(axis=1)
+    other_creatures_c["c_ratings_variability"] = other_creatures_c.iloc[:, 1:].std(axis=1)
     std_df = other_creatures_c[[process_survey.COL_ID, "c_ratings_variability"]]
     merged_df = pd.merge(c_graded, std_df, on=process_survey.COL_ID)
     # TODO: STOPPED HERE
@@ -741,17 +742,6 @@ def demographics(analysis_dict, save_path):
                             survey_mapping.EDU_GRAD: "#445745"}
 
     education_counts = con_demo[education].value_counts().reset_index(drop=False, inplace=False)
-    # education_counts.to_csv(os.path.join(result_path, "education.csv"), index=False)
-
-    education_counts_list = [education_counts.loc[education_counts[f"{education}"] == e, "count"].tolist()[0] for e in
-                             education_order]
-
-    # plotter.plot_pie(categories_names=education_order, categories_counts=education_counts_list,
-    #                 categories_labels=education_labels, categories_colors=education_color_dict,
-    #                 pie_direction=270, annot_groups=False, annot_props=False, edge_color="none",
-    #                 legend=True, legend_vertical=False, legend_order=[education_labels[e] for e in education_order],
-    #                 title=f"{education}", save_path=result_path, save_name=f"education", format="png")
-
     education_props = con_demo[education].value_counts(normalize=True)
     education_props_df = education_props.reset_index(drop=False, inplace=False)
     education_props_df["proportion"] = 100 * education_props_df["proportion"]
@@ -846,7 +836,9 @@ def demographics(analysis_dict, save_path):
                         }
     topic_order = list(topic_color_dict.keys())  # ordered dicts are supported in this Python version
 
-    plotter.plot_pie(categories_names=topic_order, categories_counts=[category_counts[topic] for topic in topic_order],
+    category_counts = [category_counts[topic] if topic in category_counts else 0 for topic in topic_order]
+
+    plotter.plot_pie(categories_names=topic_order, categories_counts=category_counts,
                      categories_colors=topic_color_dict, title=f"{field}",
                      pie_direction=180, annot_groups=True, annot_group_selection=substantial_list,
                      annot_props=False, edge_color="none",
@@ -894,8 +886,11 @@ def demographics(analysis_dict, save_path):
     threshold = 1.5
     substantial_df = employment_props.loc[employment_props["proportion"] > threshold]
     substantial_list = substantial_df[employment].tolist()
+
+    category_counts = [employment_counts[employment] if employment in employment_counts else 0 for employment in employment_order]
+
     plotter.plot_pie(categories_names=employment_order,
-                     categories_counts=[employment_counts[employment] for employment in employment_order],
+                     categories_counts=category_counts,  #[employment_counts[employment] for employment in employment_order]
                      categories_colors=employment_colors, title=f"{employment}", edge_color="none",
                      pie_direction=180, annot_groups=True, annot_group_selection=substantial_list, annot_props=False,
                      save_path=result_path, save_name=f"employment", format="png")
@@ -1006,8 +1001,10 @@ def experience(analysis_dict, save_path):
     threshold = 1.5
     substantial_list = animal_props.loc[animal_props["proportion"] > threshold, "Please specify which animals"].tolist()
 
+    category_counts = [animal_counts[animal] if animal in animal_counts else 0 for animal in animal_order]
+
     plotter.plot_pie(categories_names=animal_order,
-                     categories_counts=[animal_counts[animal] for animal in animal_order],
+                     categories_counts=category_counts,  #[animal_counts[animal] for animal in animal_order]
                      categories_colors=animal_colors, title=f"Animal Experience (3+)", edge_color="none",
                      pie_direction=180, annot_groups=True, annot_group_selection=substantial_list, annot_props=False,
                      save_path=result_path, save_name="exp_animal_types", format="png")
@@ -1026,10 +1023,12 @@ def relationship_across(sub_df, analysis_dict, save_path):
     """
 
     # get ms columns
-    ms_cols = [c for c in analysis_dict["other_creatures_ms"].columns.tolist() if "ms_" in c]
+    ms_creature_cols = list(survey_mapping.other_creatures_ms.values())
+    ms_cols = [c for c in analysis_dict["other_creatures_ms"].columns.tolist() if c in ms_creature_cols]
 
     # get c columns
-    c_cols = [c for c in analysis_dict["other_creatures_cons"].columns.tolist() if "c_" in c]
+    c_creature_cols = list(survey_mapping.other_creatures_cons.values())
+    c_cols = [c for c in analysis_dict["other_creatures_cons"].columns.tolist() if c in c_creature_cols]
 
     # map education columns
     education_q = "What is your education background?"
@@ -1093,24 +1092,24 @@ def relationship_across(sub_df, analysis_dict, save_path):
 
 def analyze_survey(sub_df, analysis_dict, save_path):
     """
-    :param sub_df:
-    :param analysis_dict:
-    :param save_path:
-    :return:
+    The method which manages all the processing of specific survey data for analyses.
+    :param sub_df: the dataframe of all participants' responses
+    :param analysis_dict: dictionary where key=topic, value=a dataframe containing all the columns relevant for this
+    topic/section
+    :param save_path: where the results will be saved (csvs, plots)
     """
-    # graded_consciousness(analysis_dict, save_path)
-    # relationship_across(sub_df, analysis_dict, save_path)
-    # gender_cross(analysis_dict, save_path)  # move to after the individuals
-    # demographics(analysis_dict, save_path)
-    # experience(analysis_dict, save_path)
-    # other_creatures(analysis_dict, save_path)
-    # earth_in_danger(analysis_dict, save_path)
-    # ics(analysis_dict, save_path)
-    # kill_for_test(analysis_dict, save_path)
-    # zombie_pill(analysis_dict, save_path)
-    #moral_consideration_features(analysis_dict, save_path)
+    other_creatures(analysis_dict, save_path)
+    graded_consciousness(analysis_dict, save_path)
+    relationship_across(sub_df, analysis_dict, save_path)
+    gender_cross(analysis_dict, save_path)  # move to after the individuals
+    demographics(analysis_dict, save_path)
+    experience(analysis_dict, save_path)
+    zombie_pill(analysis_dict, save_path)
+    earth_in_danger(analysis_dict, save_path)  # MUST COME AFTER "zombie_pill"
+    ics(analysis_dict, save_path)
+    kill_for_test(analysis_dict, save_path)
+    moral_consideration_features(analysis_dict, save_path)
     moral_considreation_prios(analysis_dict, save_path)
-
     consciousness_intelligence(analysis_dict, save_path)
 
     return
