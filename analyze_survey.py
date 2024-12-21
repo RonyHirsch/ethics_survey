@@ -1098,18 +1098,31 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     topic/section
     :param save_path: where the results will be saved (csvs, plots)
     """
+    print("1")
     other_creatures(analysis_dict, save_path)
+    print("2")
     graded_consciousness(analysis_dict, save_path)
+    print("3")
     relationship_across(sub_df, analysis_dict, save_path)
+    print("4")
     gender_cross(analysis_dict, save_path)  # move to after the individuals
+    print("5")
     demographics(analysis_dict, save_path)
+    print("6")
     experience(analysis_dict, save_path)
+    print("7")
     zombie_pill(analysis_dict, save_path)
+    print("8")
     earth_in_danger(analysis_dict, save_path)  # MUST COME AFTER "zombie_pill"
+    print("9")
     ics(analysis_dict, save_path)
+    print("10")
     kill_for_test(analysis_dict, save_path)
+    print("11")
     moral_consideration_features(analysis_dict, save_path)
+    print("12")
     moral_considreation_prios(analysis_dict, save_path)
+    print("13")
     consciousness_intelligence(analysis_dict, save_path)
 
     return
