@@ -251,7 +251,7 @@ def perform_PCA(df_pivot, save_path, save_name, components=2, clusters=3, label_
     chisq_df.to_csv(os.path.join(save_path, f"{save_name}_cluster_centroids_chisq.csv"), index=False)
 
     # WRITE TO TXT
-    with open(os.path.join(save_path, f"{save_name}_PCA_result.txt"), 'a') as file:
+    with open(os.path.join(save_path, f"{save_name}_PCA_result.txt"), "w") as file:
         for line in txt_output:
             line_str = str(line)
             file.write(line_str + '\n')

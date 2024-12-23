@@ -278,9 +278,6 @@ def processed_free_sample(subject_data_path, free_save_path):
     return subject_dict, subject_processed
 
 
-
-
-
 if __name__ == '__main__':
 
     prolific_path = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\prolific"
