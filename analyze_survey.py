@@ -254,13 +254,14 @@ def earth_in_danger(analysis_dict, save_path):
     # in the pca_df we also get the results of the KMeans clustering we performed.
     # then, we want to examine if there are any demographics that are shared within each cluster.
     df_zombie = analysis_dict["zombification_pill"]
-    df_zombie["Would you take the pill?"] = df_zombie["Would you take the pill?"].map({"Yes": 1, "No": 0})
+    df_zombie_copy = df_zombie.copy()
+    df_zombie_copy["Would you take the pill?"] = df_zombie_copy["Would you take the pill?"].map({"Yes": 1, "No": 0})
     df_demog = analysis_dict["demographics"]
     df_animalexp = analysis_dict["animal_exp"]
     df_ethicsexp = analysis_dict["ethics_exp"]
     df_aiexp = analysis_dict["ai_exp"]
     df_cexp = analysis_dict["consciousness_exp"]
-    df_list = [df_demog, df_animalexp, df_ethicsexp, df_aiexp, df_cexp, df_zombie]
+    df_list = [df_demog, df_animalexp, df_ethicsexp, df_aiexp, df_cexp, df_zombie_copy]
     unified_df = reduce(lambda x, y: x.merge(y, on=process_survey.COL_ID), df_list)
     unified_df_cluster = pd.merge(unified_df, pca_df[[process_survey.COL_ID, "Cluster"]],
                                   on=process_survey.COL_ID, how="left")
@@ -608,9 +609,9 @@ def graded_consciousness(analysis_dict, save_path):
     Relations to variability in Consciousness Ratings
     """
     other_creatures_c = analysis_dict["other_creatures_cons"]
-    other_creatures_c["c_ratings_variability"] = other_creatures_c.iloc[:, 1:].std(axis=1)
-    std_df = other_creatures_c[[process_survey.COL_ID, "c_ratings_variability"]]
-    merged_df = pd.merge(c_graded, std_df, on=process_survey.COL_ID)
+    #other_creatures_c["c_ratings variability"] = other_creatures_c.iloc[:, 1:].std(axis=1)
+    #std_df = other_creatures_c[[process_survey.COL_ID, "c_ratings variability"]]
+    #merged_df = pd.merge(c_graded, std_df, on=process_survey.COL_ID)
     # TODO: STOPPED HERE
 
     return
@@ -1018,6 +1019,8 @@ def relationship_across(sub_df, analysis_dict, save_path):
     if not os.path.isdir(result_path):
         os.mkdir(result_path)
 
+    sub_df_copy = sub_df.copy()  # this is the copy we'll be working on, to not change the original
+
     """
     Ordinal
     """
@@ -1032,7 +1035,7 @@ def relationship_across(sub_df, analysis_dict, save_path):
 
     # map education columns
     education_q = "What is your education background?"
-    sub_df[education_q] = sub_df[education_q].map(survey_mapping.EDU_MAP)
+    sub_df_copy[education_q] = sub_df_copy[education_q].map(survey_mapping.EDU_MAP)
 
     # ordinal columns
     ordinal_cols = ms_cols + c_cols + [education_q, survey_mapping.Q_AI_EXP,
@@ -1050,12 +1053,12 @@ def relationship_across(sub_df, analysis_dict, save_path):
     cat_cols = [gender, country, most_important]
     for col in cat_cols:
         label_encoder_country = LabelEncoder()
-        sub_df[col] = label_encoder_country.fit_transform(sub_df[col])
+        sub_df_copy[col] = label_encoder_country.fit_transform(sub_df_copy[col])
 
     # earth in danger
     earth_cols = [c for c in analysis_dict["earth_in_danger"].columns.tolist() if "A" in c]
     for c in earth_cols:
-        sub_df[c] = sub_df[c].map(survey_mapping.EARTH_DANGER_MAP)
+        sub_df_copy[c] = sub_df_copy[c].map(survey_mapping.EARTH_DANGER_MAP)
 
     cat_cols.extend(earth_cols)
 
@@ -1066,22 +1069,22 @@ def relationship_across(sub_df, analysis_dict, save_path):
     # get kill columns
     kill_cols = [c for c in analysis_dict["important_test_kill"].columns.tolist() if "A creature/system" in c]
     for c in kill_cols:
-        sub_df[c] = sub_df[c].map(survey_mapping.ANS_KILLING_MAP)
+        sub_df_copy[c] = sub_df_copy[c].map(survey_mapping.ANS_KILLING_MAP)
 
     moral_prios_cols = [c for c in analysis_dict["moral_considerations_prios"].columns.tolist() if "Do you think" in c]
     moral_prios_cols.remove("Do you think conscious creatures/systems should be taken into account in moral decisions?")
     for c in moral_prios_cols:
-        sub_df[c] = sub_df[c].map(survey_mapping.ANS_YESNO_MAP)
+        sub_df_copy[c] = sub_df_copy[c].map(survey_mapping.ANS_YESNO_MAP)
 
     intellect_col = "Do you think consciousness and intelligence are related?"
     zombie_col = "Would you take the pill?"
     other_bin_cols = [intellect_col, zombie_col]
     for c in other_bin_cols:
-        sub_df[c] = sub_df[c].map(survey_mapping.ANS_YESNO_MAP)
+        sub_df_copy[c] = sub_df_copy[c].map(survey_mapping.ANS_YESNO_MAP)
 
     bin_cols = kill_cols + moral_prios_cols + other_bin_cols
 
-    helper_funcs.perform_kmodes(df=sub_df,
+    helper_funcs.perform_kmodes(df=sub_df_copy,
                                 numeric_cols=["How old are you?"],
                                 ordinal_cols=ordinal_cols,
                                 categorical_cols=cat_cols,
