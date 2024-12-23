@@ -1,5 +1,6 @@
 import os
-
+import pickle
+import warnings
 import numpy as np
 import pandas as pd
 import survey_mapping
@@ -16,7 +17,8 @@ COL_DUR_SEC = "duration_sec"  # how long it took the subject (in seconds)
 MIN_DUR_SEC = 300  # 300 seconds = 5 minutes
 
 COL_BOT = "Q_RecaptchaScore"  # captcha score
-BOT_PASS = 1  # in the captcha,  1 = not a robot
+BOT_PASS = 0.8  # in the captcha,  1 = not a robot
+AGE_CONSENT = 18
 
 COL_CONSENT = "consent_form"  # the field of informed consent
 CONSENT_YES = "I consent, begin the study"  # providing consent
@@ -26,11 +28,13 @@ def convert_columns(df):
     for column in df.columns:
         try:
             # Try to convert to numeric
-            df[column] = pd.to_numeric(df[column])
+            df.loc[:, column] = pd.to_numeric(df[column])
         except ValueError:
             try:
                 # If numeric conversion fails, try to convert to datetime
-                df[column] = pd.to_datetime(df[column])
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=UserWarning)
+                    df.loc[:, column] = pd.to_datetime(df[column])
             except ValueError:
                 # If both conversions fail, leave the column as is
                 pass
@@ -38,8 +42,10 @@ def convert_columns(df):
 
 
 def bot_filter(sub_df):
+    shape_before = sub_df.shape[0]
+    print(f"Before filtering: {shape_before} subjects in sample")
     # all those with a reCaptcha score that isn't perfect
-    suspected_bot = sub_df[sub_df[COL_BOT] != BOT_PASS]
+    suspected_bot = sub_df[sub_df[COL_BOT] < BOT_PASS]
     # test 1: did it take them less than MIN_DUR_SEC to answer the survey?
     test1 = suspected_bot[suspected_bot[COL_DUR_SEC] < MIN_DUR_SEC]
     if not test1.empty:
@@ -47,11 +53,21 @@ def bot_filter(sub_df):
         sub_df_filtered.reset_index(inplace=True, drop=True)
     else:
         sub_df_filtered = sub_df
+    shape_after = sub_df.shape[0]
+    print(f"Bot filtering: {shape_before - shape_after} were excluded")
 
     # test 2: did these people even finish the entire study?
     sub_df_filtered = sub_df_filtered[sub_df_filtered["Finished"] != "False"]
     sub_df_filtered.reset_index(inplace=True, drop=True)
-    return sub_df_filtered
+    shape_finish = sub_df_filtered.shape[0]
+    print(f"Partial responses: {shape_after - shape_finish} were excluded")
+
+    # test 3: are respondent in the age of consent?
+    sub_df_age = sub_df_filtered[sub_df_filtered["How old are you?"] >= AGE_CONSENT]
+    sub_df_age.reset_index(inplace=True, drop=True)
+    shape_final = sub_df_age.shape[0]
+    print(f"Underage participants: {shape_finish - shape_final} were excluded")
+    return sub_df_age
 
 
 def analysis_prep(sub_df):
@@ -172,9 +188,6 @@ def process_values(sub_df):
 
 
 def process_survey(sub_df):
-    sub_df.rename(columns=survey_mapping.questions_name_mapping, inplace=True)  # give meaningful headers
-    sub_df = sub_df.iloc[2:]  # delete the other question-indicator rows
-    sub_df = convert_columns(sub_df)  # convert numeric and datetime columns to be as such
     # filter out participants who did not provide consent - they are not counted as participants in the study:
     sub_df = sub_df[sub_df[COL_CONSENT] == CONSENT_YES].reset_index(inplace=False, drop=True)
     # filter out bots:
@@ -218,18 +231,27 @@ def processed_paid_sample(subject_data_path, prolific_save_path, prolific_data_p
     # remove automatically-generated columns with no usable data
     subject_data_raw.drop(columns=survey_mapping.redundant, inplace=True)
 
-    # process the df
-    subject_processed = process_survey(subject_data_raw)
+    subject_data_raw.rename(columns=survey_mapping.questions_name_mapping, inplace=True)  # give meaningful headers
+    sub_df = subject_data_raw.iloc[2:]  # delete the other question-indicator rows
+    sub_df = convert_columns(sub_df)  # convert numeric and datetime columns to be as such
+
     # As the sample is paid, cross some of the demographic data with Prolific to ensure correctness
-    subject_processed = correct_prolific(df=subject_processed,
+    subject_processed = correct_prolific(df=sub_df,
                                          save_path=prolific_save_path,
                                          prolific_data_path=prolific_data_path)
+
+    # process the df
+    subject_processed = process_survey(subject_processed)
+
     # As the sample is paid, there are a few more columns to take care of to ensure de-identification
     subject_processed.drop(columns=survey_mapping.prolific_redundant, inplace=True, errors="ignore")
     subject_processed.to_csv(os.path.join(prolific_save_path, "processed_data.csv"), index=False)
 
     # prepare the questions for analysis
     subject_dict = analysis_prep(subject_processed)
+    # save to pickle for loading
+    with open(os.path.join(prolific_save_path, "processed_data.pkl"), "wb") as f:
+        pickle.dump(subject_dict, f)
     return subject_dict, subject_processed
 
 
@@ -240,37 +262,65 @@ def processed_free_sample(subject_data_path, free_save_path):
     # remove automatically-generated columns with no usable data
     subject_data_raw.drop(columns=survey_mapping.redundant, inplace=True)
 
+    subject_data_raw.rename(columns=survey_mapping.questions_name_mapping, inplace=True)  # give meaningful headers
+    sub_df = subject_data_raw.iloc[2:]  # delete the other question-indicator rows
+    sub_df = convert_columns(sub_df)  # convert numeric and datetime columns to be as such
+
     # process the df
-    subject_processed = process_survey(subject_data_raw)
+    subject_processed = process_survey(sub_df)
     subject_processed.to_csv(os.path.join(free_save_path, "processed_data.csv"), index=False)
 
     # prepare the questions for analysis
     subject_dict = analysis_prep(subject_processed)
+    with open(os.path.join(free_save_path, "processed_data.pkl"), "wb") as f:
+        pickle.dump(subject_dict, f)
 
     return subject_dict, subject_processed
 
 
+
+
+
 if __name__ == '__main__':
 
-    # paid sample
-    prolific_sub_dict, prolific_sub_df = processed_paid_sample(subject_data_path=r"C:\Users\rony\Documents\ethics_survey_data\prolific\raw\prolific_paid_labels.csv",
-                                                               prolific_save_path=r"C:\Users\rony\Documents\ethics_survey_data\prolific\processed",
-                                                               prolific_data_path=r"C:\Users\rony\Documents\ethics_survey_data\prolific\raw\prolific_export_666701f76c6898bb61cdb6c0.csv")
-    analyze_survey.analyze_survey(sub_df=prolific_sub_df,
-                                  analysis_dict=prolific_sub_dict,
-                                  save_path=r"C:\Users\rony\Documents\ethics_survey_data\prolific\processed")
+    prolific_path = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\prolific"
+    free_path = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\free"
 
-    # free sample
-    free_sub_dict, paid_sub_df = processed_free_sample(subject_data_path=r"C:\Users\rony\Documents\ethics_survey_data\free\raw\ethics_free_labels.csv",
-                                                       free_save_path=r"C:\Users\rony\Documents\ethics_survey_data\free\processed")
-    analyze_survey.analyze_survey(sub_df=paid_sub_df,
-                                  analysis_dict=free_sub_dict,
-                                  save_path=r"C:\Users\rony\Documents\ethics_survey_data\free\processed")
+    load = True
+
+    if load:
+        # load paid
+        with open(os.path.join(prolific_path, r"processed\processed_data.pkl"), "rb") as f:
+            prolific_sub_dict = pickle.load(f)
+        prolific_sub_df = pd.read_csv(os.path.join(prolific_path, r"processed\processed_data.csv"))
+        # load free
+        with open(os.path.join(free_path, r"processed\processed_data.pkl"), "rb") as f:
+            free_sub_dict = pickle.load(f)
+        free_sub_df = pd.read_csv(os.path.join(free_path, r"processed\processed_data.csv"))
+
+    else:  # run everything
+        # paid sample
+        prolific_sub_dict, prolific_sub_df = processed_paid_sample(subject_data_path=os.path.join(prolific_path, r"raw\prolific_paid_labels.csv"),
+                                                                   prolific_save_path=os.path.join(prolific_path, r"processed"),
+                                                                   prolific_data_path=os.path.join(prolific_path, r"raw\prolific_export_666701f76c6898bb61cdb6c0.csv"))
+        analyze_survey.analyze_survey(sub_df=prolific_sub_df.copy(),
+                                      analysis_dict=prolific_sub_dict,
+                                      save_path=os.path.join(prolific_path, r"processed"))
+
+        # free sample
+        free_sub_dict, free_sub_df = processed_free_sample(subject_data_path=os.path.join(free_path, r"raw\ethics_free_labels.csv"),
+                                                           free_save_path=os.path.join(free_path, r"processed"))
+        analyze_survey.analyze_survey(sub_df=free_sub_df.copy(),
+                                      analysis_dict=free_sub_dict,
+                                      save_path=os.path.join(free_path, r"processed"))
 
     # collapse both samples
-    total_df = pd.concat([prolific_sub_df, paid_sub_df], ignore_index=True)
+    prolific_sub_df["source"] = "Prolific"
+    free_sub_df["source"] = "Free"
+    total_df = pd.concat([prolific_sub_df, free_sub_df], ignore_index=True)
+    total_df.to_csv(r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\processed_data.csv", index=False)
     # unify the dicts as well
     total_dict = dict()
     for key in prolific_sub_dict.keys():
         total_dict[key] = pd.concat([prolific_sub_dict[key], free_sub_dict[key]], ignore_index=True)
-    analyze_survey.analyze_survey(sub_df=total_df, analysis_dict=total_dict, save_path=r"C:\Users\rony\Documents\ethics_survey_data\all")
+    analyze_survey.analyze_survey(sub_df=total_df, analysis_dict=total_dict, save_path=r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all")

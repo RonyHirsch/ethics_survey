@@ -1,5 +1,6 @@
 import os
 import re
+import warnings
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
@@ -32,6 +33,102 @@ def diverging_palette(color_order, left, right):
     colors = [pal(i / (num_colors - 1)) for i in range(num_colors)]
     color_dict = {color_order[i]: colors[i] for i in range(num_colors)}
     return color_dict
+
+
+def plot_raincloud_separate_samples(df, id_col, data_col_names, data_col_colors, save_path, save_name,
+                   x_title, x_name_dict, title,
+                   y_title, ymin, ymax, yskip, y_ticks=None, y_jitter=0,
+                   data_col_violin_left=None, violin_alpha=0.65, violin_width=0.5, group_spacing=0.5,
+                   marker_spread=0.1, marker_size=100, marker_alpha=0.25, format="svg",
+                   size_inches_x=15, size_inches_y=12):
+    # ids
+    ids = df[id_col].unique().tolist()
+    # X axis params
+    stim_xs = {item: idx * group_spacing for idx, item in enumerate(data_col_names)}
+    scatter_x_dict = {id: {} for id in ids}
+    scatter_y_dict = {id: {} for id in ids}
+
+    for data_type in data_col_names:
+        data_color = data_col_colors[data_type]
+        y_values = df[data_type].dropna().tolist()  # drop nan - each column is its own group
+        x_loc = stim_xs[data_type]
+
+        # violin orientation
+        if data_col_violin_left is None:
+            left_flag = True
+        else:
+            left_flag = data_col_violin_left[data_type]
+
+        # plot violin
+        violin = plt.violinplot(y_values, positions=[x_loc], widths=violin_width, showmeans=True,
+                                showextrema=False, showmedians=False)
+        if left_flag:
+            # make it a half-violin plot (only to the LEFT of center)
+            for b in violin['bodies']:
+                # get the center
+                m = np.mean(b.get_paths()[0].vertices[:, 0])
+                # modify the paths to not go further right than the center
+                b.get_paths()[0].vertices[:, 0] = np.clip(b.get_paths()[0].vertices[:, 0], -np.inf, m)
+                b.set_color(data_color)
+                b.set_alpha(violin_alpha)
+                b.set_edgecolor(data_color)
+        else:
+            # make it a half-violin plot (only to the RIGHT of center)
+            for b in violin['bodies']:
+                # get the center
+                m = np.mean(b.get_paths()[0].vertices[:, 0])
+                # modify the paths to not go further left than the center
+                b.get_paths()[0].vertices[:, 0] = np.clip(b.get_paths()[0].vertices[:, 0], m, np.inf)
+                b.set_color(data_color)
+                b.set_alpha(violin_alpha)
+                b.set_edgecolor(data_color)
+
+        # change the color of the mean lines (showmeans=True)
+        violin['cmeans'].set_color("black")
+        violin['cmeans'].set_linewidth(4)
+
+        # control the length
+        m = np.mean(violin['cmeans'].get_paths()[0].vertices[:, 0])
+        if left_flag:
+            violin['cmeans'].get_paths()[0].vertices[:, 0] = np.clip(violin['cmeans'].get_paths()[0].vertices[:, 0], -np.inf, m)
+        else:
+            violin['cmeans'].get_paths()[0].vertices[:, 0] = np.clip(violin['cmeans'].get_paths()[0].vertices[:, 0], m, np.inf)
+
+        # now, scatter
+        for id in ids:
+            id_data = df[df[id_col] == id].reset_index(inplace=False, drop=True)
+            id_y_loc = id_data[data_type][0]  # the first (and only) value here
+            id_y_jitter = id_y_loc + np.random.uniform(-y_jitter, y_jitter, size=1)
+            # introduce jitter to x_loc for this specific id (so that they won't all overlap)
+            if left_flag:
+                id_x_loc = (x_loc + marker_spread / 3.5) + (np.random.rand(1) * marker_spread)[0]
+            else:
+                id_x_loc = (x_loc - marker_spread / 3.5) - (np.random.rand(1) * marker_spread)[0]
+            scatter_x_dict[id][data_type] = id_x_loc
+            scatter_y_dict[id][data_type] = id_y_jitter
+            plt.scatter(x=id_x_loc, y=id_y_jitter, marker="o", color=data_color, s=marker_size, alpha=marker_alpha, edgecolor=data_color, zorder=2)
+
+    # cosmetics
+    plt.ylabel(y_title, fontsize=15, labelpad=8)
+    if y_ticks is None:
+        plt.yticks([y for y in np.arange(ymin, ymax, yskip)], fontsize=15)
+    else:
+        plt.yticks(ticks=[y for y in np.arange(ymin, ymax, yskip)], labels=[item for item in y_ticks], fontsize=15)
+    plt.xlabel(x_title, fontsize=22, labelpad=10)
+    plt.xticks(ticks=[(idx * group_spacing) for idx, item in enumerate(data_col_names)], labels=[x_name_dict[item] for item in data_col_names], fontsize=15)
+    plt.title(title, fontsize=25)
+
+    # save plot
+    figure = plt.gcf()  # get current figure
+    figure.set_size_inches(size_inches_x, size_inches_y)
+    if format == "svg":
+        plt.savefig(os.path.join(save_path, f"{save_name}.svg"), format="svg", dpi=1000, bbox_inches='tight', pad_inches=0.01)
+    if format == "png":
+        plt.savefig(os.path.join(save_path, f"{save_name}.png"), format="png", dpi=1000, bbox_inches='tight', pad_inches=0.01)
+    del figure
+    plt.clf()
+    plt.close()
+    return
 
 
 def plot_raincloud(df, id_col, data_col_names, data_col_colors, save_path, save_name,
@@ -132,6 +229,7 @@ def plot_raincloud(df, id_col, data_col_names, data_col_colors, save_path, save_
     if format == "png":
         plt.savefig(os.path.join(save_path, f"{save_name}.png"), format="png", dpi=1000, bbox_inches='tight', pad_inches=0.01)
     del figure
+    plt.clf()
     plt.close()
     return
 
@@ -216,6 +314,7 @@ def plot_pie(categories_names, categories_counts, title, save_path, save_name,
         plt.savefig(os.path.join(save_path, f"{save_name}.svg"), format="svg", dpi=1000, bbox_inches='tight', pad_inches=0.01)
     if format == "png":
         plt.savefig(os.path.join(save_path, f"{save_name}.png"), format="png", dpi=1000, bbox_inches='tight', pad_inches=0.01)
+    plt.clf()
     plt.close()
     return
 
@@ -246,6 +345,7 @@ def plot_pca_scatter_2d(df, hue, title, save_path, save_name, pal=None, format="
     plt.savefig(os.path.join(save_path, f"{save_name}_PCA_result.{format}"), format=f"{format}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
+    plt.clf()
     plt.close()
     return
 
@@ -292,6 +392,7 @@ def plot_nonbinary_preferences(means, sems, colors, labels, label_map, title, mi
     plt.savefig(os.path.join(save_path, f"{save_name}.{format}"), format=f"{format}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
+    plt.clf()
     plt.close()
     return
 
@@ -329,6 +430,7 @@ def plot_binary_preferences(means, sems, colors, labels, label_map, title, save_
     plt.savefig(os.path.join(save_path, f"{save_name}.{format}"), format=f"{format}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
+    plt.clf()
     plt.close()
     return
 
@@ -361,7 +463,8 @@ def plot_3d_scatter(x_col, y_col, z_col, data, color_map=None, c_values_col=None
                     color="gray")
 
     if not save:
-        plt.show()
+        c = 4
+    #    plt.show()
 
     else:
         # save plot
@@ -370,46 +473,8 @@ def plot_3d_scatter(x_col, y_col, z_col, data, color_map=None, c_values_col=None
         plt.savefig(os.path.join(save_path, f"{save_name}.{save_format}"), format=f"{save_format}",
                     dpi=1000, bbox_inches="tight", pad_inches=0.01)
         del figure
+        plt.clf()
         plt.close()
-    return
-
-
-def plot_pca_scatter(df, hue, title, save_path, pal=None):
-
-    plot_3d_scatter(x_col="PC1", y_col="PC2", z_col="PC3", data=df, c_values_col=hue,
-                    color_map=ListedColormap(sns.color_palette("hls", len(df[hue].unique().tolist())).as_hex()),
-                    save=False)
-
-    """
-    fig = plt.figure(figsize=(10, 7))
-
-    ax = Axes3D(fig, auto_add_to_figure=False)
-    fig.add_axes(ax)
-
-    sc = ax.scatter(df["PC1"].tolist(), df["PC2"].tolist(), df["PC3"].tolist(),
-                    s=40, c=df[hue].tolist(), marker='o',
-                    cmap=ListedColormap(sns.color_palette("hls", len(df[hue].unique().tolist())).as_hex()), alpha=1)
-    """
-
-    # TODO FINISH THIS
-    if pal is None:
-        sns.scatterplot(x='PC1', y='PC2', data=df, hue=hue, s=150, palette=sns.color_palette("hls", len(df[hue].unique().tolist())), legend=False)
-    else:
-        sns.scatterplot(x='PC1', y='PC2', data=df, hue=hue, palette=pal, s=150, legend=False)
-    for item in df.index:
-        plt.text(df.loc[item, 'PC1'], df.loc[item, 'PC2'], item)
-    plt.title(title)
-    plt.xlabel('Principal Component 1')
-    plt.ylabel('Principal Component 2')
-
-    # save plot
-    figure = plt.gcf()  # get current figure
-    figure.set_size_inches(15, 12)
-    plt.savefig(os.path.join(save_path, f"PCA_result.svg"), format="svg", dpi=1000, bbox_inches='tight',
-                pad_inches=0.01)
-    del figure
-    plt.close()
-
     return
 
 
@@ -431,6 +496,7 @@ def plot_histogram(df, category_col, data_col, save_path, save_name, format="svg
     plt.savefig(os.path.join(save_path, f"{save_name}.{format}"), format=f"{format}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
+    plt.clf()
     plt.close()
 
     return
@@ -465,6 +531,7 @@ def plot_categorical_bars_layered(categories_prop_df, category_col, full_data_co
     plt.savefig(os.path.join(save_path, f"{save_name}.{format}"), format=f"{format}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
+    plt.clf()
     plt.close()
     return
 
@@ -509,6 +576,7 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
     plt.savefig(os.path.join(save_path, f"{save_name}.{format}"), format=f"{format}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
+    plt.clf()
     plt.close()
 
     return
@@ -556,6 +624,7 @@ def plot_categorical_proportion_bar(categories_prop_df, category_col, data_col, 
     plt.savefig(os.path.join(save_path, f"{save_name}.svg"), format="svg", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
+    plt.clf()
     plt.close()
 
     return
@@ -587,7 +656,7 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
 
         # plot the mean rating as a dot
         mean_position = (mean_rating / num_ratings) * 100
-        a.plot(mean_position, 0, 'ro', markersize=5, color="#333333")
+        a.plot(mean_position, 0, markersize=5, color="#333333")
 
         # annotate the mean rating
         a.text(
@@ -609,7 +678,9 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
         a.tick_params(axis='x', labelsize=18)
         if ytick_visible:
             wrapped_col_name = textwrap.fill(col, width=text_width)  # limit the text line width
-            a.set_yticklabels([wrapped_col_name], fontsize=18)
+            yticks = a.get_yticks()  # current y-tick positions
+            a.set_yticks(yticks)  # explicitly set them to satisfy FixedLocator
+            a.set_yticklabels([wrapped_col_name] * len(yticks), fontsize=18)
         else:
             a.set_yticklabels("")
             a.spines["left"].set_visible(False)
@@ -639,6 +710,7 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
     plt.savefig(os.path.join(save_path, f"{save_name}.png"), format="png", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
+    plt.clf()
     plt.close()
 
     return
@@ -700,6 +772,7 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
     plt.savefig(os.path.join(save_path, f"{save_name}.{format}"), format=format, dpi=1000, bbox_inches="tight",
                 pad_inches=0.01)
     del figure
+    plt.clf()
     plt.close()
 
     return
@@ -725,6 +798,7 @@ def plot_scatter(df, data_col, category_col, category_color_dict, category_order
                       jitter=horizontal_jitter, size=15, color=category_color_dict[category], alpha=0.8, zorder=1)
 
     # Plot means with standard deviations manually
+    warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*All-NaN axis encountered.*")
     for i, category in enumerate(category_order):
         try:
             mean = category_means[category]
@@ -742,10 +816,10 @@ def plot_scatter(df, data_col, category_col, category_color_dict, category_order
     if y_min is None:
         y_min = df[data_col].min()
     if y_max is None:
-        y_max =  df[data_col].max() + 1
+        y_max = df[data_col].max() + 1
     if y_skip is None:
         y_skip = 1
-    plt.yticks(np.arange(y_min,y_max + 1 / y_skip, y_skip), fontsize=16)
+    plt.yticks(np.arange(y_min, y_max + 1 / y_skip, y_skip), fontsize=16)
     plt.xticks(fontsize=16)
     plt.xlabel(x_label.title(), fontsize=18)
     plt.ylabel(y_label.title(), fontsize=18)
@@ -757,6 +831,7 @@ def plot_scatter(df, data_col, category_col, category_color_dict, category_order
     plt.savefig(os.path.join(save_path, f"{save_name}.png"), format="png", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
+    plt.clf()
     plt.close()
 
     return
@@ -778,7 +853,7 @@ def plot_world_map_proportion(country_proportions_df, data_column, save_path):
     - Then, map_shapfile_path should be the path to the '.shp' file in the unzipped folder
     
     """
-    map_shapfile_path = r"C:\Users\rony\Documents\github_projects\ethics_survey\ne_110m_admin_0_countries\ne_110m_admin_0_countries.shp"
+    map_shapfile_path = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\code\ethics_survey\ne_110m_admin_0_countries\ne_110m_admin_0_countries.shp"
     world = gpd.read_file(map_shapfile_path)
     world = world[world["CONTINENT"] != "Antarctica"]  # remove Antarctica
     world = world[world["CONTINENT"] != "Seven seas (open ocean"]  # remove the seven seas
@@ -827,6 +902,7 @@ def plot_world_map_proportion(country_proportions_df, data_column, save_path):
     plt.savefig(os.path.join(save_path, f"proportion_by_country.png"), format="png", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
+    plt.clf()
     plt.close()
 
     """
@@ -859,6 +935,7 @@ def plot_world_map_proportion(country_proportions_df, data_column, save_path):
     plt.savefig(os.path.join(save_path, f"proportion_by_continent.png"), format="png", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
+    plt.clf()
     plt.close()
 
     """
@@ -895,6 +972,7 @@ def plot_density(df, x_col, x_col_name, hue_col, hue_col_name, save_name, save_p
     plt.savefig(os.path.join(save_path, f"density_{save_name}.{format}"), format=format, dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
+    plt.clf()
     plt.close()
     return
 

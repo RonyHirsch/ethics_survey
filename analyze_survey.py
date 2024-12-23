@@ -1,7 +1,6 @@
 import os
 import pandas as pd
 import re
-import numpy as np
 from functools import reduce
 from sklearn.preprocessing import LabelEncoder
 import plotter
@@ -268,6 +267,52 @@ def earth_in_danger(analysis_dict, save_path):
     unified_df_cluster.rename(columns=survey_mapping.Q_EXP_DICT, inplace=True)
     unified_df_cluster.to_csv(os.path.join(result_path, "clusters_with_demographic.csv"), index=False)
 
+
+    """
+    Examine the clusters demographically
+    """
+    # Perform an independent-sample t-test to see difference in age between the two clusters
+    group1 = unified_df_cluster[unified_df_cluster["Cluster"] == 0]["How old are you?"].tolist()
+    group2 = unified_df_cluster[unified_df_cluster["Cluster"] == 1]["How old are you?"].tolist()
+    continuous_contingency_df = helper_funcs.independent_samples_ttest(list_group1=group1, list_group2=group2)
+    continuous_contingency_df[f"per"] = ["age"]
+
+    # Perform a Mann-Whitney U test to test the association between clusters and ordinal data
+    ordinal_contingency_cols = {"Education": "What is your education background?",
+                                "Experience with Ethics": "exp_ethics",
+                                "Experience with Consciousness": "exp_consciousness",
+                                "Experience with Animals": "exp_animals",
+                                "Experience with AI": "exp_ai"}
+    ordinal_contingency_list = list()
+    for col in ordinal_contingency_cols:
+        if col == "Education":
+            unified_df_cluster.loc[:, ordinal_contingency_cols[col]] = unified_df_cluster[ordinal_contingency_cols[col]].map(survey_mapping.EDU_MAP)
+        group1 = unified_df_cluster[unified_df_cluster["Cluster"] == 0][ordinal_contingency_cols[col]].tolist()
+        group2 = unified_df_cluster[unified_df_cluster["Cluster"] == 1][ordinal_contingency_cols[col]].tolist()
+        mu_result = helper_funcs.mann_whitney_utest(list_group1=group1, list_group2=group2)
+        mu_result[f"per"] = [col]
+        ordinal_contingency_list.append(mu_result)
+        transformed_df = unified_df_cluster.pivot(index="response_id", columns="Cluster", values=ordinal_contingency_cols[col]).reset_index()
+        transformed_df.columns = ["response_id", "0", "1"]
+        plotter.plot_raincloud_separate_samples(df=transformed_df, id_col="response_id", data_col_names=["0", "1"],
+                                                data_col_colors={"0": "#963484", "1": "#0F8B8D"},
+                                                save_path=result_path, save_name=f"clusters_by_{col}",
+                                                x_title="Cluster", x_name_dict={"0": "0", "1": "1"},
+                                                title="", y_title="Ratings",
+                                                ymin=min(unified_df_cluster[ordinal_contingency_cols[col]].tolist()),
+                                                ymax=max(unified_df_cluster[ordinal_contingency_cols[col]].tolist()),
+                                                yskip=1)
+    ordinal_contingency_df = pd.concat(ordinal_contingency_list)
+
+    # Perform a Chi-squared test to examine association between the cluster and the other factors
+    gender_contingency_table = pd.crosstab(unified_df_cluster["Cluster"], unified_df_cluster["How do you describe yourself?"])
+    chisquare_result = helper_funcs.chi_squared_test(contingency_table=gender_contingency_table)
+    chisquare_result[f"per"] = ["Gender"]
+
+    # together
+    clusters_demographic_tests = pd.concat([continuous_contingency_df, ordinal_contingency_df, chisquare_result], ignore_index=True)
+    clusters_demographic_tests.to_csv(os.path.join(result_path, "clusters_by_demographic_stats.csv"), index=False)
+
     import seaborn as sns
 
     overlap = unified_df_cluster.groupby(["Cluster", "Would you take the pill?"]).size().unstack(fill_value=0)
@@ -462,7 +507,7 @@ def moral_consideration_features(analysis_dict, save_path):
     # if participants selected only one to begin with, we didn't ask them to select which they think is the most important
     # see it here :
     # filtered_data = ms_features[ms_features["Which do you think is the most important for moral considerations?"].isna()]
-    ms_features["Which do you think is the most important for moral considerations?"] = ms_features[
+    ms_features.loc[:, "Which do you think is the most important for moral considerations?"] = ms_features[
         "Which do you think is the most important for moral considerations?"]. \
         fillna(ms_features["What do you think is important for moral considerations?"])
     # now after we have the most important, plot it
@@ -668,6 +713,9 @@ def demographics(analysis_dict, save_path):
     """
 
     age = "How old are you?"
+    age_stats = con_demo[age].astype(float).describe()
+    age_stats.to_csv(os.path.join(result_path, "age_stats.csv"))  # index=True as it includes the information
+
     age_counts = con_demo[age].value_counts()
     age_counts_df = age_counts.reset_index(drop=False, inplace=False)
     age_counts_df_sorted = age_counts_df.sort_values(age, ascending=True)
@@ -680,6 +728,8 @@ def demographics(analysis_dict, save_path):
 
     merged_df = pd.merge(age_counts_df, age_props_df, on=age)
     merged_df.to_csv(os.path.join(result_path, "age.csv"), index=False)
+
+
 
     """
     Country of Residence
@@ -934,15 +984,42 @@ def gender_cross(analysis_dict, save_path):
 
 
 def experience(analysis_dict, save_path):
-    ethics = analysis_dict["ethics_exp"]
-    animals = analysis_dict["animal_exp"]
-    ai = analysis_dict["ai_exp"]
-    consciousness = analysis_dict["consciousness_exp"]
 
     # save path
     result_path = os.path.join(save_path, "experience")
     if not os.path.isdir(result_path):
         os.mkdir(result_path)
+
+    ethics = analysis_dict["ethics_exp"]
+    animals = analysis_dict["animal_exp"]
+    ai = analysis_dict["ai_exp"]
+    consciousness = analysis_dict["consciousness_exp"]
+
+    ethics_q = "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in ethics and morality?"
+    animal_q = "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your level of interaction or experience with animals?"
+    ai_q = "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in artificial intelligence (AI) systems?"
+    consciousness_q = "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in the science of consciousness?"
+
+    ethics_counts = ethics[ethics_q].value_counts().sort_index().reset_index()
+    ethics_counts.columns = ["rating", "count"]
+    ethics_counts["proportion"] = (ethics_counts["count"] / ethics_counts["count"].sum()) * 100
+    ethics_counts["experience"] = "ethics"
+    animal_counts = animals[animal_q].value_counts().sort_index().reset_index()
+    animal_counts.columns = ["rating", "count"]
+    animal_counts["proportion"] = (animal_counts["count"] / animal_counts["count"].sum()) * 100
+    animal_counts["experience"] = "animals"
+    ai_counts = ai[ai_q].value_counts().sort_index().reset_index()
+    ai_counts.columns = ["rating", "count"]
+    ai_counts["proportion"] = (ai_counts["count"] / ai_counts["count"].sum()) * 100
+    ai_counts["experience"] = "ai"
+    consciousness_counts = consciousness[consciousness_q].value_counts().sort_index().reset_index()
+    consciousness_counts.columns = ["rating", "count"]
+    consciousness_counts["proportion"] = (consciousness_counts["count"] / consciousness_counts["count"].sum()) * 100
+    consciousness_counts["experience"] = "consciousness"
+
+    experience_counts = pd.concat([ethics_counts, animal_counts, ai_counts, consciousness_counts], ignore_index=True)
+    experience_counts.to_csv(os.path.join(result_path, "experience_proportions.csv"), index=False)
+
 
     """
     Does experience with animals affect answers related to animal C / MS ? 
@@ -951,8 +1028,6 @@ def experience(analysis_dict, save_path):
     animals = animals.apply(helper_funcs.replace_animal_other, axis=1)  # replace "Other" if categories do exist
 
     # first of all, general animal info
-    animal_q = "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your level of interaction or experience with animals?"
-
     stats = {animal_q: helper_funcs.compute_stats(animals[animal_q])}
     plot_data = {}
     for item, (proportions, mean_rating, std_dev) in stats.items():
@@ -1013,86 +1088,6 @@ def experience(analysis_dict, save_path):
     return
 
 
-def relationship_across(sub_df, analysis_dict, save_path):
-    # save path
-    result_path = os.path.join(save_path, "clustering")
-    if not os.path.isdir(result_path):
-        os.mkdir(result_path)
-
-    sub_df_copy = sub_df.copy()  # this is the copy we'll be working on, to not change the original
-
-    """
-    Ordinal
-    """
-
-    # get ms columns
-    ms_creature_cols = list(survey_mapping.other_creatures_ms.values())
-    ms_cols = [c for c in analysis_dict["other_creatures_ms"].columns.tolist() if c in ms_creature_cols]
-
-    # get c columns
-    c_creature_cols = list(survey_mapping.other_creatures_cons.values())
-    c_cols = [c for c in analysis_dict["other_creatures_cons"].columns.tolist() if c in c_creature_cols]
-
-    # map education columns
-    education_q = "What is your education background?"
-    sub_df_copy[education_q] = sub_df_copy[education_q].map(survey_mapping.EDU_MAP)
-
-    # ordinal columns
-    ordinal_cols = ms_cols + c_cols + [education_q, survey_mapping.Q_AI_EXP,
-                                       survey_mapping.Q_ANIMAL_EXP,
-                                       survey_mapping.Q_CONSC_EXP,
-                                       survey_mapping.Q_ETHICS_EXP]
-
-    """
-    Categorical 
-    """
-    gender = "How do you describe yourself?"
-    country = "In which country do you currently reside?"
-    most_important = "What do you think is important for moral considerations?"
-
-    cat_cols = [gender, country, most_important]
-    for col in cat_cols:
-        label_encoder_country = LabelEncoder()
-        sub_df_copy[col] = label_encoder_country.fit_transform(sub_df_copy[col])
-
-    # earth in danger
-    earth_cols = [c for c in analysis_dict["earth_in_danger"].columns.tolist() if "A" in c]
-    for c in earth_cols:
-        sub_df_copy[c] = sub_df_copy[c].map(survey_mapping.EARTH_DANGER_MAP)
-
-    cat_cols.extend(earth_cols)
-
-    """
-    Binary
-    """
-
-    # get kill columns
-    kill_cols = [c for c in analysis_dict["important_test_kill"].columns.tolist() if "A creature/system" in c]
-    for c in kill_cols:
-        sub_df_copy[c] = sub_df_copy[c].map(survey_mapping.ANS_KILLING_MAP)
-
-    moral_prios_cols = [c for c in analysis_dict["moral_considerations_prios"].columns.tolist() if "Do you think" in c]
-    moral_prios_cols.remove("Do you think conscious creatures/systems should be taken into account in moral decisions?")
-    for c in moral_prios_cols:
-        sub_df_copy[c] = sub_df_copy[c].map(survey_mapping.ANS_YESNO_MAP)
-
-    intellect_col = "Do you think consciousness and intelligence are related?"
-    zombie_col = "Would you take the pill?"
-    other_bin_cols = [intellect_col, zombie_col]
-    for c in other_bin_cols:
-        sub_df_copy[c] = sub_df_copy[c].map(survey_mapping.ANS_YESNO_MAP)
-
-    bin_cols = kill_cols + moral_prios_cols + other_bin_cols
-
-    helper_funcs.perform_kmodes(df=sub_df_copy,
-                                numeric_cols=["How old are you?"],
-                                ordinal_cols=ordinal_cols,
-                                categorical_cols=cat_cols,
-                                binary_cols=bin_cols,
-                                save_path=result_path)
-    return
-
-
 def analyze_survey(sub_df, analysis_dict, save_path):
     """
     The method which manages all the processing of specific survey data for analyses.
@@ -1101,31 +1096,17 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     topic/section
     :param save_path: where the results will be saved (csvs, plots)
     """
-    print("1")
     other_creatures(analysis_dict, save_path)
-    print("2")
     graded_consciousness(analysis_dict, save_path)
-    print("3")
-    relationship_across(sub_df, analysis_dict, save_path)
-    print("4")
     gender_cross(analysis_dict, save_path)  # move to after the individuals
-    print("5")
     demographics(analysis_dict, save_path)
-    print("6")
     experience(analysis_dict, save_path)
-    print("7")
     zombie_pill(analysis_dict, save_path)
-    print("8")
     earth_in_danger(analysis_dict, save_path)  # MUST COME AFTER "zombie_pill"
-    print("9")
     ics(analysis_dict, save_path)
-    print("10")
     kill_for_test(analysis_dict, save_path)
-    print("11")
     moral_consideration_features(analysis_dict, save_path)
-    print("12")
     moral_considreation_prios(analysis_dict, save_path)
-    print("13")
     consciousness_intelligence(analysis_dict, save_path)
 
     return

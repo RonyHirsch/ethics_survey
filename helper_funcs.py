@@ -9,38 +9,45 @@ from sklearn.preprocessing import StandardScaler
 from kmodes.kprototypes import KPrototypes
 import scipy.stats as stats
 from scipy.stats import chi2_contingency
+from scipy.stats import mannwhitneyu
+from scipy.stats import ttest_ind
 from sklearn.utils import shuffle
 import plotter
 
 
-def perform_kmodes(df, numeric_cols, ordinal_cols, categorical_cols, binary_cols, save_path):
-    all_cols = numeric_cols + ordinal_cols + categorical_cols + binary_cols
-    data = df[all_cols]
-    for col in all_cols:
-        data[col] = data[col].astype(int)
+def chi_squared_test(contingency_table):
+    chi2, p, dof, expected = chi2_contingency(contingency_table)
+    result_df = pd.DataFrame({
+        "test": ["chi squared"],
+        "statistic": [chi2],
+        "p": [p],
+        "df": [dof],  # Degrees of Freedom
+        #"expected": [expected]  # Expected Frequencies
+    })
+    return result_df
 
-    # combine all columns to prepare for K-Prototypes as K-Prototypes requires all columns as input
-    data_matrix = data.values
 
-    # Define categorical indices, binary are considered categorical as well for some reason
-    categorical_indices = [data.columns.get_loc(col) for col in categorical_cols + binary_cols]
+def independent_samples_ttest(list_group1, list_group2):  # continuous data
+    t_stat, p_value = ttest_ind(list_group1, list_group2)
+    result_df = pd.DataFrame({
+        "test": ["independent t-test"],
+        "statistic": [t_stat],
+        "p": [p_value],
+        "df": [len(list_group1) + len(list_group2) - 2]
+    })
+    return result_df
 
-    # Initialize K-Prototypes
-    kproto = KPrototypes(n_clusters=3, init="Cao", verbose=2)
 
-    # Fit the model and predict clusters
-    clusters = kproto.fit_predict(data_matrix, categorical=categorical_indices)
+def mann_whitney_utest(list_group1, list_group2):  # ordinal data
+    u_stat, p_value = mannwhitneyu(list_group1, list_group2, alternative='two-sided')
+    result_df = pd.DataFrame({
+        "test": ["mann whitney"],
+        "statistic": [u_stat],
+        "p": [p_value],
+        "df": [len(list_group1) + len(list_group2) - 2]
+    })
 
-    # Add the cluster labels to the original DataFrame
-    data["cluster"] = clusters
-
-    pca = PCA(n_components=3)
-    pca_result = pca.fit_transform(data.drop("cluster", axis=1))  # drop the 'Cluster' column for PCA
-    data["PC1"] = pca_result[:, 0]
-    data["PC2"] = pca_result[:, 1]
-    data["PC3"] = pca_result[:, 2]
-    plotter.plot_pca_scatter(df=data, hue="cluster", title="", save_path=save_path)
-    return
+    return result_df
 
 
 def lca_analysis(df, save_path, n_classes=3):
@@ -98,7 +105,7 @@ def perform_PCA(df_pivot, save_path, save_name, components=2, clusters=3, label_
     where creatures receive similar ratings for both C and MS. If it's negative, it's divergence.
     """
     loadings = pd.DataFrame(pca.components_.T, index=df_pivot.columns, columns=["PC1", "PC2"])
-    print(loadings)
+    #print(loadings)
     txt_output.append(loadings)
 
     ### STATISTICAL SIGNIFICANCE
@@ -135,14 +142,13 @@ def perform_PCA(df_pivot, save_path, save_name, components=2, clusters=3, label_
 
     ### PLOT
     # Perform K-means clustering
-    kmeans = KMeans(n_clusters=clusters, random_state=42)
+    kmeans = KMeans(n_clusters=clusters, random_state=42, n_init=10)  # The n_init parameter controls the number of times the KMeans algorithm is run with different centroid seeds; 10 is the default
     df_pivot["Cluster"] = kmeans.fit_predict(df_pivot)
     unified_df = pd.merge(df_pivot, pca_df, left_index=True, right_index=True)
     unified_df.to_csv(os.path.join(save_path, f"{save_name}_pca_result_with_kmeans_clusters.csv"), index=True)  # index here is the identity of each dot
-
     plotter.plot_pca_scatter_2d(df=unified_df, hue=unified_df["Cluster"], title="Ratings PCA",
                                 save_path=save_path, save_name=save_name,
-                                pal=["#A3333D", "#27474E", "#B1740F"], annotate=False, size=250)  # "#B1740F", "#003554"
+                                pal=["#A3333D", "#27474E"], annotate=False, size=250)  # "#B1740F", "#003554"
 
     # test the statistical significance of the clustering
     """
@@ -182,10 +188,10 @@ def perform_PCA(df_pivot, save_path, save_name, components=2, clusters=3, label_
     for cluster in range(0, clusters):
         # take cluster means
         cluster_centroid = cluster_centroids.iloc[[cluster], :]  # take only 1 row (the row of the cluster)
-        cluster_centroid.drop(columns=["PC1", "PC2"], inplace=True)  # drop the non-question columns
+        cluster_centroid = cluster_centroid.drop(columns=["PC1", "PC2"])  # drop the non-question columns
         # take cluster sems
         cluster_sems = cluster_centroids_sem.iloc[[cluster], :]
-        cluster_sems.drop(columns=["PC1", "PC2"], inplace=True)
+        cluster_sems = cluster_sems.drop(columns=["PC1", "PC2"])
 
         if binary:
             """
@@ -244,8 +250,7 @@ def perform_PCA(df_pivot, save_path, save_name, components=2, clusters=3, label_
     chisq_df = pd.DataFrame(result)
     chisq_df.to_csv(os.path.join(save_path, f"{save_name}_cluster_centroids_chisq.csv"), index=False)
 
-
-    ### WRITE TO TXT
+    # WRITE TO TXT
     with open(os.path.join(save_path, f"{save_name}_PCA_result.txt"), 'a') as file:
         for line in txt_output:
             line_str = str(line)
