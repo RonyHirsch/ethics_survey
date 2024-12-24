@@ -80,8 +80,206 @@ def lca_analysis(df, save_path, n_classes=3):
     return
 
 
-def perform_PCA(df_pivot, save_path, save_name, components=2, clusters=3, label_map=None, binary=True, threshold=0):
+def perform_PCA(df_pivot, save_path, save_name, components=2):
+    """
+    PCA reduces the dimensionality of the given df_pivot. We compute and saves the PCA-transformed data (PC1, PC2) and
+    the loadings (coefficients showing how much each feature contributes to the principal components). We then assess
+    the explained variance of each principal component and test its statistical significance using permutation tests.
+    :return: pca_df - the PCA-transformed data; the explained variance ratios; the loadings (describing the relationship
+    between the original features and principal components)
+    """
+    txt_output = list()
 
+    # Perform PCA
+    pca = PCA(n_components=components)
+    pca_result = pca.fit_transform(df_pivot)
+
+    # Create a DataFrame for PCA results
+    """
+    PC1 is the direction (in the original feature space) along which the data varies the most. 
+    For example, in rating C and MS, it represents a pattern where certain creatures consistently receive high or low 
+    ratings across both Consciousness and Moral Status. 
+    """
+    pca_df = pd.DataFrame(data=pca_result, columns=[f"PC{i+1}" for i in range(components)], index=df_pivot.index)
+    pca_df.to_csv(os.path.join(save_path, f"{save_name}_PCA_result.csv"), index=True)
+
+    # Get the loadings (coefficients)
+    """
+    Loadings indicate how much each original variable (e.g., the ratings of C and MS) contributes to each principal 
+    component. They are the coefficients of the linear combinations that make up the principal components.
+    If the loadings for PC are both positive and large for both ratings, it suggests that PC1 represents a pattern 
+    where creatures receive similar ratings for both C and MS. If it's negative, it's divergence.
+    """
+    loadings = pd.DataFrame(pca.components_.T, index=df_pivot.columns, columns=[f"PC{i+1}" for i in range(components)])
+    txt_output.append(loadings)
+
+    # Explained variance ratio
+    """
+    The amount of variance each principal component explains how much of the total variance in the data is captured by 
+    each component.
+    """
+    explained_variance = pca.explained_variance_ratio_
+    line = f"Explained Variance Ratio: " + ", ".join([f"PC{i+1} = {var:.2f}" for i, var in enumerate(explained_variance)])
+    print(line)
+    txt_output.append(line)
+
+    # Permutation test
+    n_permutations = 1000
+    permuted_variances = np.zeros((n_permutations, components))
+
+    for i in range(n_permutations):
+        permuted_data = shuffle(df_pivot, random_state=i)
+        permuted_pca = PCA(n_components=components)
+        permuted_pca.fit(permuted_data)
+        permuted_variances[i] = permuted_pca.explained_variance_ratio_
+
+    # Calculate p-values: how often the variance explained by the permuted PCs is >= the variance explained by the original PCs
+    p_values = np.mean(permuted_variances >= explained_variance, axis=0)
+    line = f"P-values for explained variance: " + ", ".join([f"PC{i+1} = {p:.4f}" for i, p in enumerate(p_values)])
+    print(line)
+    txt_output.append(line)
+
+    with open(os.path.join(save_path, f"{save_name}_PCA_result.txt"), "w") as file:
+        for line in txt_output:
+            file.write(str(line) + '\n')
+
+    return pca_df, loadings, explained_variance
+
+
+def perform_kmeans(df_pivot, save_path, save_name, clusters=2):
+    """
+    Perform k-means clustering (scikit-learn's) to group the data into a specified number of clusters.
+    We then append the cluster labels to the dataset and calculate the silhouette score,
+    which evaluates how well-separated the clusters are. We then test the clustering's statistical significance by
+    comparing it to random clusters. This medho also saves the cluster centroids, which represent the average values
+    of features for each cluster.
+    """
+    txt_output = list()
+
+    # Perform k-means clustering
+    # The n_init parameter controls the number of times the KMeans algorithm is run with different centroid seeds; 10 is the default
+    kmeans = KMeans(n_clusters=clusters, random_state=42, n_init=10)
+    df_pivot["Cluster"] = kmeans.fit_predict(df_pivot)
+
+    # Calculate silhouette score
+    """
+    The silhouette score measures how similar a data point is to its own cluster compared to other clusters. 
+    It ranges from -1 to 1, where a value closer to 1 indicates that the data points are well clustered.
+    """
+    silhouette_avg = silhouette_score(df_pivot.drop(columns="Cluster"), df_pivot["Cluster"])
+    line = f"{clusters}-Means Clustering Silhouette Score: {silhouette_avg:.2f}"
+    print(line)
+    txt_output.append(line)
+
+    # test the statistical significance of the clustering (against random clusters)
+    n_iterations = 1000
+    random_silhouette_scores = [
+        silhouette_score(df_pivot.drop(columns="Cluster"), np.random.randint(0, clusters, size=df_pivot.shape[0]))
+        for _ in range(n_iterations)
+    ]
+    p_value = np.mean(silhouette_avg < np.array(random_silhouette_scores))
+    line = f"P-value of Silhouette Score compared to random clusters ({n_iterations} iterations): {p_value:.4f}"
+    print(line)
+    txt_output.append(line)
+
+    # Save cluster centroids
+    cluster_centroids = df_pivot.groupby("Cluster").mean()
+    cluster_centroids.to_csv(os.path.join(save_path, f"{save_name}_cluster_centroids_raw.csv"), index=True)
+
+    with open(os.path.join(save_path, f"{save_name}_kmeans_{clusters}_result.txt"), "w") as file:
+        for line in txt_output:
+            file.write(str(line) + '\n')
+
+    return df_pivot, kmeans
+
+
+def plot_kmeans_on_PCA(df_pivot, pca_df, save_path, save_name, palette=None):
+    """
+    Gets:
+    - "pca_df" from the method perform_PCA, and
+    - "df_pivot" from the method perform_kmeans,
+    and draws a scatterplot showing the cluster assignments (Kmeans) projected onto the PCA-transformed space (PCA),
+    so that we'd have an easier time interpreting the clustering.
+    NOTE: we do NOT assume that the PCA was used as input for the kmeans, as "perform_kmeans" calculates clusters on the
+    RAW data (not the dim-reduced one).
+    """
+    unified_df = pd.merge(df_pivot, pca_df, left_index=True, right_index=True)
+    unified_df.to_csv(os.path.join(save_path, f"{save_name}_pca_result_with_kmeans_clusters.csv"), index=True)
+
+    # Default palette
+    if palette is None:
+        palette = ["#A3333D", "#27474E"]
+
+    # Plot PCA scatter with cluster labels
+    plotter.plot_pca_scatter_2d(
+        df=unified_df,
+        hue=unified_df["Cluster"],
+        title="Ratings PCA",
+        save_path=save_path,
+        save_name=save_name,
+        pal=palette,
+        annotate=False,
+        size=250
+    )
+    return unified_df
+
+
+def plot_cluster_centroids(cluster_centroids, cluster_sems, save_path, save_name, label_map=None, binary=True,
+                           threshold=0):
+    """
+    Plots the centroids for each cluster with preferences and uncertainty.
+    """
+    for cluster in range(len(cluster_centroids)):
+        # Take cluster means and SEMs
+        cluster_centroid = cluster_centroids.iloc[[cluster], :].drop(columns=["PC1", "PC2"], errors="ignore")
+        cluster_sem = cluster_sems.iloc[[cluster], :].drop(columns=["PC1", "PC2"], errors="ignore")
+
+        if binary:
+            # Map binary choices to -1 to 1 scale
+            preferences = cluster_centroid.iloc[0] * 2 - 1
+            sems_scaled = cluster_sem.iloc[0] * 2
+            labels = preferences.index
+
+            # Define colors based on preferences
+            colors = ["#102E4A" if val > 0 else "#EDAE49" for val in preferences]
+
+            # Plot binary preferences
+            plotter.plot_binary_preferences(
+                means=preferences,
+                sems=sems_scaled,
+                colors=colors,
+                labels=labels,
+                label_map=label_map,
+                title=f"Cluster {cluster}",
+                save_name=f"{save_name}_cluster_{cluster}_centroids",
+                save_path=save_path
+            )
+        else:
+            # For non-binary data, keep original scale
+            preferences = cluster_centroid.iloc[0]
+            sems_scaled = cluster_sem.iloc[0]
+            labels = preferences.index
+
+            # Define colors based on threshold
+            colors = ["#DB5461" if val <= threshold else "#26818B" for val in preferences]
+
+            # Plot non-binary preferences
+            plotter.plot_nonbinary_preferences(
+                means=preferences,
+                sems=sems_scaled,
+                colors=colors,
+                min=1,
+                max=4,
+                thresh=threshold,
+                labels=labels,
+                label_map=label_map,
+                title=f"Cluster {cluster}",
+                save_name=f"{save_name}_cluster_{cluster}_centroids",
+                save_path=save_path
+            )
+
+
+def perform_PCA_old(df_pivot, save_path, save_name, components=2, clusters=3, label_map=None, binary=True, threshold=0):
     txt_output = list()
 
     # Perform PCA

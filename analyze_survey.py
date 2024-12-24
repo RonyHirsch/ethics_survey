@@ -173,13 +173,39 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
 
     label_maps = {**survey_mapping.MS_RATINGS, **survey_mapping.C_RATINGS}
 
-    pca_df = helper_funcs.perform_PCA(df_pivot=df_nosub, save_path=result_path, save_name="people", components=2,
-                                      clusters=2,
-                                      label_map=label_maps, binary=False, threshold=2.5)
-    pca_df[process_survey.COL_ID] = df.iloc[:, 0]
+    # OLD - DEPRECATED (perform_PCA_old)
+    #pca_df = helper_funcs.perform_PCA(df_pivot=df_nosub, save_path=result_path, save_name="people", components=2,
+    #                                  clusters=2,
+    #                                  label_map=label_maps, binary=False, threshold=2.5)
+    #pca_df[process_survey.COL_ID] = df.iloc[:, 0]
+
+    # Perform PCA
+    pca_df, loadings, explained_variance = helper_funcs.perform_PCA(df_pivot=df_nosub, save_path=result_path,
+                                                                    save_name="people", components=2)
+
+    # Perform k-means clustering
+    df_pivot, kmeans = helper_funcs.perform_kmeans(df_pivot=df_nosub, clusters=2,
+                                                   save_path=result_path, save_name="people")
+
+    # Plot k-means clusters in PCA space
+    helper_funcs.plot_kmeans_on_PCA(df_pivot=df_pivot, pca_df=pca_df, save_path=result_path, save_name="people")
+
+    # Plot cluster centroids
+    # Compute the cluster centroids and SEMs
+    cluster_centroids = df_pivot.groupby("Cluster").mean()
+    cluster_sems = df_pivot.groupby("Cluster").sem()
+
+    helper_funcs.plot_cluster_centroids(cluster_centroids=cluster_centroids, cluster_sems=cluster_sems,
+                                        save_path=result_path, save_name="people",
+                                        label_map=label_maps,
+                                        binary=False,
+                                        threshold=0)
+
+
+    #####
 
     demog_df = analysis_dict["demographics"]
-
+    pca_df[process_survey.COL_ID] = df.iloc[:, 0]
     unified_df = pd.merge(pca_df, demog_df, on=process_survey.COL_ID)
     unified_df.to_csv(os.path.join(result_path, f"people_PCA_result_with_demographics.csv"), index=False)
 
@@ -246,9 +272,38 @@ def earth_in_danger(analysis_dict, save_path):
         df_earth_coded[col] = df_earth_coded[col].map(col_map)
 
     df_earth_coded.set_index([process_survey.COL_ID], inplace=True)
-    pca_df = helper_funcs.perform_PCA(df_pivot=df_earth_coded, save_path=result_path, save_name="items",
-                                      components=2, clusters=2, label_map=survey_mapping.EARTH_DANGER_QA_MAP)
-    pca_df.reset_index(drop=False, inplace=True)
+
+    # OLD - DEPRECATED (helper_funcs.perform_PCA_old)
+    #pca_df = helper_funcs.perform_PCA(df_pivot=df_earth_coded, save_path=result_path, save_name="items",
+    #                                  components=2, clusters=2, label_map=survey_mapping.EARTH_DANGER_QA_MAP)
+    #pca_df.reset_index(drop=False, inplace=True)
+
+    ### NEW - PCA separately from K-Means
+
+    # Perform PCA
+    pca_df, loadings, explained_variance = helper_funcs.perform_PCA(df_pivot=df_earth_coded, save_path=result_path,
+                                                                    save_name="items", components=2)
+
+    # Perform k-means clustering
+    df_pivot, kmeans = helper_funcs.perform_kmeans(df_pivot=df_earth_coded, clusters=2,
+                                                   save_path=result_path, save_name="items")
+
+    # Plot k-means clusters in PCA space
+    pca_with_cluster = helper_funcs.plot_kmeans_on_PCA(df_pivot=df_pivot, pca_df=pca_df,
+                                                       save_path=result_path, save_name="items")
+    pca_with_cluster.reset_index(inplace=True, drop=False)
+
+    # Plot cluster centroids
+    # Compute the cluster centroids and SEMs
+    cluster_centroids = df_pivot.groupby("Cluster").mean()
+    cluster_sems = df_pivot.groupby("Cluster").sem()
+
+    helper_funcs.plot_cluster_centroids(cluster_centroids=cluster_centroids, cluster_sems=cluster_sems,
+                                        save_path=result_path, save_name="items",
+                                        label_map=survey_mapping.EARTH_DANGER_QA_MAP,
+                                        binary=True,
+                                        threshold=0)
+
 
     # in the pca_df we also get the results of the KMeans clustering we performed.
     # then, we want to examine if there are any demographics that are shared within each cluster.
@@ -262,7 +317,7 @@ def earth_in_danger(analysis_dict, save_path):
     df_cexp = analysis_dict["consciousness_exp"]
     df_list = [df_demog, df_animalexp, df_ethicsexp, df_aiexp, df_cexp, df_zombie_copy]
     unified_df = reduce(lambda x, y: x.merge(y, on=process_survey.COL_ID), df_list)
-    unified_df_cluster = pd.merge(unified_df, pca_df[[process_survey.COL_ID, "Cluster"]],
+    unified_df_cluster = pd.merge(unified_df, pca_with_cluster[[process_survey.COL_ID, "Cluster"]],
                                   on=process_survey.COL_ID, how="left")
     unified_df_cluster.rename(columns=survey_mapping.Q_EXP_DICT, inplace=True)
     unified_df_cluster.to_csv(os.path.join(result_path, "clusters_with_demographic.csv"), index=False)

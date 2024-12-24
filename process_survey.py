@@ -283,7 +283,7 @@ if __name__ == '__main__':
     prolific_path = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\prolific"
     free_path = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\free"
 
-    load = True
+    load = False
 
     if load:
         # load paid
