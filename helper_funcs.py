@@ -243,8 +243,8 @@ def plot_cluster_centroids(cluster_centroids, cluster_sems, save_path, save_name
 
         # Collect data for all clusters
         for cluster in range(len(cluster_centroids)):
-            cluster_centroid = cluster_centroids.iloc[[cluster], :].drop(columns=["PC1", "PC2"], errors="ignore")
-            cluster_sem = cluster_sems.iloc[[cluster], :].drop(columns=["PC1", "PC2"], errors="ignore")
+            cluster_centroid = cluster_centroids.iloc[[cluster], :]
+            cluster_sem = cluster_sems.iloc[[cluster], :]
 
             if binary:
                 # Scale binary preferences
@@ -280,8 +280,8 @@ def plot_cluster_centroids(cluster_centroids, cluster_sems, save_path, save_name
     else:
         # Plot per cluster
         for cluster in range(len(cluster_centroids)):
-            cluster_centroid = cluster_centroids.iloc[[cluster], :].drop(columns=["PC1", "PC2"], errors="ignore")
-            cluster_sem = cluster_sems.iloc[[cluster], :].drop(columns=["PC1", "PC2"], errors="ignore")
+            cluster_centroid = cluster_centroids.iloc[[cluster], :]
+            cluster_sem = cluster_sems.iloc[[cluster], :]
 
             if binary:
                 preferences = cluster_centroid.iloc[0] * 2 - 1
@@ -338,11 +338,19 @@ def corr_per_item(df, items, save_path):
     return
 
 
-def compute_stats(column):
-    proportions = column.value_counts(normalize=True).sort_index() * 100
+def compute_stats(column, possible_values=None):
+    if possible_values is None:  # Infer possible values from the column
+        possible_values = sorted(column.dropna().unique())
+
+    # Initialize proportions for all possible values
+    proportions = {val: 0 for val in possible_values}
+    actual_proportions = column.value_counts(normalize=True).sort_index() * 100
+    for value, proportion in actual_proportions.items():
+        proportions[value] = proportion
     mean_rating = column.mean()
     std_dev = column.std()
-    return proportions, mean_rating, std_dev
+    n = column.count()
+    return proportions, mean_rating, std_dev, n
 
 
 animal_other_conversion = {"Rats": "Rodents",

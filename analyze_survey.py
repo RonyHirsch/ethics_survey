@@ -55,7 +55,6 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
                         value_name="Rating")
     long_data[["Topic", "Item"]] = long_data["Item_Topic"].str.split('_', expand=True)
     long_data = long_data.drop(columns=["Item_Topic"])
-    long_data = long_data[[process_survey.COL_ID, "Topic", "Item", "Rating"]]
     long_data["Topic"] = long_data["Topic"].map(topic_name_map)
 
     # add some demographic numerical columns
@@ -73,28 +72,16 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
     demos_df = analysis_dict["demographics"].loc[:, [process_survey.COL_ID, "How old are you?"]].rename(
         columns={"How old are you?": "age"}, inplace=False)
 
-    result_df = long_data
+    result_df = long_data.copy()
     for dataframe in [animal_experience_df, ai_experience_df, ethics_experience_df, con_experience_df, demos_df]:
         result_df = pd.merge(result_df, dataframe, on=[process_survey.COL_ID])
-
-    result_df.to_csv(os.path.join(result_path, "c_v_ms_long.csv"), index=False)
-
-    # plot aggregated data
-
     result_df["non_human_animal"] = result_df["Item"].map(survey_mapping.other_creatures_isNonHumanAnimal)
-
-    for exp in ["exp_animals", "exp_ai", "exp_ethics", "exp_consc"]:
-        for topic in ["Consciousness", "Moral Status"]:
-            top_df = result_df[result_df["Topic"] == topic]
-            exp_name = exp.split("_")[-1]
-            plotter.plot_density(df=top_df, x_col="Rating", x_col_name=f"{topic} Rating",
-                                 hue_col=exp, hue_col_name=f"Experience with {exp_name}",
-                                 save_name=f"{exp}_{topic.lower()}", save_path=result_path)
+    result_df.to_csv(os.path.join(result_path, "c_v_ms_long.csv"), index=False)
 
     # turn categorical columns into numeric ones for linear modelling
     for col in ["Topic", "Item"]:
-        label_encoder_country = LabelEncoder()
-        result_df[col] = label_encoder_country.fit_transform(result_df[col])
+        label_encoder = LabelEncoder()
+        result_df[col] = label_encoder.fit_transform(result_df[col])
 
     result_df.to_csv(os.path.join(result_path, "c_v_ms_long_coded.csv"), index=False)
 
@@ -116,20 +103,20 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
         # Prepare data for each column in the dataframe, they represent the items
         stats = {}
         for col in items_sansA:
-            stats[col] = helper_funcs.compute_stats(df_topic[col])
+            stats[col] = helper_funcs.compute_stats(df_topic[col], possible_values=[1, 2, 3, 4])
 
         # Create DataFrame for plotting
         plot_data = {}
-        for item, (proportions, mean_rating, std_dev) in stats.items():
+        for item, (proportions, mean_rating, std_dev, n) in stats.items():
             plot_data[item] = {
-                'Proportion': proportions,
-                'Mean': mean_rating,
-                'Std Dev': std_dev
+                "Proportion": proportions,
+                "Mean": mean_rating,
+                "Std Dev": std_dev,
+                "N": n
             }
 
         # Define plot size and number of subplots
         num_plots = len(df_topic.columns)
-        # rating_color_list = ["#e31a1c", "#fb9a99", "#a6cee3", "#1f78b4"]
 
         if sorting_method is None:
             # Sort the data by the proportion of "4" rating (Python 3.7+ dictionaries maintain the insertion order of keys)
@@ -146,6 +133,7 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
         # plot
         plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=num_plots, legend=rating_labels,
                                              colors=rating_color_list, num_ratings=4, title=f"{topic_name.title()}",
+                                             bar_relative=False, bar_range_min=1, bar_range_max=4,
                                              save_path=result_path, save_name=f"{topic_name.lower()}_ratings")
 
     """
@@ -163,21 +151,14 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
                             x_col="Consciousness", x_label="Consciousness", x_min=1, x_max=4, x_ticks=1,
                             y_col="Moral Status", y_label="Moral Status", y_min=1, y_max=4, y_ticks=1,
                             save_path=result_path, save_name=f"correlation_c_ms", annotate_id=True,
-                            palette_bounds=colors, format="png", corr_line=True,
+                            palette_bounds=colors, corr_line=True,
                             individual_df=individual_data, id_col="response_id")
 
     """
     Cluster people based on their rating tendencies of different entities' consciousness and moral status >> PER PERSON
     """
     df_nosub = df.iloc[:, 1:]  # only rating cols
-
     label_maps = {**survey_mapping.MS_RATINGS, **survey_mapping.C_RATINGS}
-
-    # OLD - DEPRECATED (perform_PCA_old)
-    #pca_df = helper_funcs.perform_PCA(df_pivot=df_nosub, save_path=result_path, save_name="people", components=2,
-    #                                  clusters=2,
-    #                                  label_map=label_maps, binary=False, threshold=2.5)
-    #pca_df[process_survey.COL_ID] = df.iloc[:, 0]
 
     # Perform PCA
     pca_df, loadings, explained_variance = helper_funcs.perform_PCA(df_pivot=df_nosub, save_path=result_path,
@@ -260,6 +241,18 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
     df_earth = analysis_dict["earth_in_danger"]
     questions = df_earth.columns[df_earth.columns != process_survey.COL_ID].tolist()
 
+    # super-simple dumn pie charts to see how many overall selected each option
+    for q in questions:
+        df_q = df_earth.loc[:, [process_survey.COL_ID, q]]
+        counts = df_q[q].value_counts()
+        plotter.plot_pie(categories_names=counts.index.tolist(), categories_counts=counts.tolist(),
+                         categories_labels=CAT_LABEL_DICT,
+                         categories_colors=CAT_COLOR_DICT, title=f"{q}",
+                         save_path=result_path, save_name=f"{'_'.join(counts.index.tolist())}", format="png")
+
+    """
+    Real stuff: Kmeans clustering, crossing with demographics
+    """
     df_earth_coded = df_earth.copy()
     for col in questions:
         """
@@ -299,12 +292,6 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
     # Compute the cluster centroids and SEMs
     cluster_centroids = df_pivot.groupby("Cluster").mean()
     cluster_sems = df_pivot.groupby("Cluster").sem()
-    # Plot
-    #helper_funcs.plot_cluster_centroids(cluster_centroids=cluster_centroids, cluster_sems=cluster_sems,
-    #                                    save_path=result_path, save_name="items",
-    #                                    label_map=survey_mapping.EARTH_DANGER_QA_MAP,
-    #                                    binary=True,
-    #                                    threshold=0)
 
     # Plot per cluster
     helper_funcs.plot_cluster_centroids(cluster_centroids=cluster_centroids, cluster_sems=cluster_sems,
@@ -332,7 +319,6 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
     pca_with_cluster = helper_funcs.plot_kmeans_on_PCA(df_pivot=df_pivot, pca_df=pca_df,
                                                        save_path=result_path, save_name="items")
     pca_with_cluster.reset_index(inplace=True, drop=False)
-
 
 
     """
@@ -378,13 +364,16 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
         transformed_df = unified_df_cluster.pivot(index="response_id", columns="Cluster", values=ordinal_contingency_cols[col]).reset_index()
         transformed_df.columns = ["response_id", "0", "1"]
         plotter.plot_raincloud_separate_samples(df=transformed_df, id_col="response_id", data_col_names=["0", "1"],
-                                                data_col_colors={"0": "#963484", "1": "#0F8B8D"},
+                                                data_col_colors={"0": "#EDAE49", "1": "#102E4A"},
                                                 save_path=result_path, save_name=f"clusters_by_{col}",
                                                 x_title="Cluster", x_name_dict={"0": "0", "1": "1"},
                                                 title="", y_title="Ratings",
                                                 ymin=min(unified_df_cluster[ordinal_contingency_cols[col]].tolist()),
                                                 ymax=max(unified_df_cluster[ordinal_contingency_cols[col]].tolist()),
-                                                yskip=1)
+                                                yskip=1, fmt="png")
+    # now after the demographics are coded
+    unified_df_cluster.to_csv(os.path.join(result_path, "clusters_with_demographic_coded.csv"), index=False)
+
     ordinal_contingency_df = pd.concat(ordinal_contingency_list)
 
     # Perform a Chi-squared test to examine association between the cluster and the other factors
@@ -396,46 +385,6 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
     clusters_demographic_tests = pd.concat([continuous_contingency_df, ordinal_contingency_df, chisquare_result], ignore_index=True)
     clusters_demographic_tests.to_csv(os.path.join(result_path, "clusters_by_demographic_stats.csv"), index=False)
 
-    import seaborn as sns
-
-    overlap = unified_df_cluster.groupby(["Cluster", "Would you take the pill?"]).size().unstack(fill_value=0)
-    print("Count of overlap:\n", overlap)
-    count_A1_B1 = len(unified_df_cluster[
-                          (unified_df_cluster["Cluster"] == 1) & (unified_df_cluster["Would you take the pill?"] == 1)])
-    count_A1_B0 = len(unified_df_cluster[
-                          (unified_df_cluster["Cluster"] == 1) & (unified_df_cluster["Would you take the pill?"] == 0)])
-    count_A0_B0 = len(unified_df_cluster[
-                          (unified_df_cluster["Cluster"] == 0) & (unified_df_cluster["Would you take the pill?"] == 0)])
-    count_A0_B1 = len(unified_df_cluster[
-                          (unified_df_cluster["Cluster"] == 0) & (unified_df_cluster["Would you take the pill?"] == 1)])
-
-    only_A = len(unified_df_cluster[
-                     (unified_df_cluster["Cluster"] == 1) & (unified_df_cluster["Would you take the pill?"] == 0)])
-    only_B = len(unified_df_cluster[
-                     (unified_df_cluster["Cluster"] == 0) & (unified_df_cluster["Would you take the pill?"] == 1)])
-    both_A_and_B = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 1) & (
-                unified_df_cluster["Would you take the pill?"] == 1)])
-    only_neither = len(unified_df_cluster[(unified_df_cluster["Cluster"] == 0) & (
-                unified_df_cluster["Would you take the pill?"] == 0)])
-    print(f"Rows where A=1 and B=0: {only_A}")
-    print(f"Rows where A=0 and B=1: {only_B}")
-    print(f"Rows where A=1 and B=1: {both_A_and_B}")
-    print(f"Rows where A=0 and B=0: {only_neither}")
-
-    total_rows = len(unified_df_cluster)
-    proportions = pd.DataFrame({
-        'Pill=No': [only_A / total_rows, only_neither / total_rows],
-        'Pill=Yes': [both_A_and_B / total_rows, only_B / total_rows]
-    }, index=['Cluster=1', 'Cluster=0'])
-    sns.heatmap(proportions, annot=True, cmap='Blues', cbar=True, fmt='.2f')
-
-    for q in questions:
-        df_q = df_earth.loc[:, [process_survey.COL_ID, q]]
-        counts = df_q[q].value_counts()
-        plotter.plot_pie(categories_names=counts.index.tolist(), categories_counts=counts.tolist(),
-                         categories_labels=CAT_LABEL_DICT,
-                         categories_colors=CAT_COLOR_DICT, title=f"{q}",
-                         save_path=result_path, save_name=f"{'_'.join(counts.index.tolist())}", format="png")
     return
 
 
@@ -674,17 +623,18 @@ def graded_consciousness(analysis_dict, save_path):
     rating_questions = [survey_mapping.Q_GRADED_EQUAL, survey_mapping.Q_GRADED_UNEQUAL, survey_mapping.Q_GRADED_INCOMP]
     stats = {}
     for col in rating_questions:
-        stats[col] = helper_funcs.compute_stats(c_graded[col])
+        stats[col] = helper_funcs.compute_stats(c_graded[col], possible_values=[1, 2, 3, 4])
     # Create DataFrame for plotting
     plot_data = {}
-    for item, (proportions, mean_rating, std_dev) in stats.items():
+    for item, (proportions, mean_rating, std_dev, n) in stats.items():
         plot_data[item] = {
-            'Proportion': proportions,
-            'Mean': mean_rating,
-            'Std Dev': std_dev
+            "Proportion": proportions,
+            "Mean": mean_rating,
+            "Std Dev": std_dev,
+            "N": n
         }
     # Sort the data by the MEAN rating (Python 3.7+ dictionaries maintain the insertion order of keys)
-    sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]['Mean'], reverse=True)
+    sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"], reverse=True)
     plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=3, legend=rating_labels,
                                          colors=rating_color_list, num_ratings=4, title=f"How Much do you Agree?",
                                          save_path=result_path, save_name=f"consciousness_graded_ratings",
@@ -1111,13 +1061,14 @@ def experience(analysis_dict, save_path):
     animals = animals.apply(helper_funcs.replace_animal_other, axis=1)  # replace "Other" if categories do exist
 
     # first of all, general animal info
-    stats = {animal_q: helper_funcs.compute_stats(animals[animal_q])}
+    stats = {animal_q: helper_funcs.compute_stats(animals[animal_q], possible_values=[1, 2, 3, 4])}
     plot_data = {}
-    for item, (proportions, mean_rating, std_dev) in stats.items():
+    for item, (proportions, mean_rating, std_dev, n) in stats.items():
         plot_data[item] = {
-            'Proportion': proportions,
-            'Mean': mean_rating,
-            'Std Dev': std_dev
+            "Proportion": proportions,
+            "Mean": mean_rating,
+            "Std Dev": std_dev,
+            "N": n,
         }
     sorted_plot_data = {key: plot_data[key] for key in list(dict(plot_data).keys()) if key in plot_data}.items()
     rating_labels = ["1 (None)", "2", "3", "4", "5 (Extremely)"]
@@ -1179,13 +1130,13 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     topic/section
     :param save_path: where the results will be saved (csvs, plots)
     """
+    earth_in_danger(analysis_dict, save_path)
     other_creatures(analysis_dict, save_path)
     graded_consciousness(analysis_dict, save_path)
     gender_cross(analysis_dict, save_path)  # move to after the individuals
     demographics(analysis_dict, save_path)
     experience(analysis_dict, save_path)
     zombie_pill(analysis_dict, save_path)
-    earth_in_danger(analysis_dict, save_path)  # MUST COME AFTER "zombie_pill"
     ics(analysis_dict, save_path)
     kill_for_test(analysis_dict, save_path)
     moral_consideration_features(analysis_dict, save_path)

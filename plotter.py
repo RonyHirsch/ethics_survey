@@ -39,7 +39,7 @@ def plot_raincloud_separate_samples(df, id_col, data_col_names, data_col_colors,
                    x_title, x_name_dict, title,
                    y_title, ymin, ymax, yskip, y_ticks=None, y_jitter=0,
                    data_col_violin_left=None, violin_alpha=0.65, violin_width=0.5, group_spacing=0.5,
-                   marker_spread=0.1, marker_size=100, marker_alpha=0.25, format="svg",
+                   marker_spread=0.1, marker_size=100, marker_alpha=0.25, fmt="svg",
                    size_inches_x=15, size_inches_y=12):
     # ids
     ids = df[id_col].unique().tolist()
@@ -121,10 +121,7 @@ def plot_raincloud_separate_samples(df, id_col, data_col_names, data_col_colors,
     # save plot
     figure = plt.gcf()  # get current figure
     figure.set_size_inches(size_inches_x, size_inches_y)
-    if format == "svg":
-        plt.savefig(os.path.join(save_path, f"{save_name}.svg"), format="svg", dpi=1000, bbox_inches='tight', pad_inches=0.01)
-    if format == "png":
-        plt.savefig(os.path.join(save_path, f"{save_name}.png"), format="png", dpi=1000, bbox_inches='tight', pad_inches=0.01)
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches='tight', pad_inches=0.01)
     del figure
     plt.clf()
     plt.close()
@@ -446,7 +443,7 @@ def plot_nonbinary_preferences(means, sems, colors, labels, label_map, title, mi
     return
 
 
-def plot_binary_preferences(means, sems, colors, labels, label_map, title, save_name, save_path, format="png"):
+def plot_binary_preferences(means, sems, colors, labels, label_map, title, save_name, save_path, fmt="png"):
     fig, ax = plt.subplots(figsize=(16, 6))
     y_pos = np.arange(len(means))
 
@@ -476,8 +473,7 @@ def plot_binary_preferences(means, sems, colors, labels, label_map, title, save_
     # save plot
     figure = plt.gcf()  # get current figure
     figure.set_size_inches(15, 12)
-    plt.savefig(os.path.join(save_path, f"{save_name}.{format}"), format=f"{format}", dpi=1000, bbox_inches='tight',
-                pad_inches=0.01)
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight', pad_inches=0.01)
     del figure
     plt.clf()
     plt.close()
@@ -680,15 +676,32 @@ def plot_categorical_proportion_bar(categories_prop_df, category_col, data_col, 
 
 
 def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save_path, save_name, title, legend=None,
-                                 sem_line=True, ytick_visible=True, text_width=max_text_width):
+                                 sem_line=True, ytick_visible=True, text_width=max_text_width, fmt="png",
+                                 bar_relative=True, bar_range_min=1, bar_range_max=4):
+    """
+    Plots horizontal stacked proportion bars for multiple items with optional error bars for mean ratings.
+
+    :param plot_data: Dict, containing proportions, mean ratings, standard deviations, and N (# of people)
+    :param num_plots: Number of plots to create (one per item).
+    :param colors: List, colors for each rating category.
+    :param num_ratings: Total number of rating categories.
+    :param sem_line: Bool, optional. Whether to plot standard error lines. Defaults to True.
+    :param ytick_visible: Whether to display y-axis tick labels. Defaults to True.
+    :param text_width: Maximum width for wrapped text. Defaults to 30.
+    """
 
     fig, axs = plt.subplots(num_plots, 1, figsize=(15, (num_ratings + 1) * num_plots), sharex=True)
 
     # plot each column as a separate bar
     for i, (col, data) in enumerate(plot_data):
-        proportions = data['Proportion']  # between 0-100
-        mean_rating = data['Mean']
-        std_dev = data['Std Dev']
+        proportions = data["Proportion"]  # between 0-100
+        mean_rating = data["Mean"]
+        std_dev = data["Std Dev"]
+        n = data["N"]
+
+        # validate proportions sum to ~100%
+        if abs(sum(proportions.values()) - 100) > 1e-6:
+            raise ValueError(f"Proportions for {col} do not sum to 100%: {sum(proportions.values()):.2f}%")
 
         # stacked bar plot
         bottom = 0  # left is bottom, as all bars will actually be horizontal
@@ -704,7 +717,10 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
             bottom += proportion
 
         # plot the mean rating as a dot
-        mean_position = (mean_rating / num_ratings) * 100
+        if bar_relative:  # relative to actual proportions
+            mean_position = (mean_rating / num_ratings) * 100
+        else:  # ignoring them, scaling
+            mean_position = bar_range_min + (mean_rating - 1) / (bar_range_max - bar_range_min) * 100
         a.plot(mean_position, 0, markersize=5, color="#333333")
 
         # annotate the mean rating
@@ -718,8 +734,10 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
 
         if sem_line:
             # add standard error line
-            std_dev_position = (std_dev / num_ratings) * 100
-            sem_position = (std_dev / np.sqrt(num_ratings)) * 100
+            if bar_relative:
+                sem_position = (std_dev / np.sqrt(n)) * 100
+            else:
+                sem_position = (std_dev / np.sqrt(n)) * 100
             a.errorbar(mean_position, 0, xerr=sem_position, fmt='o', color="#333333",
                             ecolor="#333333", elinewidth=1, capsize=4, capthick=1, label="")
 
@@ -756,7 +774,7 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
     # save plot
     figure = plt.gcf()  # get current figure
     figure.set_size_inches(18, 12)
-    plt.savefig(os.path.join(save_path, f"{save_name}.png"), format="png", dpi=1000, bbox_inches='tight',
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
     plt.clf()
@@ -766,7 +784,7 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
 
 
 def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_col, y_label, y_min, y_max, y_ticks,
-                    save_path, save_name, annotate_id=True, title_text="", palette_bounds=None, format="png", size=300,
+                    save_path, save_name, annotate_id=True, title_text="", palette_bounds=None, fmt="png", size=300,
                     corr_line=False, individual_df=None, id_col=None):
 
     plt.figure(figsize=(8, 6))
@@ -818,7 +836,7 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
     sns.despine(right=True, top=True)
     figure = plt.gcf()  # get current figure
     figure.set_size_inches(18, 12)
-    plt.savefig(os.path.join(save_path, f"{save_name}.{format}"), format=format, dpi=1000, bbox_inches="tight",
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches="tight",
                 pad_inches=0.01)
     del figure
     plt.clf()
