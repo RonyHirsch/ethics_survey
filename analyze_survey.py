@@ -195,10 +195,18 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
     cluster_centroids = df_pivot.groupby("Cluster").mean()
     cluster_sems = df_pivot.groupby("Cluster").sem()
 
+    # plot per cluster
     helper_funcs.plot_cluster_centroids(cluster_centroids=cluster_centroids, cluster_sems=cluster_sems,
                                         save_path=result_path, save_name="people",
                                         label_map=label_maps,
-                                        binary=False,
+                                        binary=False, overlaid=False,
+                                        threshold=0)
+
+    # overlaid
+    helper_funcs.plot_cluster_centroids(cluster_centroids=cluster_centroids, cluster_sems=cluster_sems,
+                                        save_path=result_path, save_name="people",
+                                        label_map=label_maps,
+                                        binary=False, overlaid=True,
                                         threshold=0)
 
 
@@ -239,7 +247,7 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
     return
 
 
-def earth_in_danger(analysis_dict, save_path):
+def earth_in_danger(analysis_dict, save_path, cluster_num=2):
     """
     Answers to the "Earth is in danger who would you save?" section
     """
@@ -255,7 +263,7 @@ def earth_in_danger(analysis_dict, save_path):
     df_earth_coded = df_earth.copy()
     for col in questions:
         """
-        The map should convert values into 0/1s for the PCA and Kmeans clustering. 
+        The map should convert values into 0/1s for the PCA / Kmeans clustering. 
         PCA is a technique that works with numeric data to capture variance. 
         It projects the data into lower dimensions based on linear combinations of the features, so we can't use 
         categorizations (and map them to numbers as the model might falsely interpret these numeric encodings as 
@@ -266,46 +274,70 @@ def earth_in_danger(analysis_dict, save_path):
         some sort of distance relationship. 
         
         So we will convert everything into binary. However, in order to keep interpretability, I will choose the
-        0's and 1's myself (and not simple map each column into binary arbitratily. 
+        0's and 1's myself (and not simple map each column into binary arbitrarily. 
         """
         col_map = survey_mapping.EARTH_DANGER_QA_MAP[col]
         df_earth_coded[col] = df_earth_coded[col].map(col_map)
 
     df_earth_coded.set_index([process_survey.COL_ID], inplace=True)
 
-    # OLD - DEPRECATED (helper_funcs.perform_PCA_old)
-    #pca_df = helper_funcs.perform_PCA(df_pivot=df_earth_coded, save_path=result_path, save_name="items",
-    #                                  components=2, clusters=2, label_map=survey_mapping.EARTH_DANGER_QA_MAP)
-    #pca_df.reset_index(drop=False, inplace=True)
-
-    ### NEW - PCA separately from K-Means
-
-    # Perform PCA
-    pca_df, loadings, explained_variance = helper_funcs.perform_PCA(df_pivot=df_earth_coded, save_path=result_path,
-                                                                    save_name="items", components=2)
-
-    # Perform k-means clustering
-    df_pivot, kmeans = helper_funcs.perform_kmeans(df_pivot=df_earth_coded, clusters=2,
+    """
+    Perform k-means clustering: group the choices into (k) clusters based on feature similarity.
+    Each cluster is represented by a "centroid" (average position of the data points in the cluster).
+    Data points are assigned to the cluster whose centroid they are closest to.
+    """
+    df_pivot, kmeans = helper_funcs.perform_kmeans(df_pivot=df_earth_coded, clusters=cluster_num,
                                                    save_path=result_path, save_name="items")
 
-    # Plot k-means clusters in PCA space
+    """
+    Plot the KMeans cluster centroids: this is important. 
+    For each cluster (we have cluster_num clusters total), the centroid is the average data point for this cluster 
+    (the mean value of the features for all data points in the cluster). We use the centroids to visualize each cluster's
+    choice in each earth-is-in-danger dyad, to interpret the differences between them.  
+    """
+
+    # Compute the cluster centroids and SEMs
+    cluster_centroids = df_pivot.groupby("Cluster").mean()
+    cluster_sems = df_pivot.groupby("Cluster").sem()
+    # Plot
+    #helper_funcs.plot_cluster_centroids(cluster_centroids=cluster_centroids, cluster_sems=cluster_sems,
+    #                                    save_path=result_path, save_name="items",
+    #                                    label_map=survey_mapping.EARTH_DANGER_QA_MAP,
+    #                                    binary=True,
+    #                                    threshold=0)
+
+    # Plot per cluster
+    helper_funcs.plot_cluster_centroids(cluster_centroids=cluster_centroids, cluster_sems=cluster_sems,
+                                        save_path=result_path, save_name="items",
+                                        label_map=survey_mapping.EARTH_DANGER_QA_MAP, binary=True,
+                                        threshold=0, overlaid=False)
+
+    # Plot - collapsed (all clusters together)
+    helper_funcs.plot_cluster_centroids(cluster_centroids=cluster_centroids, cluster_sems=cluster_sems,
+                                        save_path=result_path, save_name="items",
+                                        label_map=survey_mapping.EARTH_DANGER_QA_MAP, binary=True,
+                                        threshold=0, overlaid=True, cluster_colors_overlaid=["#EDAE49", "#102E4A"])
+
+
+    """
+    Plot k-means clusters in PCA space: combine the KMeans cluster assignments with the PCA-transformed data into 
+    one dataset, to visualize the clusters in the reduced PCA space using a scatter plot.
+    This way, we can interpret the clustering in terms of the main patterns of *variation* in the data. 
+    In this context we are not really interested in the PCA other than for plotting reasons, as the KMeans is the
+    more informative test. 
+    """
+    # Perform PCA
+    pca_df, loadings, explained_variance = helper_funcs.perform_PCA(df_pivot=df_earth_coded, save_path=result_path,
+                                                                    save_name="items", components=cluster_num)
     pca_with_cluster = helper_funcs.plot_kmeans_on_PCA(df_pivot=df_pivot, pca_df=pca_df,
                                                        save_path=result_path, save_name="items")
     pca_with_cluster.reset_index(inplace=True, drop=False)
 
-    # Plot cluster centroids
-    # Compute the cluster centroids and SEMs
-    cluster_centroids = df_pivot.groupby("Cluster").mean()
-    cluster_sems = df_pivot.groupby("Cluster").sem()
-
-    helper_funcs.plot_cluster_centroids(cluster_centroids=cluster_centroids, cluster_sems=cluster_sems,
-                                        save_path=result_path, save_name="items",
-                                        label_map=survey_mapping.EARTH_DANGER_QA_MAP,
-                                        binary=True,
-                                        threshold=0)
 
 
-    # in the pca_df we also get the results of the KMeans clustering we performed.
+    """
+    Examine the clusters demographically
+    """
     # then, we want to examine if there are any demographics that are shared within each cluster.
     df_zombie = analysis_dict["zombification_pill"]
     df_zombie_copy = df_zombie.copy()
@@ -322,10 +354,6 @@ def earth_in_danger(analysis_dict, save_path):
     unified_df_cluster.rename(columns=survey_mapping.Q_EXP_DICT, inplace=True)
     unified_df_cluster.to_csv(os.path.join(result_path, "clusters_with_demographic.csv"), index=False)
 
-
-    """
-    Examine the clusters demographically
-    """
     # Perform an independent-sample t-test to see difference in age between the two clusters
     group1 = unified_df_cluster[unified_df_cluster["Cluster"] == 0]["How old are you?"].tolist()
     group2 = unified_df_cluster[unified_df_cluster["Cluster"] == 1]["How old are you?"].tolist()

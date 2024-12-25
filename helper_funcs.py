@@ -213,7 +213,7 @@ def plot_kmeans_on_PCA(df_pivot, pca_df, save_path, save_name, palette=None):
     # Plot PCA scatter with cluster labels
     plotter.plot_pca_scatter_2d(
         df=unified_df,
-        hue=unified_df["Cluster"],
+        hue="Cluster",
         title="Ratings PCA",
         save_path=save_path,
         save_name=save_name,
@@ -225,236 +225,100 @@ def plot_kmeans_on_PCA(df_pivot, pca_df, save_path, save_name, palette=None):
 
 
 def plot_cluster_centroids(cluster_centroids, cluster_sems, save_path, save_name, label_map=None, binary=True,
-                           threshold=0):
+                           threshold=0, overlaid=False, cluster_colors_overlaid=None):
     """
     Plots the centroids for each cluster with preferences and uncertainty.
+    Can either plot individual plots per cluster or a single overlaid plot for all clusters.
     """
-    for cluster in range(len(cluster_centroids)):
-        # Take cluster means and SEMs
-        cluster_centroid = cluster_centroids.iloc[[cluster], :].drop(columns=["PC1", "PC2"], errors="ignore")
-        cluster_sem = cluster_sems.iloc[[cluster], :].drop(columns=["PC1", "PC2"], errors="ignore")
+    if overlaid:
+        all_preferences = []
+        all_sems = []
+        all_colors = []
+        cluster_names = []
 
-        if binary:
-            # Map binary choices to -1 to 1 scale
-            preferences = cluster_centroid.iloc[0] * 2 - 1
-            sems_scaled = cluster_sem.iloc[0] * 2
-            labels = preferences.index
-
-            # Define colors based on preferences
-            colors = ["#102E4A" if val > 0 else "#EDAE49" for val in preferences]
-
-            # Plot binary preferences
-            plotter.plot_binary_preferences(
-                means=preferences,
-                sems=sems_scaled,
-                colors=colors,
-                labels=labels,
-                label_map=label_map,
-                title=f"Cluster {cluster}",
-                save_name=f"{save_name}_cluster_{cluster}_centroids",
-                save_path=save_path
-            )
+        if not cluster_colors_overlaid:
+            cluster_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']  # Default color palette for clusters
         else:
-            # For non-binary data, keep original scale
-            preferences = cluster_centroid.iloc[0]
-            sems_scaled = cluster_sem.iloc[0]
-            labels = preferences.index
+            cluster_colors = cluster_colors_overlaid
 
-            # Define colors based on threshold
-            colors = ["#DB5461" if val <= threshold else "#26818B" for val in preferences]
+        # Collect data for all clusters
+        for cluster in range(len(cluster_centroids)):
+            cluster_centroid = cluster_centroids.iloc[[cluster], :].drop(columns=["PC1", "PC2"], errors="ignore")
+            cluster_sem = cluster_sems.iloc[[cluster], :].drop(columns=["PC1", "PC2"], errors="ignore")
 
-            # Plot non-binary preferences
-            plotter.plot_nonbinary_preferences(
-                means=preferences,
-                sems=sems_scaled,
-                colors=colors,
-                min=1,
-                max=4,
-                thresh=threshold,
-                labels=labels,
-                label_map=label_map,
-                title=f"Cluster {cluster}",
-                save_name=f"{save_name}_cluster_{cluster}_centroids",
-                save_path=save_path
-            )
+            if binary:
+                # Scale binary preferences
+                preferences = cluster_centroid.iloc[0] * 2 - 1
+                sems_scaled = cluster_sem.iloc[0] * 2
+                # Define colors based on clusters
+                colors = [cluster_colors[cluster]] * len(preferences)
+            else:
+                # Non-binary preferences
+                preferences = cluster_centroid.iloc[0]
+                sems_scaled = cluster_sem.iloc[0]
+                # Define colors based on clusters
+                colors = [cluster_colors[cluster]] * len(preferences)
 
+            all_preferences.append(preferences)
+            all_sems.append(sems_scaled)
+            all_colors.append(colors)
+            cluster_names.append(f"Cluster {cluster}")
 
-def perform_PCA_old(df_pivot, save_path, save_name, components=2, clusters=3, label_map=None, binary=True, threshold=0):
-    txt_output = list()
+        # Call the overlaid plot function
+        plotter.plot_overlaid_preferences(
+            all_preferences=all_preferences,
+            all_sems=all_sems,
+            all_colors=all_colors,
+            labels=preferences.index,
+            label_map=label_map,
+            cluster_names=cluster_names,
+            binary=binary,
+            save_name=f"{save_name}_overlaid_centroids",
+            save_path=save_path,
+            threshold=threshold
+        )
+    else:
+        # Plot per cluster
+        for cluster in range(len(cluster_centroids)):
+            cluster_centroid = cluster_centroids.iloc[[cluster], :].drop(columns=["PC1", "PC2"], errors="ignore")
+            cluster_sem = cluster_sems.iloc[[cluster], :].drop(columns=["PC1", "PC2"], errors="ignore")
 
-    # Perform PCA
-    pca = PCA(n_components=components)
-    pca_result = pca.fit_transform(df_pivot)
+            if binary:
+                preferences = cluster_centroid.iloc[0] * 2 - 1
+                sems_scaled = cluster_sem.iloc[0] * 2
+                labels = preferences.index
+                colors = ["#102E4A" if val > 0 else "#EDAE49" for val in preferences]
 
-    # Create a DataFrame for PCA results
-    """
-    PC1 is the direction (in the original feature space) along which the data varies the most. In this case, 
-    it represents a pattern where certain creatures consistently receive high or low ratings across both Consciousness
-    and Moral Status. 
-    """
-    pca_df = pd.DataFrame(data=pca_result, columns=["PC1", "PC2"], index=df_pivot.index)
-    pca_df.to_csv(os.path.join(save_path, f"{save_name}_PCA_result.csv"), index=True)
+                plotter.plot_binary_preferences(
+                    means=preferences,
+                    sems=sems_scaled,
+                    colors=colors,
+                    labels=labels,
+                    label_map=label_map,
+                    title=f"Cluster {cluster}",
+                    save_name=f"{save_name}_cluster_{cluster}_centroids",
+                    save_path=save_path
+                )
+            else:
+                preferences = cluster_centroid.iloc[0]
+                sems_scaled = cluster_sem.iloc[0]
+                labels = preferences.index
+                colors = ["#DB5461" if val <= threshold else "#26818B" for val in preferences]
 
-    # Get the loadings (coefficients)
-    """
-    Loadings indicate how much each original variable (ratings for C and MS) contributes to each principal component. 
-    They are the coefficients of the linear combinations that make up the principal components.
-    If the loadings for PC are both positive and large for both ratings, it suggests that PC1 represents a pattern 
-    where creatures receive similar ratings for both C and MS. If it's negative, it's divergence.
-    """
-    loadings = pd.DataFrame(pca.components_.T, index=df_pivot.columns, columns=["PC1", "PC2"])
-    #print(loadings)
-    txt_output.append(loadings)
-
-    ### STATISTICAL SIGNIFICANCE
-
-    # fit for statistical significance
-    pca.fit(df_pivot)
-    """
-    The amount of variance each principal component explains how much of the total variance in the data is captured by 
-    each component.
-    """
-    original_variance = pca.explained_variance_ratio_
-    # Explained variance ratio
-    explained_variance = pca.explained_variance_ratio_
-    line = f"Explained Variance Ratio: PC1 = {explained_variance[0]:.2f}, PC2 = {explained_variance[1]:.2f}"
-    print(line)
-    txt_output.append(line)
-
-    # permutation test: assess the significance of the explained variance of each PC
-    n_permutations = 1000
-    permuted_variances = np.zeros((n_permutations, 2))
-
-    for i in range(n_permutations):
-        # Shuffle each column independently
-        permuted_data = shuffle(df_pivot, random_state=i)
-        permuted_pca = PCA(n_components=components)
-        permuted_pca.fit(permuted_data)
-        permuted_variances[i] = permuted_pca.explained_variance_ratio_
-
-    # Calculate p-values: how often the variance explained by the permuted PCs is >= the variance explained by the original PCs
-    p_values = np.mean(permuted_variances >= original_variance, axis=0)
-    line = f"P-values for explained variance: PC1 = {p_values[0]:.4f}, PC2 = {p_values[1]:.4f}"
-    print(line)
-    txt_output.append(line)
-
-    ### PLOT
-    # Perform K-means clustering
-    kmeans = KMeans(n_clusters=clusters, random_state=42, n_init=10)  # The n_init parameter controls the number of times the KMeans algorithm is run with different centroid seeds; 10 is the default
-    df_pivot["Cluster"] = kmeans.fit_predict(df_pivot)
-    unified_df = pd.merge(df_pivot, pca_df, left_index=True, right_index=True)
-    unified_df.to_csv(os.path.join(save_path, f"{save_name}_pca_result_with_kmeans_clusters.csv"), index=True)  # index here is the identity of each dot
-    plotter.plot_pca_scatter_2d(df=unified_df, hue=unified_df["Cluster"], title="Ratings PCA",
-                                save_path=save_path, save_name=save_name,
-                                pal=["#A3333D", "#27474E"], annotate=False, size=250)  # "#B1740F", "#003554"
-
-    # test the statistical significance of the clustering
-    """
-    The silhouette score measures how similar a data point is to its own cluster compared to other clusters. 
-    It ranges from -1 to 1, where a value closer to 1 indicates that the data points are well clustered.
-    """
-
-    # calculate the silouhette score of the real data
-    silhouette_avg = silhouette_score(df_pivot.drop(columns="Cluster"), df_pivot["Cluster"])
-    line = f"{clusters}-Means Clustering Silhouette Score: {silhouette_avg:.2f}"
-    print(line)
-    txt_output.append(line)
-
-    # random permutations
-    n_iterations = 1000
-    random_silhouette_scores = list()
-    for _ in range(n_iterations):
-        random_clusters = np.random.randint(0, clusters, size=df_pivot.shape[0])
-        score = silhouette_score(df_pivot.drop(columns="Cluster"), random_clusters)
-        random_silhouette_scores.append(score)
-    p_value = np.mean(silhouette_avg < np.array(random_silhouette_scores))
-    line = f"P-value of Silhouette Score compared to random clusters ({n_iterations} iterations): {p_value:.4f}"
-    print(line)
-    txt_output.append(line)
-
-
-    """
-    Identify the centroids: the choices that each cluster made on average on each question
-    """
-    cluster_centroids = unified_df.groupby("Cluster").mean()
-    cluster_centroids.to_csv(os.path.join(save_path, f"{save_name}_cluster_centroids_raw.csv"), index=True)  # index=Cluster id
-
-    # plot the centroids
-    cluster_centroids_sem = unified_df.groupby("Cluster").sem()  # the centroids were mean, these are sems for plotting
-
-    # for each cluster
-    for cluster in range(0, clusters):
-        # take cluster means
-        cluster_centroid = cluster_centroids.iloc[[cluster], :]  # take only 1 row (the row of the cluster)
-        cluster_centroid = cluster_centroid.drop(columns=["PC1", "PC2"])  # drop the non-question columns
-        # take cluster sems
-        cluster_sems = cluster_centroids_sem.iloc[[cluster], :]
-        cluster_sems = cluster_sems.drop(columns=["PC1", "PC2"])
-
-        if binary:
-            """
-            map binary choices to a -1 to 1 scale where 0.5 means no preference, such that 
-            -1 indicates complete preference for "0"
-            +1 indicates complete preference for "1"
-            0 means no preference (50-50)
-            """
-            preferences = cluster_centroid.iloc[0] * 2 - 1  # scale the means
-            labels = preferences.index
-            """
-            Unlike the means, SEMs are measures of spread (uncertainty), not actual preference values. 
-            So, they should only be scaled (by the same factor as the means), not shifted (no -1), as it simply 
-            represents how much the mean might fluctuate, not a direct preference value. 
-            We only need to stretch its range, not change its center
-            """
-            sems_scaled = cluster_sems.iloc[0] * 2
-
-            # Define colors based on the preferences: positive for "1", negative for "0"
-            colors = ["#102E4A" if val > 0 else "#EDAE49" for val in preferences]
-
-            plotter.plot_binary_preferences(means=preferences, sems=sems_scaled, colors=colors,
-                                            labels=labels, label_map=label_map, title=f"Cluster {cluster}",
-                                            save_name=f"{save_name}_cluster_{cluster}_centroids", save_path=save_path)
-
-        else:
-            """
-            choices are not binary - so they were not 0/1 which can be scaled to -1/1. 
-            keep them as they are in the same scale
-            """
-            preferences = cluster_centroid.iloc[0]  # Keep the means as they are (do not scale)
-            labels = preferences.index
-            sems_scaled = cluster_sems.iloc[0]  # no need to change it either
-            colors = ["#DB5461" if val <= threshold else "#26818B" for val in preferences]
-            plotter.plot_nonbinary_preferences(means=preferences, sems=sems_scaled, colors=colors, min=1, max=4,
-                                               thresh=threshold, labels=labels, label_map=label_map,
-                                               title=f"Cluster {cluster}",
-                                               save_name=f"{save_name}_cluster_{cluster}_centroids", save_path=save_path)
-
-    """
-    Test the significance of the difference between the centroids: 
-    test whether there’s a significant association between cluster membership and the choices made on each question. 
-    To do that, we'll use a Chi-square test, as the choice is binary and the sample is large. 
-    """
-
-    q_cols = df_pivot.columns[:-1]  # everything but the "Cluster" column
-    result = list()
-    for choice in q_cols:
-        # create a contingency table for the current choice and the cluster column
-        contingency_table = pd.crosstab(df_pivot["Cluster"], df_pivot[choice])
-        # perform the Chi-Square test
-        chi2, p, dof, expected = chi2_contingency(contingency_table)
-        # Expected: the expected frequencies for each cell in the contingency table, the theoretical frequencies
-        # that would occur in each cell of a contingency table if the choices are independent of the cluster
-        result.append({"Choice": choice, "Chi2": chi2, "p-value": p, "dof": dof, "Expected": expected})
-    chisq_df = pd.DataFrame(result)
-    chisq_df.to_csv(os.path.join(save_path, f"{save_name}_cluster_centroids_chisq.csv"), index=False)
-
-    # WRITE TO TXT
-    with open(os.path.join(save_path, f"{save_name}_PCA_result.txt"), "w") as file:
-        for line in txt_output:
-            line_str = str(line)
-            file.write(line_str + '\n')
-
-    return unified_df
+                plotter.plot_nonbinary_preferences(
+                    means=preferences,
+                    sems=sems_scaled,
+                    colors=colors,
+                    min=1,
+                    max=4,
+                    thresh=threshold,
+                    labels=labels,
+                    label_map=label_map,
+                    title=f"Cluster {cluster}",
+                    save_name=f"{save_name}_cluster_{cluster}_centroids",
+                    save_path=save_path
+                )
+    return
 
 
 def corr_per_item(df, items, save_path):

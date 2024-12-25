@@ -319,13 +319,14 @@ def plot_pie(categories_names, categories_counts, title, save_path, save_name,
     return
 
 
-def plot_pca_scatter_2d(df, hue, title, save_path, save_name, pal=None, format="png", annotate=True, size=150):
+def plot_pca_scatter_2d(df, hue, title, save_path, save_name, pal=None, fmt="png", annotate=True, size=150):
 
     if pal is None:
-        sns.scatterplot(x='PC1', y='PC2', data=df, hue=hue, s=size,
+        sns.scatterplot(x="PC1", y="PC2", data=df, hue=hue, s=size,
                         palette=sns.color_palette("hls", len(df[hue].unique().tolist())), legend=False)
     else:
-        sns.scatterplot(x='PC1', y='PC2', data=df, hue=hue, palette=pal, s=size, legend=False)
+        sns.scatterplot(x="PC1", y="PC2", data=df, hue=hue, s=size,
+                        palette=pal, legend=False)
     if annotate:
         for item in df.index:
             plt.text(df.loc[item, 'PC1'], df.loc[item, 'PC2'], item)
@@ -342,7 +343,7 @@ def plot_pca_scatter_2d(df, hue, title, save_path, save_name, pal=None, format="
     # save plot
     figure = plt.gcf()  # get current figure
     figure.set_size_inches(15, 12)
-    plt.savefig(os.path.join(save_path, f"{save_name}_PCA_result.{format}"), format=f"{format}", dpi=1000, bbox_inches='tight',
+    plt.savefig(os.path.join(save_path, f"{save_name}_PCA_result.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
     plt.clf()
@@ -359,6 +360,54 @@ def get_labels(label_dict, min_val=0, max_val=1):
     label_0 = [key for key, value in label_dict.items() if value == min_val][0]
     label_1 = [key for key, value in label_dict.items() if value == max_val][0]
     return label_0, label_1
+
+
+def plot_overlaid_preferences(all_preferences, all_sems, all_colors, labels, label_map, cluster_names,
+                               binary, save_name, save_path, threshold=0):
+    """
+    Creates a single plot overlaying centroids (preferences) and SEMs for all clusters.
+    """
+    fig, ax = plt.subplots(figsize=(16, 6))
+    y_pos = np.arange(len(labels))
+
+    # Map labels to readable names if label_map is provided
+    display_labels = [label_map.get(label, label) for label in labels] if label_map else labels
+
+    # Plot centroids for all clusters
+    for cluster_idx, (preferences, sems, colors) in enumerate(zip(all_preferences, all_sems, all_colors)):
+        for i, (mean, sem, color) in enumerate(zip(preferences, sems, colors)):
+            ax.hlines(y=y_pos[i], xmin=(-1 if binary else threshold - 1), xmax=(1 if binary else threshold + 1),
+                      color="lightgray", linestyle='--', linewidth=1)
+            ax.errorbar(mean, y_pos[i], xerr=sem, fmt='o', color=color, markersize=8,
+                        ecolor="black", elinewidth=2, capsize=4)
+
+    ax.axvline(0 if binary else threshold, color='black', linewidth=1)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(["" for _ in display_labels])
+    ax.set_xlabel("No Preference" if binary else "Threshold", fontsize=15)
+    ax.set_title("Overlaid Cluster Centroids", fontsize=15)
+    ax.invert_yaxis()
+    ax.set_xlim([-1, 1] if binary else [threshold - 1, threshold + 1])
+
+    for i, label in enumerate(display_labels):
+        label_0, label_1 = get_labels(label_map[labels[i]]) if binary else get_labels(label_map[labels[i]], min_val=1,
+                                                                                      max_val=4)
+        ax.text(-1.05 if binary else threshold - 1.05, i, label_0, va='center', ha='right', fontsize=15, color='black')
+        ax.text(1.05 if binary else threshold + 1.05, i, label_1, va='center', ha='left', fontsize=15, color='black')
+
+    # Add legend for clusters
+    handles = [plt.Line2D([0], [0], color=colors[0], lw=4) for colors in all_colors]
+    ax.legend(handles, cluster_names, loc="upper right", fontsize=10)
+
+    # Save the figure
+    figure = plt.gcf()
+    figure.set_size_inches(15, 13)
+    plt.savefig(os.path.join(save_path, f"{save_name}.png"), format="png", dpi=1000, bbox_inches='tight',
+                pad_inches=0.01)
+    del figure
+    plt.clf()
+    plt.close()
+    return
 
 
 def plot_nonbinary_preferences(means, sems, colors, labels, label_map, title, min, max, thresh,
