@@ -186,6 +186,26 @@ def perform_kmeans(df_pivot, save_path, save_name, clusters=2):
     cluster_centroids = df_pivot.groupby("Cluster").mean()
     cluster_centroids.to_csv(os.path.join(save_path, f"{save_name}_cluster_centroids_raw.csv"), index=True)
 
+    """
+    Test the significance of the difference between the centroids: 
+    test whether there’s a significant association between cluster membership and the choices made on each question. 
+    To do that, we'll use a Chi-square test, as the choice is binary and the sample is large. 
+    """
+
+    q_cols = df_pivot.columns[:-1]  # everything but the "Cluster" column
+    result = list()
+    for choice in q_cols:
+        # create a contingency table for the current choice and the cluster column
+        contingency_table = pd.crosstab(df_pivot["Cluster"], df_pivot[choice])
+        # perform the Chi-Square test
+        chi2, p, dof, expected = chi2_contingency(contingency_table)
+        # Expected: the expected frequencies for each cell in the contingency table, the theoretical frequencies
+        # that would occur in each cell of a contingency table if the choices are independent of the cluster
+        result.append({"Choice": choice, "Chi2": chi2, "p-value": p, "dof": dof, "Expected": expected})
+    chisq_df = pd.DataFrame(result)
+    chisq_df.to_csv(os.path.join(save_path, f"{save_name}_cluster_centroids_chisq.csv"), index=False)
+
+
     with open(os.path.join(save_path, f"{save_name}_kmeans_{clusters}_result.txt"), "w") as file:
         for line in txt_output:
             file.write(str(line) + '\n')
@@ -225,7 +245,7 @@ def plot_kmeans_on_PCA(df_pivot, pca_df, save_path, save_name, palette=None):
 
 
 def plot_cluster_centroids(cluster_centroids, cluster_sems, save_path, save_name, label_map=None, binary=True,
-                           threshold=0, overlaid=False, cluster_colors_overlaid=None):
+                           threshold=0, overlaid=False, cluster_colors_overlaid=None, fmt="png"):
     """
     Plots the centroids for each cluster with preferences and uncertainty.
     Can either plot individual plots per cluster or a single overlaid plot for all clusters.
@@ -275,7 +295,8 @@ def plot_cluster_centroids(cluster_centroids, cluster_sems, save_path, save_name
             binary=binary,
             save_name=f"{save_name}_overlaid_centroids",
             save_path=save_path,
-            threshold=threshold
+            threshold=threshold,
+            fmt=fmt
         )
     else:
         # Plot per cluster

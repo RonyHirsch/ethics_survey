@@ -93,6 +93,7 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
     rating_labels = ["Does Not Have", "Probably Doesn't Have", "Probably Has", "Has"]
 
     sorting_method = None
+    sorted_suffix = ""
 
     for topic_code, topic_name in topic_name_map.items():  # Consciousness, Moral Status
         df_topic = df.loc[:, [col for col in df.columns if col.startswith(f"{topic_code}_")]]
@@ -126,6 +127,7 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
             sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]['Mean'], reverse=True)
             if sort_together:  # if false, then it'll sort each of them by the previous condition independently
                 sorting_method = list(dict(sorted_plot_data).keys())  # this is the order now
+                sorted_suffix = "_sortTogether"
 
         else:  # sort the second column by the first one's order
             sorted_plot_data = {key: plot_data[key] for key in sorting_method if key in plot_data}.items()
@@ -134,15 +136,14 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
         plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=num_plots, legend=rating_labels,
                                              colors=rating_color_list, num_ratings=4, title=f"{topic_name.title()}",
                                              bar_relative=False, bar_range_min=1, bar_range_max=4,
-                                             save_path=result_path, save_name=f"{topic_name.lower()}_ratings")
+                                             save_path=result_path, save_name=f"ratings_{topic_name.lower()}{sorted_suffix}")
 
     """
     Plot "other creatures" judgments of Consciousness vs. of Moral Status. >> PER ITEM
     """
 
     # prepare data for analyses
-    df_pivot = long_data.pivot_table(index="Item", columns="Topic", values="Rating", aggfunc="mean").fillna(
-        0).reset_index(drop=False, inplace=False)
+    df_pivot = long_data.pivot_table(index="Item", columns="Topic", values="Rating", aggfunc="mean").reset_index(drop=False, inplace=False)  # I don't want to 'fillna(0).' this
 
     colors = [rating_color_list[0], rating_color_list[-1]]
     individual_data = long_data.pivot_table(index=["response_id", "Item"], columns="Topic",
@@ -150,9 +151,15 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
     plotter.plot_scatter_xy(df=df_pivot, identity_col="Item",
                             x_col="Consciousness", x_label="Consciousness", x_min=1, x_max=4, x_ticks=1,
                             y_col="Moral Status", y_label="Moral Status", y_min=1, y_max=4, y_ticks=1,
-                            save_path=result_path, save_name=f"correlation_c_ms", annotate_id=True,
-                            palette_bounds=colors, corr_line=True,
+                            save_path=result_path, save_name=f"correlation_c_ms_individual", annotate_id=True,
+                            palette_bounds=colors, corr_line=False, diag_line=True,
                             individual_df=individual_data, id_col="response_id")
+    plotter.plot_scatter_xy(df=df_pivot, identity_col="Item",
+                            x_col="Consciousness", x_label="Consciousness", x_min=1, x_max=4, x_ticks=1,
+                            y_col="Moral Status", y_label="Moral Status", y_min=1, y_max=4, y_ticks=1,
+                            save_path=result_path, save_name=f"correlation_c_ms", annotate_id=True,
+                            palette_bounds=colors, corr_line=False, diag_line=True,
+                            individual_df=None, id_col=None)
 
     """
     Cluster people based on their rating tendencies of different entities' consciousness and moral status >> PER PERSON
@@ -301,7 +308,7 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
 
     # Plot - collapsed (all clusters together)
     helper_funcs.plot_cluster_centroids(cluster_centroids=cluster_centroids, cluster_sems=cluster_sems,
-                                        save_path=result_path, save_name="items",
+                                        save_path=result_path, save_name="items", fmt="svg",
                                         label_map=survey_mapping.EARTH_DANGER_QA_MAP, binary=True,
                                         threshold=0, overlaid=True, cluster_colors_overlaid=["#EDAE49", "#102E4A"])
 
@@ -399,6 +406,8 @@ def ics(analysis_dict, save_path):
 
     # load relevant data
     df_ics = analysis_dict["ics"]
+    df_ics.to_csv(os.path.join(result_path, "i_c_s.csv"), index=False)
+
     questions = [c for c in df_ics.columns if c.startswith("Do you think a creature/system")]
     for q in questions:
         df_q = df_ics.loc[:, [process_survey.COL_ID, q]]
@@ -411,6 +420,55 @@ def ics(analysis_dict, save_path):
                          categories_labels=CAT_LABEL_DICT,
                          categories_colors=CAT_COLOR_DICT, title=f"{q}",
                          save_path=result_path, save_name=q_name, format="png")
+
+    """
+    Follow up #1: valence w/o consciousness.
+    Those who replied YES to having positive and negative sensations of pleasure/pain w/o consciousness, 
+    were asked: "Do you have an example of a case of positive/negative sensations without consciousness?".
+    I want to see what they replied, and see how many themes are common
+    """
+    q_sWc_ex = "Do you have an example of a case of positive/negative sensations without consciousness?"
+    df_ics_exmaples = df_ics[df_ics[q_sWc_ex].notna()]  # only people who answered this question
+    examples = df_ics_exmaples.loc[:, q_sWc_ex].tolist()
+    # filter out answers that are just "No" (as in "I don't have an example"); filter out "NO", "no", "No" and "nO"
+    examples_filtered = sorted([ex for ex in examples if not(re.search(ex.strip(), "No", re.IGNORECASE))])  # strip is for spaces
+
+    # common themes
+    coma = [ex for ex in examples_filtered if re.search("coma", ex, re.IGNORECASE)]
+    vs = [ex for ex in examples_filtered if re.search("vegetative state", ex, re.IGNORECASE)]
+    plants = [ex for ex in examples_filtered if (re.search("plants", ex, re.IGNORECASE) or
+                                                 re.search("plant", ex, re.IGNORECASE) or
+                                                 re.search("sunflower", ex, re.IGNORECASE) or
+                                                 re.search("trees", ex, re.IGNORECASE) or
+                                                 re.search("grass", ex, re.IGNORECASE))]
+    ai = [ex for ex in examples_filtered if re.search("AI", ex)]  # here I don't wanna ignore case
+    animals = [ex for ex in examples_filtered if (re.search("snake", ex, re.IGNORECASE) or
+                                                  re.search("mouse", ex, re.IGNORECASE) or
+                                                  re.search("fish", ex, re.IGNORECASE) or
+                                                  re.search("molluscs", ex, re.IGNORECASE) or  # mollusks
+                                                  re.search("clams", ex, re.IGNORECASE) or
+                                                  re.search("fungus", ex, re.IGNORECASE) or
+                                                  re.search("fungai", ex, re.IGNORECASE) or  # manually saw this response (typo included)
+                                                  re.search("octopus", ex, re.IGNORECASE) or
+                                                  re.search("jellyfish", ex, re.IGNORECASE) or
+                                                  re.search("dog", ex, re.IGNORECASE) or
+                                                  re.search("insects", ex, re.IGNORECASE) or
+                                                  re.search("bugs", ex, re.IGNORECASE) or
+                                                  re.search("bug", ex, re.IGNORECASE) or
+                                                  re.search("worm", ex, re.IGNORECASE) or
+                                                  re.search("fly", ex, re.IGNORECASE) or
+                                                  re.search("animals", ex, re.IGNORECASE) or
+                                                  re.search("animal", ex, re.IGNORECASE))]
+    rest = [ex for ex in examples_filtered if ex not in (coma + vs + plants + ai + animals)]
+
+    result_df = pd.DataFrame({"coma": [len(coma)], "vs": [len(vs)], "plants": [len(plants)], "animals": [len(animals)],
+                              "ai": [len(ai)], "misc": [len(rest)]}).transpose()
+    result_df.rename(columns={result_df.columns[0]: "count"}, inplace=True)
+    result_df.to_csv((os.path.join(result_path, "ics_valence wo consciousness_examples.csv")), index=True)  # index is the type
+    # save the misc ones
+    rest_df = pd.DataFrame({f"miscellaneous examples for {q_sWc_ex}": rest})
+    rest_df.to_csv(os.path.join(result_path, "ics_valence wo consciousness_example_misc.csv"), index=False)
+
     return
 
 
@@ -516,6 +574,7 @@ def moral_consideration_features(analysis_dict, save_path):
               }
 
     ms_features = analysis_dict["moral_considerations_features"]
+    ms_features.to_csv(os.path.join(result_path, "moral_considerations_features.csv"), index=False)
 
     ms_features_copy = ms_features[[process_survey.COL_ID, "What do you think is important for moral considerations?"]]
 
@@ -572,7 +631,7 @@ def moral_consideration_features(analysis_dict, save_path):
     plotter.plot_categorical_bars_layered(categories_prop_df=df_unified, category_col="index",
                                           full_data_col="Proportion_all", partial_data_col="Proportion_one",
                                           categories_colors=colors, save_path=result_path,
-                                          save_name="important_features", format="png", y_min=0, y_max=101,
+                                          save_name="important_features", fmt="svg", y_min=0, y_max=101,
                                           y_skip=10, inch_w=20, inch_h=12)
     df_unified.to_csv(os.path.join(result_path, "important_features.csv"), index=False)
     return
@@ -588,6 +647,8 @@ def moral_considreation_prios(analysis_dict, save_path):
         os.mkdir(result_path)
 
     ms_prios = analysis_dict["moral_considerations_prios"]
+    ms_prios.to_csv(os.path.join(result_path, "moral_decisions_prios.csv"), index=False)
+
     questions = [c for c in ms_prios.columns if c.startswith("Do you think")]
     for q in questions:
         df_q = ms_prios.loc[:, [process_survey.COL_ID, q]]
@@ -601,6 +662,87 @@ def moral_considreation_prios(analysis_dict, save_path):
         df_r = ms_prios.loc[:, [process_survey.COL_ID, r]]
         df_r = df_r[df_r[r].notnull()]
         df_r.to_csv(os.path.join(result_path, f"{r.replace('?', '').replace('/', '-')}.csv"), index=False)
+
+    """
+    Relations to graded consciousness: How many people who think some people should have higher MS than others think
+    that consciousness is a graded phenomenon?
+    """
+    c_graded = analysis_dict["consciousness_graded"]
+    q_mc_human_prio = "Do you think some people should have a higher moral status than others?"
+    q_mc_human_prio_why = "What characterizes people with higher moral status?"
+    ms_prios_relevant = ms_prios.loc[:, ["response_id", q_mc_human_prio, q_mc_human_prio_why]]
+    combined = pd.merge(ms_prios_relevant, c_graded, on="response_id")
+    combined.to_csv(os.path.join(result_path, "moral_decisions_prios_graded_c.csv"), index=False)
+
+    """
+    Mann-Whitney U-test on the ratings of agreement with C-GRADED questions (ordinal) based whether they 
+    agree with 'q_mc_human_prio'
+    """
+    q_mc_human_prio_yes = combined[combined[q_mc_human_prio] == "Yes"].reset_index(inplace=False, drop=True)
+    q_mc_human_prio_no = combined[combined[q_mc_human_prio] == "No"].reset_index(inplace=False, drop=True)
+
+    rating_questions = [survey_mapping.Q_GRADED_EQUAL, survey_mapping.Q_GRADED_UNEQUAL, survey_mapping.Q_GRADED_INCOMP]
+
+    result_list = list()
+    for col in rating_questions:
+        mwu = helper_funcs.mann_whitney_utest(list_group1=q_mc_human_prio_yes.loc[:, col].tolist(),
+                                              list_group2=q_mc_human_prio_no.loc[:, col].tolist())
+        # add descriptives: yes (some humans' MS > than others)
+        mwu["group 1"] = ["q_mc_human_prio_yes"]
+        mwu["group 1 M"] = q_mc_human_prio_yes.loc[:, col].mean()
+        mwu["group 1 SD"] = q_mc_human_prio_yes.loc[:, col].std()
+        # descriptives: no (some humans' MS is not > than others)
+        mwu["group 2"] = ["q_mc_human_prio_no"]
+        mwu["group 2 M"] = q_mc_human_prio_no.loc[:, col].mean()
+        mwu["group 2 SD"] = q_mc_human_prio_no.loc[:, col].std()
+        # dependent var & save
+        mwu["dependent_var"] = [f"{col}"]
+        # df to list
+        result_list.append(mwu)
+
+    result_df = pd.concat(result_list, ignore_index=True)
+    result_df.to_csv(os.path.join(result_path, "stats_humans unequal_c graded qs.csv"), index=False)
+
+    """
+    Plot the graded consciousness q's separately for each group
+    """
+    human_prios = {"yes": q_mc_human_prio_yes, "no": q_mc_human_prio_no}
+    for human_prio in human_prios.keys():
+        df = human_prios[human_prio]
+        plot_graded_consciousness_given_df(df=df, save_path=result_path, prefix="", suffix=f"_{human_prio}")
+
+    return
+
+
+def plot_graded_consciousness_given_df(df, save_path, prefix="", suffix=""):
+    """
+    Plot the answers to the rating questions (agreement) in a stacked bar plot. This can be used for any sub-set
+    of the participants and does nothing but plotting
+    """
+    rating_color_list = ["#DB5461", "#fb9a99", "#70a0a4", "#26818B"]
+    rating_labels = ["1", "2", "3", "4"]  # how much do you agree
+    rating_questions = [survey_mapping.Q_GRADED_EQUAL, survey_mapping.Q_GRADED_UNEQUAL, survey_mapping.Q_GRADED_INCOMP]
+    stats = {}
+    for col in rating_questions:
+        stats[col] = helper_funcs.compute_stats(df[col], possible_values=[1, 2, 3, 4])
+    # Create DataFrame for plotting
+    plot_data = {}
+    for item, (proportions, mean_rating, std_dev, n) in stats.items():
+        plot_data[item] = {
+            "Proportion": proportions,
+            "Mean": mean_rating,
+            "Std Dev": std_dev,
+            "N": n
+        }
+    # Sort the data by the MEAN rating (Python 3.7+ dictionaries maintain the insertion order of keys)
+    sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"], reverse=True)
+    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=3, legend=rating_labels,
+                                         colors=rating_color_list, num_ratings=4, title=f"How Much do you Agree?",
+                                         save_path=save_path,
+                                         save_name=f"{prefix}consciousness_graded_ratings{suffix}",
+                                         text_width=39)
+    # save the figure data
+    pd.DataFrame(plot_data).to_csv(os.path.join(save_path, f"{prefix}consciousness_graded_ratings{suffix}.csv"))
     return
 
 
@@ -615,30 +757,10 @@ def graded_consciousness(analysis_dict, save_path):
 
     c_graded = analysis_dict["consciousness_graded"]
 
-    """
-    Plot the answers to the rating questions (agreement) in a stacked bar plot
-    """
-    rating_color_list = ["#DB5461", "#fb9a99", "#70a0a4", "#26818B"]
-    rating_labels = ["1", "2", "3", "4"]
-    rating_questions = [survey_mapping.Q_GRADED_EQUAL, survey_mapping.Q_GRADED_UNEQUAL, survey_mapping.Q_GRADED_INCOMP]
-    stats = {}
-    for col in rating_questions:
-        stats[col] = helper_funcs.compute_stats(c_graded[col], possible_values=[1, 2, 3, 4])
-    # Create DataFrame for plotting
-    plot_data = {}
-    for item, (proportions, mean_rating, std_dev, n) in stats.items():
-        plot_data[item] = {
-            "Proportion": proportions,
-            "Mean": mean_rating,
-            "Std Dev": std_dev,
-            "N": n
-        }
-    # Sort the data by the MEAN rating (Python 3.7+ dictionaries maintain the insertion order of keys)
-    sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"], reverse=True)
-    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=3, legend=rating_labels,
-                                         colors=rating_color_list, num_ratings=4, title=f"How Much do you Agree?",
-                                         save_path=result_path, save_name=f"consciousness_graded_ratings",
-                                         text_width=39)
+    # Plot the answers to the rating questions (agreement) in a stacked bar plot
+    plot_graded_consciousness_given_df(df=c_graded, save_path=result_path)
+
+    # now, other things
 
     """
     Relations to expertise
@@ -1130,8 +1252,11 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     topic/section
     :param save_path: where the results will be saved (csvs, plots)
     """
+
+    moral_considreation_prios(analysis_dict, save_path)
     earth_in_danger(analysis_dict, save_path)
-    other_creatures(analysis_dict, save_path)
+    other_creatures(analysis_dict, save_path, sort_together=False)
+    other_creatures(analysis_dict, save_path, sort_together=True)
     graded_consciousness(analysis_dict, save_path)
     gender_cross(analysis_dict, save_path)  # move to after the individuals
     demographics(analysis_dict, save_path)
@@ -1139,8 +1264,7 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     zombie_pill(analysis_dict, save_path)
     ics(analysis_dict, save_path)
     kill_for_test(analysis_dict, save_path)
-    moral_consideration_features(analysis_dict, save_path)
-    moral_considreation_prios(analysis_dict, save_path)
     consciousness_intelligence(analysis_dict, save_path)
+    moral_consideration_features(analysis_dict, save_path)
 
     return

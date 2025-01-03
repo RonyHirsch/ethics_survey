@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import textwrap
 import geopandas as gpd
+import math
 import geodatasets
 
 # Modify the default font settings
@@ -360,7 +361,7 @@ def get_labels(label_dict, min_val=0, max_val=1):
 
 
 def plot_overlaid_preferences(all_preferences, all_sems, all_colors, labels, label_map, cluster_names,
-                               binary, save_name, save_path, threshold=0):
+                               binary, save_name, save_path, threshold=0, fmt="png"):
     """
     Creates a single plot overlaying centroids (preferences) and SEMs for all clusters.
     """
@@ -387,8 +388,8 @@ def plot_overlaid_preferences(all_preferences, all_sems, all_colors, labels, lab
     ax.set_xlim([-1, 1] if binary else [threshold - 1, threshold + 1])
 
     for i, label in enumerate(display_labels):
-        label_0, label_1 = get_labels(label_map[labels[i]]) if binary else get_labels(label_map[labels[i]], min_val=1,
-                                                                                      max_val=4)
+        label_0, label_1 = get_labels(label_map[labels[i]]) if binary else get_labels(label_map[labels[i]],
+                                                                                      min_val=1, max_val=4)
         ax.text(-1.05 if binary else threshold - 1.05, i, label_0, va='center', ha='right', fontsize=15, color='black')
         ax.text(1.05 if binary else threshold + 1.05, i, label_1, va='center', ha='left', fontsize=15, color='black')
 
@@ -399,7 +400,7 @@ def plot_overlaid_preferences(all_preferences, all_sems, all_colors, labels, lab
     # Save the figure
     figure = plt.gcf()
     figure.set_size_inches(15, 13)
-    plt.savefig(os.path.join(save_path, f"{save_name}.png"), format="png", dpi=1000, bbox_inches='tight',
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
     plt.clf()
@@ -408,7 +409,7 @@ def plot_overlaid_preferences(all_preferences, all_sems, all_colors, labels, lab
 
 
 def plot_nonbinary_preferences(means, sems, colors, labels, label_map, title, min, max, thresh,
-                               save_name, save_path, format="png"):
+                               save_name, save_path, fmt="png"):
     fig, ax = plt.subplots(figsize=(16, 6))
     y_pos = np.arange(len(means))
 
@@ -435,7 +436,7 @@ def plot_nonbinary_preferences(means, sems, colors, labels, label_map, title, mi
     # save plot
     figure = plt.gcf()  # get current figure
     figure.set_size_inches(15, 13)
-    plt.savefig(os.path.join(save_path, f"{save_name}.{format}"), format=f"{format}", dpi=1000, bbox_inches='tight',
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
     plt.clf()
@@ -548,7 +549,7 @@ def plot_histogram(df, category_col, data_col, save_path, save_name, format="svg
 
 
 def plot_categorical_bars_layered(categories_prop_df, category_col, full_data_col, partial_data_col, categories_colors,
-                                  save_path, save_name, format="svg", y_min=0, y_max=100, y_skip=10,
+                                  save_path, save_name, fmt="svg", y_min=0, y_max=100, y_skip=10,
                                   inch_w=15, inch_h=12):
     plt.figure(figsize=(8, 6))
     sns.set_style("ticks")
@@ -569,11 +570,12 @@ def plot_categorical_bars_layered(categories_prop_df, category_col, full_data_co
     wrapped_labels = [textwrap.fill(label, width=10) for label in categories]
     plt.xticks(ticks=np.arange(len(wrapped_labels)), labels=wrapped_labels, fontsize=16)
     plt.xlabel(category_col.title(), fontsize=20)
+    plt.ylabel("Proportion", fontsize=20)
 
     # save plot
     figure = plt.gcf()  # get current figure
     figure.set_size_inches(inch_w, inch_h)
-    plt.savefig(os.path.join(save_path, f"{save_name}.{format}"), format=f"{format}", dpi=1000, bbox_inches='tight',
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
     plt.clf()
@@ -785,7 +787,7 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
 
 def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_col, y_label, y_min, y_max, y_ticks,
                     save_path, save_name, annotate_id=True, title_text="", palette_bounds=None, fmt="png", size=300,
-                    corr_line=False, individual_df=None, id_col=None):
+                    corr_line=False, diag_line=False, individual_df=None, id_col=None):
 
     plt.figure(figsize=(8, 6))
     plt.rcParams["font.family"] = "Calibri"
@@ -814,6 +816,11 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
     if corr_line:
         sns.regplot(data=df, x=x_col, y=y_col, scatter=False, ci=None, order=1,  # linear
                     line_kws=dict(color="black", lw=1.5, linestyle="--"))
+
+    if diag_line:
+        xy1 = [math.floor(min(df[x_col].tolist())), math.floor(min(df[x_col].tolist()))]
+        xy2 = [math.ceil(max(df[x_col].tolist())), math.ceil(max(df[x_col].tolist()))]
+        plt.plot(xy1, xy2, zorder=1, color="black", lw=1.5, linestyle="--")
 
     # scatter plot
     sns.scatterplot(data=df, x=x_col, y=y_col, cmap=cmap, norm=norm, c=df["combined"], s=size, zorder=3)

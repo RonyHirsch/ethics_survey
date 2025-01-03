@@ -278,46 +278,49 @@ def processed_free_sample(subject_data_path, free_save_path):
     return subject_dict, subject_processed
 
 
-if __name__ == '__main__':
-
-    prolific_path = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\prolific"
-    free_path = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\free"
-
-    load = False
-
+def manage_processing(prolific_data_path, free_data_path, all_save_path, load=False):
     if load:
         # load paid
-        with open(os.path.join(prolific_path, r"processed\processed_data.pkl"), "rb") as f:
+        with open(os.path.join(prolific_data_path, r"processed\processed_data.pkl"), "rb") as f:
             prolific_sub_dict = pickle.load(f)
-        prolific_sub_df = pd.read_csv(os.path.join(prolific_path, r"processed\processed_data.csv"))
+        prolific_sub_df = pd.read_csv(os.path.join(prolific_data_path, r"processed\processed_data.csv"))
         # load free
-        with open(os.path.join(free_path, r"processed\processed_data.pkl"), "rb") as f:
+        with open(os.path.join(free_data_path, r"processed\processed_data.pkl"), "rb") as f:
             free_sub_dict = pickle.load(f)
-        free_sub_df = pd.read_csv(os.path.join(free_path, r"processed\processed_data.csv"))
+        free_sub_df = pd.read_csv(os.path.join(free_data_path, r"processed\processed_data.csv"))
 
     else:  # run everything
         # paid sample
-        prolific_sub_dict, prolific_sub_df = processed_paid_sample(subject_data_path=os.path.join(prolific_path, r"raw\prolific_paid_labels.csv"),
-                                                                   prolific_save_path=os.path.join(prolific_path, r"processed"),
-                                                                   prolific_data_path=os.path.join(prolific_path, r"raw\prolific_export_666701f76c6898bb61cdb6c0.csv"))
+        prolific_sub_dict, prolific_sub_df = processed_paid_sample(subject_data_path=os.path.join(prolific_data_path, r"raw\prolific_paid_labels.csv"),
+                                                                   prolific_save_path=os.path.join(prolific_data_path, r"processed"),
+                                                                   prolific_data_path=os.path.join(prolific_data_path, r"raw\prolific_export_666701f76c6898bb61cdb6c0.csv"))
         analyze_survey.analyze_survey(sub_df=prolific_sub_df.copy(),
                                       analysis_dict=prolific_sub_dict,
-                                      save_path=os.path.join(prolific_path, r"processed"))
+                                      save_path=os.path.join(prolific_data_path, r"processed"))
 
         # free sample
-        free_sub_dict, free_sub_df = processed_free_sample(subject_data_path=os.path.join(free_path, r"raw\ethics_free_labels.csv"),
-                                                           free_save_path=os.path.join(free_path, r"processed"))
+        free_sub_dict, free_sub_df = processed_free_sample(subject_data_path=os.path.join(free_data_path, r"raw\ethics_free_labels.csv"),
+                                                           free_save_path=os.path.join(free_data_path, r"processed"))
         analyze_survey.analyze_survey(sub_df=free_sub_df.copy(),
                                       analysis_dict=free_sub_dict,
-                                      save_path=os.path.join(free_path, r"processed"))
+                                      save_path=os.path.join(free_data_path, r"processed"))
 
     # collapse both samples
     prolific_sub_df["source"] = "Prolific"
     free_sub_df["source"] = "Free"
     total_df = pd.concat([prolific_sub_df, free_sub_df], ignore_index=True)
-    total_df.to_csv(r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\processed_data.csv", index=False)
+    total_df.to_csv(os.path.join(all_save_path, "processed_data.csv"), index=False)
     # unify the dicts as well
     total_dict = dict()
     for key in prolific_sub_dict.keys():
         total_dict[key] = pd.concat([prolific_sub_dict[key], free_sub_dict[key]], ignore_index=True)
-    analyze_survey.analyze_survey(sub_df=total_df, analysis_dict=total_dict, save_path=r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all")
+    analyze_survey.analyze_survey(sub_df=total_df, analysis_dict=total_dict, save_path=all_save_path)
+    return
+
+
+if __name__ == '__main__':
+
+    manage_processing(prolific_data_path=r"..\analysis_data\prolific",
+                      free_data_path=r"..\analysis_data\free",
+                      all_save_path=r"..\analysis_data\all",
+                      load=True)
