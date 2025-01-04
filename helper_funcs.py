@@ -10,7 +10,8 @@ from kmodes.kprototypes import KPrototypes
 import scipy.stats as stats
 from scipy.stats import chi2_contingency
 from scipy.stats import mannwhitneyu
-from scipy.stats import ttest_ind
+from scipy.stats import ttest_ind, ttest_1samp
+from scipy.spatial.distance import cdist
 from sklearn.utils import shuffle
 import plotter
 
@@ -34,6 +35,20 @@ def independent_samples_ttest(list_group1, list_group2):  # continuous data
         "statistic": [t_stat],
         "p": [p_value],
         "df": [len(list_group1) + len(list_group2) - 2]
+    })
+    return result_df
+
+
+def one_sample_ttest(list_group1, test_value=0, ci=0.95):
+    ttest_result = ttest_1samp(list_group1, test_value)
+    conf_interval = ttest_result.confidence_interval(confidence_level=ci)
+    result_df = pd.DataFrame({
+        "test": ["one sample t-test"],
+        "statistic": [ttest_result.statistic],
+        "p": [ttest_result.pvalue],
+        "df": [ttest_result.df],
+        f"{ci} CI low": [conf_interval.low],
+        f"{ci} CI high": [conf_interval.high]
     })
     return result_df
 
@@ -146,7 +161,7 @@ def perform_PCA(df_pivot, save_path, save_name, components=2):
     return pca_df, loadings, explained_variance
 
 
-def perform_kmeans(df_pivot, save_path, save_name, clusters=2):
+def perform_kmeans(df_pivot, save_path, save_name, clusters=2, normalize=False):
     """
     Perform k-means clustering (scikit-learn's) to group the data into a specified number of clusters.
     We then append the cluster labels to the dataset and calculate the silhouette score,
@@ -155,6 +170,11 @@ def perform_kmeans(df_pivot, save_path, save_name, clusters=2):
     of features for each cluster.
     """
     txt_output = list()
+
+    # if normalize is True, normalize the data
+    if normalize:
+        scaler = StandardScaler()
+        df_pivot = scaler.fit_transform(df_pivot)
 
     # Perform k-means clustering
     # The n_init parameter controls the number of times the KMeans algorithm is run with different centroid seeds; 10 is the default
@@ -416,6 +436,24 @@ def replace_animal_other(row):
         else:
             row[A] = row[A]  # if no conversion, keep "Other" unchanged
     return row
+
+
+def calculate_distances(df, x_col, y_col, metric='euclidean'):
+    """
+    Calculate distances from the diagonal for points in a DataFrame.
+    :param df: pd df with the points as x-col and y-col; each row is a point
+    :param x_col:
+    :param y_col:
+    :param metric:str, the distance metric to use (default is 'euclidean'). See scipy.spatial.distance.cdist for available metrics.
+    :return: ist of distances for each point in the df
+    """
+    distances = []
+    for _, row in df.iterrows():
+        point = np.array([[row[x_col], row[y_col]]])
+        diagonal_point = np.array([[row[x_col], row[x_col]]])
+        distance = cdist(point, diagonal_point, metric=metric)[0, 0]
+        distances.append(distance)
+    return distances
 
 
 

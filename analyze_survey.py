@@ -46,6 +46,7 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
 
     df.to_csv(os.path.join(result_path, "c_v_ms.csv"), index=False)
 
+
     # codes and relevant stuff
     items = survey_mapping.other_creatures_general  # all rated items
     topic_name_map = {"c": "Consciousness", "ms": "Moral Status"}
@@ -56,6 +57,14 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
     long_data[["Topic", "Item"]] = long_data["Item_Topic"].str.split('_', expand=True)
     long_data = long_data.drop(columns=["Item_Topic"])
     long_data["Topic"] = long_data["Topic"].map(topic_name_map)
+
+    # stats: average rating (of C & MS) per item (averaged across all respondents)
+    long_data_noid = long_data.drop("response_id", axis=1, inplace=False)
+    long_data_mean_rating = long_data_noid.groupby(["Topic", "Item"]).mean().reset_index(drop=False)
+    long_data_mean_rating = long_data_mean_rating.pivot(index="Item", columns="Topic", values="Rating").reset_index(drop=False)
+    # I'll save long_data_mean_rating below after I add some stuff to it
+    long_data_mean_rating_stats = long_data_mean_rating.describe()
+    long_data_mean_rating_stats.to_csv(os.path.join(result_path, f"c_v_ms_avg_per_item_stats.csv"), index=True)  # in 'describe' the index is the desc name
 
     # add some demographic numerical columns
     animal_experience_df = analysis_dict["animal_exp"].loc[:,
@@ -86,7 +95,7 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
     result_df.to_csv(os.path.join(result_path, "c_v_ms_long_coded.csv"), index=False)
 
     """
-    Look at the ratings individually for each item 
+    Plot at the ratings individually for each item 
     """
 
     rating_color_list = ["#DB5461", "#fb9a99", "#70a0a4", "#26818B"]
@@ -164,6 +173,38 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
                             save_path=result_path, save_name=f"correlation_c_ms", annotate_id=True,
                             palette_bounds=colors, corr_line=False, diag_line=True, fmt="svg",
                             individual_df=None, id_col=None)
+
+    """
+    The scatter plot above (plot_scatter_xy) has a diagonal line. The interesting part is the off-diagonal items; 
+    those items are ones where people's certainty about them being conscious doesn't correspond to certainty about 
+    them having moral status. Let's explore that. 
+    """
+
+    # compute the perpendicular distance (how far an item is from the diagonal) : X-axis=Consciousness; Y-axis=MS
+    long_data_mean_rating["dist_from_diagonal"] = helper_funcs.calculate_distances(long_data_mean_rating,
+                                                                                   x_col="Consciousness",
+                                                                                   y_col="Moral Status",
+                                                                                   metric="euclidean")
+    long_data_mean_rating.to_csv(os.path.join(result_path, f"c_v_ms_avg_per_item.csv"), index=False)
+
+    """
+    Let's see if the distances are significantly different from zero (the diagonal). 
+    For that we'll do a one-sample t-test with the null hypothesis being that the mean distance is 0. 
+    """
+    ttest_result = helper_funcs.one_sample_ttest(list_group1=long_data_mean_rating["dist_from_diagonal"].tolist(),
+                                                 test_value=0, ci=0.95)
+    ttest_result.to_csv(os.path.join(result_path, f"c_v_ms_avg_per_item_diagonal_ttest.csv"), index=False)
+
+    # identify items with the largest deviation from the diagonal
+    top_outliers = long_data_mean_rating.nlargest(5, "dist_from_diagonal")
+
+    # use clustering to see if there are items can be clustered to groups based on their distance from the diagonal
+    result = helper_funcs.perform_kmeans(df_pivot=long_data_mean_rating[["dist_from_diagonal"]],
+                                         save_path=result_path,
+                                         save_name="items_dist_from_diag",
+                                         clusters=3, normalize=False)
+    ### TODO: STOPPED HERE, FINISH CLUSTERING W VISUALIZATION
+    x = 3
 
     """
     Cluster people based on their rating tendencies of different entities' consciousness and moral status >> PER PERSON
