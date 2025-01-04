@@ -136,7 +136,8 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
         plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=num_plots, legend=rating_labels,
                                              colors=rating_color_list, num_ratings=4, title=f"{topic_name.title()}",
                                              bar_relative=False, bar_range_min=1, bar_range_max=4,
-                                             save_path=result_path, save_name=f"ratings_{topic_name.lower()}{sorted_suffix}")
+                                             save_path=result_path, fmt="svg",
+                                             save_name=f"ratings_{topic_name.lower()}{sorted_suffix}")
 
     """
     Plot "other creatures" judgments of Consciousness vs. of Moral Status. >> PER ITEM
@@ -148,17 +149,20 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
     colors = [rating_color_list[0], rating_color_list[-1]]
     individual_data = long_data.pivot_table(index=["response_id", "Item"], columns="Topic",
                                             values="Rating").reset_index(drop=False, inplace=False)
+    # with individual lines
     plotter.plot_scatter_xy(df=df_pivot, identity_col="Item",
                             x_col="Consciousness", x_label="Consciousness", x_min=1, x_max=4, x_ticks=1,
                             y_col="Moral Status", y_label="Moral Status", y_min=1, y_max=4, y_ticks=1,
                             save_path=result_path, save_name=f"correlation_c_ms_individual", annotate_id=True,
-                            palette_bounds=colors, corr_line=False, diag_line=True,
+                            palette_bounds=colors, corr_line=False, diag_line=True, fmt="svg",
                             individual_df=individual_data, id_col="response_id")
+
+    # collapsed across everyone, no individuation, diagonal line
     plotter.plot_scatter_xy(df=df_pivot, identity_col="Item",
                             x_col="Consciousness", x_label="Consciousness", x_min=1, x_max=4, x_ticks=1,
                             y_col="Moral Status", y_label="Moral Status", y_min=1, y_max=4, y_ticks=1,
                             save_path=result_path, save_name=f"correlation_c_ms", annotate_id=True,
-                            palette_bounds=colors, corr_line=False, diag_line=True,
+                            palette_bounds=colors, corr_line=False, diag_line=True, fmt="svg",
                             individual_df=None, id_col=None)
 
     """
@@ -187,18 +191,18 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
     helper_funcs.plot_cluster_centroids(cluster_centroids=cluster_centroids, cluster_sems=cluster_sems,
                                         save_path=result_path, save_name="people",
                                         label_map=label_maps,
-                                        binary=False, overlaid=False,
+                                        binary=False, overlaid=False, fmt="svg",
                                         threshold=0)
 
     # overlaid
     helper_funcs.plot_cluster_centroids(cluster_centroids=cluster_centroids, cluster_sems=cluster_sems,
                                         save_path=result_path, save_name="people",
                                         label_map=label_maps,
-                                        binary=False, overlaid=True,
+                                        binary=False, overlaid=True, fmt="svg",
                                         threshold=0)
 
-
-    #####
+    return
+    #####  TODO: stopped here ---
 
     demog_df = analysis_dict["demographics"]
     pca_df[process_survey.COL_ID] = df.iloc[:, 0]
@@ -832,6 +836,7 @@ def consciousness_intelligence(analysis_dict, save_path):
     plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
                      categories_colors=CAT_COLOR_DICT, title=f"{question}",
                      save_path=result_path, save_name=f"{question.replace('?', '').replace('/', '-')}", format="png")
+    category_counts.to_csv(os.path.join(result_path, f"{question.replace('?', '').replace('/', '-')}.csv"))
 
     follow_up = "How?"
     con_intellect_how = con_intellect[con_intellect[follow_up].notnull()]
@@ -844,10 +849,52 @@ def consciousness_intelligence(analysis_dict, save_path):
     plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
                      categories_colors=category_colors, title=f"{follow_up}",
                      save_path=result_path, save_name=f"{follow_up.replace('?', '').replace('/', '-')}", format="png")
+    category_counts.to_csv(os.path.join(result_path, f"{follow_up.replace('?', '').replace('/', '-')}.csv"))
 
     common_denominator = "What is the common denominator?"
     con_intellect_d = con_intellect[con_intellect[common_denominator].notnull()]
     con_intellect_d.to_csv(os.path.join(result_path, "common_denominator.csv"), index=False)
+    answers = con_intellect_d[common_denominator].tolist()
+
+    information_processing = [ex for ex in answers if (re.search("process and interpret information", ex, re.IGNORECASE) or
+                                                       (re.search("processing power", ex, re.IGNORECASE)) or
+                                                       (re.search("computation", ex, re.IGNORECASE)))]
+    cognition = [ex for ex in answers if (re.search("cognition", ex, re.IGNORECASE) or
+                                          (re.search("cognitive processing", ex, re.IGNORECASE)) or
+                                          (re.search("cognitive system", ex, re.IGNORECASE)) or
+                                          (re.search("attention", ex, re.IGNORECASE)) or
+                                          re.search("abstract representation", ex, re.IGNORECASE) or
+                                          (re.search("language", ex, re.IGNORECASE)))]
+    thinking = [ex for ex in answers if (re.search("think", ex, re.IGNORECASE) or
+                                         re.search("thinking", ex, re.IGNORECASE) or
+                                         re.search("thoughts", ex, re.IGNORECASE))]
+    complexity = [ex for ex in answers if (re.search("complex", ex, re.IGNORECASE) or
+                                           re.search("complexity", ex, re.IGNORECASE) or
+                                           re.search("adaptation", ex, re.IGNORECASE) or
+                                           re.search("advanced brain structure", ex, re.IGNORECASE))]
+    emotions = [ex for ex in answers if (re.search("emotion", ex, re.IGNORECASE) or
+                                                 (re.search("emotions", ex, re.IGNORECASE)))]
+    goals_actions = [ex for ex in answers if (re.search("goals", ex, re.IGNORECASE) or
+                                              (re.search("actions", ex, re.IGNORECASE)) or
+                                              (re.search("decision making", ex, re.IGNORECASE)) or
+                                              (re.search("choosing", ex, re.IGNORECASE)))]
+    brains = [ex for ex in answers if (re.search("brain", ex, re.IGNORECASE) or
+                                       (re.search("neural organization", ex, re.IGNORECASE)) or
+                                       (re.search("neural activity", ex, re.IGNORECASE)))]
+
+    lol = information_processing + cognition + thinking + complexity + emotions + goals_actions + brains
+    rest = [ex for ex in answers if ex not in lol]
+    result_df = pd.DataFrame({"information_processing": [len(information_processing)], "cognition": [len(cognition)],
+                              "thinking": [len(thinking)], "complexity": [len(complexity)],
+                              "emotions": [len(emotions)], "goals_actions": [len(goals_actions)],
+                              "brains": [len(brains)],
+                              "misc": [len(rest)]}).transpose()
+    result_df.rename(columns={result_df.columns[0]: "count"}, inplace=True)
+    result_df.to_csv((os.path.join(result_path, "common denominator_examples.csv")), index=True)  # index is the type
+    # save the misc ones
+    rest_df = pd.DataFrame({f"common denominator_miscellaneous examples": rest})
+    rest_df.to_csv(os.path.join(result_path, "common denominator_examples_misc.csv"), index=False)
+
 
     return
 
@@ -1253,10 +1300,10 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     :param save_path: where the results will be saved (csvs, plots)
     """
 
+    other_creatures(analysis_dict, save_path, sort_together=False)
+    consciousness_intelligence(analysis_dict, save_path)
     moral_considreation_prios(analysis_dict, save_path)
     earth_in_danger(analysis_dict, save_path)
-    other_creatures(analysis_dict, save_path, sort_together=False)
-    other_creatures(analysis_dict, save_path, sort_together=True)
     graded_consciousness(analysis_dict, save_path)
     gender_cross(analysis_dict, save_path)  # move to after the individuals
     demographics(analysis_dict, save_path)
@@ -1264,7 +1311,5 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     zombie_pill(analysis_dict, save_path)
     ics(analysis_dict, save_path)
     kill_for_test(analysis_dict, save_path)
-    consciousness_intelligence(analysis_dict, save_path)
     moral_consideration_features(analysis_dict, save_path)
-
     return

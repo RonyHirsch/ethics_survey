@@ -239,7 +239,8 @@ def plot_kmeans_on_PCA(df_pivot, pca_df, save_path, save_name, palette=None):
         save_name=save_name,
         pal=palette,
         annotate=False,
-        size=250
+        size=250,
+        fmt="svg",
     )
     return unified_df
 

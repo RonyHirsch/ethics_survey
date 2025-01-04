@@ -813,14 +813,15 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
                         line_kws=dict(color="#B4B5BB", lw=0.15, linestyle="-"))
 
     # regression line
-    if corr_line:
+    if corr_line is True:
         sns.regplot(data=df, x=x_col, y=y_col, scatter=False, ci=None, order=1,  # linear
-                    line_kws=dict(color="black", lw=1.5, linestyle="--"))
+                    line_kws=dict(color="black", lw=1.25, linestyle="--"))
 
-    if diag_line:
-        xy1 = [math.floor(min(df[x_col].tolist())), math.floor(min(df[x_col].tolist()))]
-        xy2 = [math.ceil(max(df[x_col].tolist())), math.ceil(max(df[x_col].tolist()))]
-        plt.plot(xy1, xy2, zorder=1, color="black", lw=1.5, linestyle="--")
+    if diag_line is True:
+        start = math.floor(min(df[x_col].tolist()))
+        end = math.ceil(max(df[x_col].tolist()))
+        # draw a line from (start, start) to (end, end)
+        plt.plot([start, end], [start, end], color="#1F2041", linestyle="dashed", linewidth=1.25, zorder=2)
 
     # scatter plot
     sns.scatterplot(data=df, x=x_col, y=y_col, cmap=cmap, norm=norm, c=df["combined"], s=size, zorder=3)
@@ -831,10 +832,10 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
             plt.text(df[x_col][i], df[y_col][i] + 0.065, df[identity_col][i],
                      fontsize=14, ha="center")
     # titles etc
-    plt.yticks(np.arange(y_min, y_max + 1 / y_ticks, y_ticks), fontsize=16)
-    plt.xticks(np.arange(x_min, x_max + 1 / x_ticks, x_ticks), fontsize=16)
-    plt.xlim([x_min, x_max + (1 / x_ticks)])
-    plt.ylim([y_min, y_max + (1 / y_ticks)])
+    plt.yticks(np.arange(y_min, y_max + (0.05 * y_ticks), y_ticks), fontsize=16)
+    plt.xticks(np.arange(x_min, x_max + (0.05 * x_ticks), x_ticks), fontsize=16)
+    plt.xlim([x_min, x_max + (0.05 * y_ticks)])
+    plt.ylim([y_min, y_max + (0.05 * y_ticks)])
     plt.xlabel(x_label.title(), fontsize=18)
     plt.ylabel(y_label.title(), fontsize=18)
     plt.title(f"{title_text.title()}", fontsize=16)
