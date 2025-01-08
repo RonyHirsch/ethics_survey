@@ -380,17 +380,25 @@ def corr_per_item(df, items, save_path):
     return
 
 
-def compute_stats(column, possible_values=None):
+def compute_stats(column, possible_values=None, normalize=True, stats=True):
     if possible_values is None:  # Infer possible values from the column
         possible_values = sorted(column.dropna().unique())
 
     # Initialize proportions for all possible values
     proportions = {val: 0 for val in possible_values}
-    actual_proportions = column.value_counts(normalize=True).sort_index() * 100
+    if normalize:
+        actual_proportions = column.value_counts(normalize=True).sort_index() * 100
+    else:
+        actual_proportions = column.value_counts().sort_index()
+        actual_proportions = actual_proportions.transform(lambda x: x * 100 / x.sum())
     for value, proportion in actual_proportions.items():
         proportions[value] = proportion
-    mean_rating = column.mean()
-    std_dev = column.std()
+    if stats:
+        mean_rating = column.mean()
+        std_dev = column.std()
+    else:
+        mean_rating = None
+        std_dev = None
     n = column.count()
     return proportions, mean_rating, std_dev, n
 

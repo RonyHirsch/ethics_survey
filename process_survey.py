@@ -320,7 +320,7 @@ def manage_processing(prolific_data_path, free_data_path, all_save_path, load=Fa
 
 if __name__ == '__main__':
 
-    manage_processing(prolific_data_path=r"..\analysis_data\prolific",
-                      free_data_path=r"..\analysis_data\free",
-                      all_save_path=r"..\analysis_data\all",
+    manage_processing(prolific_data_path=r"..\prolific",
+                      free_data_path=r"..\free",
+                      all_save_path=r"..\all",
                       load=True)

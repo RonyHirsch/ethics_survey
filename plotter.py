@@ -678,7 +678,7 @@ def plot_categorical_proportion_bar(categories_prop_df, category_col, data_col, 
 
 
 def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save_path, save_name, title, legend=None,
-                                 sem_line=True, ytick_visible=True, text_width=max_text_width, fmt="png",
+                                 show_mean=True, sem_line=True, ytick_visible=True, text_width=max_text_width, fmt="png",
                                  bar_relative=True, bar_range_min=1, bar_range_max=4):
     """
     Plots horizontal stacked proportion bars for multiple items with optional error bars for mean ratings.
@@ -718,21 +718,22 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
                    left=bottom)
             bottom += proportion
 
-        # plot the mean rating as a dot
-        if bar_relative:  # relative to actual proportions
-            mean_position = (mean_rating / num_ratings) * 100
-        else:  # ignoring them, scaling
-            mean_position = bar_range_min + (mean_rating - 1) / (bar_range_max - bar_range_min) * 100
-        a.plot(mean_position, 0, markersize=5, color="#333333")
+        if show_mean:
+            # plot the mean rating as a dot
+            if bar_relative:  # relative to actual proportions
+                mean_position = (mean_rating / num_ratings) * 100
+            else:  # ignoring them, scaling
+                mean_position = bar_range_min + (mean_rating - 1) / (bar_range_max - bar_range_min) * 100
+            a.plot(mean_position, 0, markersize=5, color="#333333")
 
-        # annotate the mean rating
-        a.text(
-            mean_position + 0.6, 0,
-            f"{mean_rating:.2f}",
-            fontdict={"family": "sans-serif", "fontname": "Verdana", "fontsize": 16, "color": "black"},
-            ha="left",  # Horizontal alignment
-            va="center"  # Vertical alignment
-        )
+            # annotate the mean rating
+            a.text(
+                mean_position + 0.6, 0,
+                f"{mean_rating:.2f}",
+                fontdict={"family": "sans-serif", "fontname": "Verdana", "fontsize": 16, "color": "black"},
+                ha="left",  # Horizontal alignment
+                va="center"  # Vertical alignment
+            )
 
         if sem_line:
             # add standard error line
@@ -787,7 +788,7 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
 
 def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_col, y_label, y_min, y_max, y_ticks,
                     save_path, save_name, color_col=None, color_col_colors=None, palette_bounds=None, annotate_id=True,
-                    title_text="", fmt="png", size=300, corr_line=False, diag_line=False, individual_df=None, id_col=None):
+                    title_text="", fmt="png", size=400, corr_line=False, diag_line=False, individual_df=None, id_col=None):
 
     plt.figure(figsize=(8, 6))
     plt.rcParams["font.family"] = "Calibri"

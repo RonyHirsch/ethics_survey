@@ -203,7 +203,7 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
     Actually, clustering when the number of clusters = 2 aligns PERFECTLY with the top 5 outliers..
     """
 
-    nums_clusters = [2, 3]
+    nums_clusters = [2]
     for n in nums_clusters:
         kmeans = helper_funcs.perform_kmeans(df_pivot=long_data_mean_rating[["dist_from_diagonal"]],
                                              save_path=result_path,
@@ -309,7 +309,7 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
     df_earth = analysis_dict["earth_in_danger"]
     questions = df_earth.columns[df_earth.columns != process_survey.COL_ID].tolist()
 
-    # super-simple dumn pie charts to see how many overall selected each option
+    # super-simple dumb pie charts to see how many overall selected each option
     for q in questions:
         df_q = df_earth.loc[:, [process_survey.COL_ID, q]]
         counts = df_q[q].value_counts()
@@ -470,6 +470,44 @@ def ics(analysis_dict, save_path):
     df_ics.to_csv(os.path.join(result_path, "i_c_s.csv"), index=False)
 
     questions = [c for c in df_ics.columns if c.startswith("Do you think a creature/system")]
+    ans_map = {"No": 0, "Yes": 1}
+    # plot a collapsed figure where each creature is a bar, with the proportion of how many would kill it
+    stats = dict()
+    labels = list()
+    for q in questions:
+        df_q = df_ics.loc[:, [process_survey.COL_ID, q]]
+        q_name = q.replace('Do you think a creature/system', '')[:-1]
+        q_name = q_name.replace('can be', '')
+        q_name = q_name.replace('can have', '')
+        q_name = q_name.replace('/', '-')
+        labels.append(q_name)
+        df_q_map = df_q.replace({q: ans_map})
+        stats[q_name] = helper_funcs.compute_stats(df_q_map[q], possible_values=df_q_map[q].unique().tolist())
+
+    # Create DataFrame for plotting
+    plot_data = {}
+    for item, (proportions, mean_rating, std_dev, n) in stats.items():
+        plot_data[item] = {
+            "Proportion": proportions,
+            "Mean": mean_rating,
+            "Std Dev": std_dev,
+            "N": n
+        }
+    rating_labels = ["No", "Yes"]
+    rating_color_list = ["#B26972", "#355070"]
+    sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"])
+    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=4, legend=rating_labels,
+                                         ytick_visible=True, text_width=39, title=f"Do you think A creature/system can be",
+                                         show_mean=False, sem_line=False,
+                                         colors=rating_color_list, num_ratings=2,
+                                         save_path=result_path, save_name=f"ics")
+    # save data
+    plot_df = pd.DataFrame(plot_data)
+    plot_df.to_csv(os.path.join(result_path, f"ics.csv"), index=True)
+
+    ## TODO: STOPPED HERE, SORTING DOESN'T WORK ABOVE
+
+
     for q in questions:
         df_q = df_ics.loc[:, [process_survey.COL_ID, q]]
         counts = df_q[q].value_counts()
@@ -546,16 +584,36 @@ def kill_for_test(analysis_dict, save_path):
     df_test = analysis_dict["important_test_kill"]
     # all the options for killing (scenarios)
     questions = [c for c in df_test.columns if c.startswith("A creature/system that")]
+    ans_map = {"No (will not kill to pass the test)": 0, "Yes (will kill to pass the test)": 1}
+
+    # plot a collapsed figure where each creature is a bar, with the proportion of how many would kill it
+    stats = dict()
+    labels = list()
     for q in questions:
-        q_name = survey_mapping.important_test_kill_tokens[q]
         df_q = df_test.loc[:, [process_survey.COL_ID, q]]
-        counts = df_q[q].value_counts()
-        labels = {l: l.replace(' to pass the test', '') for l in counts.index.tolist()}
-        colors = {l: CAT_COLOR_DICT[l.split(' ', 1)[0]] for l in counts.index.tolist()}
-        plotter.plot_pie(categories_names=counts.index.tolist(), categories_counts=counts.tolist(),
-                         categories_labels=labels,
-                         categories_colors=colors, title=f"{q}",
-                         save_path=result_path, save_name=q_name, format="png")
+        q_name = survey_mapping.important_test_kill_tokens[q]
+        df_q_map = df_q.replace({q: ans_map})
+        stats[q_name] = helper_funcs.compute_stats(df_q_map[q], possible_values=df_q_map[q].unique().tolist())
+        labels.append(q_name)
+    # Create DataFrame for plotting
+    plot_data = {}
+    for item, (proportions, mean_rating, std_dev, n) in stats.items():
+        plot_data[item] = {
+            "Proportion": proportions,
+            "Mean": mean_rating,
+            "Std Dev": std_dev,
+            "N": n
+        }
+    rating_labels = ["No (will not kill to pass the test)", "Yes (will kill to pass the test)"]
+    rating_color_list = ["#B26972", "#355070"]
+    sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"], reverse=True)
+    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=6, legend=rating_labels,
+                                         ytick_visible=True, text_width=39, title=f"", show_mean=False, sem_line=False,
+                                         colors=rating_color_list, num_ratings=2,
+                                         save_path=result_path, save_name=f"kill_to_pass")
+    # save data
+    plot_df = pd.DataFrame(plot_data)
+    plot_df.to_csv(os.path.join(result_path, f"kill_to_pass.csv"), index=True)
 
     # those who answered all "No's"
     all_nos = df_test[df_test[
@@ -803,7 +861,8 @@ def plot_graded_consciousness_given_df(df, save_path, prefix="", suffix=""):
                                          save_name=f"{prefix}consciousness_graded_ratings{suffix}",
                                          text_width=39)
     # save the figure data
-    pd.DataFrame(plot_data).to_csv(os.path.join(save_path, f"{prefix}consciousness_graded_ratings{suffix}.csv"))
+    df_result = pd.DataFrame(sorted_plot_data)
+    df_result.to_csv(os.path.join(save_path, f"{prefix}consciousness_graded_ratings{suffix}.csv"))
     return
 
 
@@ -1356,9 +1415,12 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     topic/section
     :param save_path: where the results will be saved (csvs, plots)
     """
+    ics(analysis_dict, save_path)
+    kill_for_test(analysis_dict, save_path)
 
-    other_creatures(analysis_dict, save_path, sort_together=False)
+
     """
+    other_creatures(analysis_dict, save_path, sort_together=False)
     consciousness_intelligence(analysis_dict, save_path)
     moral_considreation_prios(analysis_dict, save_path)
     earth_in_danger(analysis_dict, save_path)
@@ -1367,8 +1429,6 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     demographics(analysis_dict, save_path)
     experience(analysis_dict, save_path)
     zombie_pill(analysis_dict, save_path)
-    ics(analysis_dict, save_path)
-    kill_for_test(analysis_dict, save_path)
     moral_consideration_features(analysis_dict, save_path)
     """
     return
