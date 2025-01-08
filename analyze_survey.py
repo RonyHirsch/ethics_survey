@@ -196,15 +196,31 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
     ttest_result.to_csv(os.path.join(result_path, f"c_v_ms_avg_per_item_diagonal_ttest.csv"), index=False)
 
     # identify items with the largest deviation from the diagonal
-    top_outliers = long_data_mean_rating.nlargest(5, "dist_from_diagonal")
+    top_outliers = long_data_mean_rating.nlargest(6, "dist_from_diagonal")
 
-    # use clustering to see if there are items can be clustered to groups based on their distance from the diagonal
-    result = helper_funcs.perform_kmeans(df_pivot=long_data_mean_rating[["dist_from_diagonal"]],
-                                         save_path=result_path,
-                                         save_name="items_dist_from_diag",
-                                         clusters=3, normalize=False)
-    ### TODO: STOPPED HERE, FINISH CLUSTERING W VISUALIZATION
-    x = 3
+    """
+    Use clustering to see if there are items can be clustered to groups based on their distance from the diagonal:
+    Actually, clustering when the number of clusters = 2 aligns PERFECTLY with the top 5 outliers..
+    """
+
+    nums_clusters = [2, 3]
+    for n in nums_clusters:
+        kmeans = helper_funcs.perform_kmeans(df_pivot=long_data_mean_rating[["dist_from_diagonal"]],
+                                             save_path=result_path,
+                                             save_name=f"items_dist_from_diag_{n}",
+                                             clusters=n, normalize=False)
+
+        # repeat the figure from before, but now color the dots by their cluster belongings
+        # add the cluster data to long_data_mean_rating
+        df_plot = long_data_mean_rating.merge(kmeans[0], on="dist_from_diagonal", how="left")
+        cluster_colors = {0: "#3C3744", 1: "#F49D37", 2: "#C2C1C2"}
+        plotter.plot_scatter_xy(df=df_plot, identity_col="Item",
+                                x_col="Consciousness", x_label="Consciousness", x_min=1, x_max=4, x_ticks=1,
+                                y_col="Moral Status", y_label="Moral Status", y_min=1, y_max=4, y_ticks=1,
+                                save_path=result_path, save_name=f"correlation_c_ms_clustering_{n}", annotate_id=True,
+                                color_col_colors=cluster_colors, color_col="Cluster", corr_line=False, diag_line=True, fmt="svg",
+                                individual_df=None, id_col=None)
+
 
     """
     Cluster people based on their rating tendencies of different entities' consciousness and moral status >> PER PERSON
@@ -1342,6 +1358,7 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     """
 
     other_creatures(analysis_dict, save_path, sort_together=False)
+    """
     consciousness_intelligence(analysis_dict, save_path)
     moral_considreation_prios(analysis_dict, save_path)
     earth_in_danger(analysis_dict, save_path)
@@ -1353,4 +1370,5 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     ics(analysis_dict, save_path)
     kill_for_test(analysis_dict, save_path)
     moral_consideration_features(analysis_dict, save_path)
+    """
     return

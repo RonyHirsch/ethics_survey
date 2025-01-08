@@ -786,8 +786,8 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
 
 
 def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_col, y_label, y_min, y_max, y_ticks,
-                    save_path, save_name, annotate_id=True, title_text="", palette_bounds=None, fmt="png", size=300,
-                    corr_line=False, diag_line=False, individual_df=None, id_col=None):
+                    save_path, save_name, color_col=None, color_col_colors=None, palette_bounds=None, annotate_id=True,
+                    title_text="", fmt="png", size=300, corr_line=False, diag_line=False, individual_df=None, id_col=None):
 
     plt.figure(figsize=(8, 6))
     plt.rcParams["font.family"] = "Calibri"
@@ -824,7 +824,13 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
         plt.plot([start, end], [start, end], color="#1F2041", linestyle="dashed", linewidth=1.25, zorder=2)
 
     # scatter plot
-    sns.scatterplot(data=df, x=x_col, y=y_col, cmap=cmap, norm=norm, c=df["combined"], s=size, zorder=3)
+    if color_col is None:  # cmap
+        sns.scatterplot(data=df, x=x_col, y=y_col, cmap=cmap, norm=norm, c=df["combined"], s=size, zorder=3)
+    else:  # hue is the diff
+        if color_col_colors is None:
+            sns.scatterplot(data=df, x=x_col, y=y_col, cmap=cmap, norm=norm, hue=color_col, s=size, zorder=3)
+        else:
+            sns.scatterplot(data=df, x=x_col, y=y_col, palette=color_col_colors, hue=color_col, s=size, zorder=3)
 
     # annotate
     if annotate_id:
