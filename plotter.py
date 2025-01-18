@@ -550,19 +550,28 @@ def plot_histogram(df, category_col, data_col, save_path, save_name, format="svg
 
 def plot_categorical_bars_layered(categories_prop_df, category_col, full_data_col, partial_data_col, categories_colors,
                                   save_path, save_name, fmt="svg", y_min=0, y_max=100, y_skip=10,
-                                  inch_w=15, inch_h=12):
+                                  inch_w=15, inch_h=12, order=None):
     plt.figure(figsize=(8, 6))
     sns.set_style("ticks")
     plt.rcParams['font.family'] = "Calibri"
 
-    categories = list()
-    for index, row in categories_prop_df.iterrows():
-        categories.append(row[category_col])
+    # Determine the order of categories
+    if order is None:
+        categories = categories_prop_df[category_col].unique().tolist()
+    else:
+        categories = order
+
+    # Plot the bars
+    for category in categories:
+
+        row = categories_prop_df[categories_prop_df[category_col] == category].iloc[0]  # category's data
+        index = categories_prop_df.index[categories_prop_df[category_col] == category][0]  # category's index in df
+
         # full data
-        plt.bar(row[category_col], row[full_data_col], color=categories_colors[index], label="" if index == 0 else "",
-                alpha=0.4)
+        plt.bar(row[category_col], row[full_data_col], color=categories_colors[row[category_col]],
+                label="" if index == 0 else "", alpha=0.4)
         # partial data
-        plt.bar(row[category_col], row[partial_data_col], color=categories_colors[index],
+        plt.bar(row[category_col], row[partial_data_col], color=categories_colors[row[category_col]],
                 label="" if index == 0 else "", alpha=1.0)
 
     plt.yticks([y for y in np.arange(y_min, y_max, y_skip)], fontsize=16)

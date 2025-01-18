@@ -59,7 +59,7 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
     long_data["Topic"] = long_data["Topic"].map(topic_name_map)
 
     # stats: average rating (of C & MS) per item (averaged across all respondents)
-    long_data_noid = long_data.drop("response_id", axis=1, inplace=False)
+    long_data_noid = long_data.drop(process_survey.COL_ID, axis=1, inplace=False)
     long_data_mean_rating = long_data_noid.groupby(["Topic", "Item"]).mean().reset_index(drop=False)
     long_data_mean_rating = long_data_mean_rating.pivot(index="Item", columns="Topic", values="Rating").reset_index(drop=False)
     # I'll save long_data_mean_rating below after I add some stuff to it
@@ -156,7 +156,7 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
     df_pivot = long_data.pivot_table(index="Item", columns="Topic", values="Rating", aggfunc="mean").reset_index(drop=False, inplace=False)  # I don't want to 'fillna(0).' this
 
     colors = [rating_color_list[0], rating_color_list[-1]]
-    individual_data = long_data.pivot_table(index=["response_id", "Item"], columns="Topic",
+    individual_data = long_data.pivot_table(index=[process_survey.COL_ID, "Item"], columns="Topic",
                                             values="Rating").reset_index(drop=False, inplace=False)
     # with individual lines
     plotter.plot_scatter_xy(df=df_pivot, identity_col="Item",
@@ -164,7 +164,7 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
                             y_col="Moral Status", y_label="Moral Status", y_min=1, y_max=4, y_ticks=1,
                             save_path=result_path, save_name=f"correlation_c_ms_individual", annotate_id=True,
                             palette_bounds=colors, corr_line=False, diag_line=True, fmt="svg",
-                            individual_df=individual_data, id_col="response_id")
+                            individual_df=individual_data, id_col=process_survey.COL_ID)
 
     # collapsed across everyone, no individuation, diagonal line
     plotter.plot_scatter_xy(df=df_pivot, identity_col="Item",
@@ -288,7 +288,7 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
     # PCA (plotted with cluster analysis)
     # helper_funcs.perform_PCA(df_pivot=df_pivot, save_path=result_path)
 
-    df.drop(columns=["response_id"], inplace=True)  # no need for participants' IDs at this point
+    df.drop(columns=[process_survey.COL_ID], inplace=True)  # no need for participants' IDs at this point
     for col in df.columns.tolist():
         df[col] = df[col].astype(int)
     helper_funcs.lca_analysis(df=df, n_classes=3, save_path=result_path)
@@ -429,9 +429,9 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
         mu_result = helper_funcs.mann_whitney_utest(list_group1=group1, list_group2=group2)
         mu_result[f"per"] = [col]
         ordinal_contingency_list.append(mu_result)
-        transformed_df = unified_df_cluster.pivot(index="response_id", columns="Cluster", values=ordinal_contingency_cols[col]).reset_index()
-        transformed_df.columns = ["response_id", "0", "1"]
-        plotter.plot_raincloud_separate_samples(df=transformed_df, id_col="response_id", data_col_names=["0", "1"],
+        transformed_df = unified_df_cluster.pivot(index=process_survey.COL_ID, columns="Cluster", values=ordinal_contingency_cols[col]).reset_index()
+        transformed_df.columns = [process_survey.COL_ID, "0", "1"]
+        plotter.plot_raincloud_separate_samples(df=transformed_df, id_col=process_survey.COL_ID, data_col_names=["0", "1"],
                                                 data_col_colors={"0": "#EDAE49", "1": "#102E4A"},
                                                 save_path=result_path, save_name=f"clusters_by_{col}",
                                                 x_title="Cluster", x_name_dict={"0": "0", "1": "1"},
@@ -673,29 +673,11 @@ def zombie_pill(analysis_dict, save_path):
     return
 
 
-def moral_consideration_features(analysis_dict, save_path):
-    """
-    Answers to the question about which features they think are important for moral considerations
-    """
-    # save path
-    result_path = os.path.join(save_path, "moral_consideration_features")
-    if not os.path.isdir(result_path):
-        os.mkdir(result_path)
+def calculate_moral_consideration_features(ms_features_df, result_path, save_prefix="",
+                                           feature_order_df=None, feature_color_dict=None):
 
-    colors = {survey_mapping.ANS_LANG: "#002642",
-              survey_mapping.ANS_SENS: "#840032",
-              survey_mapping.ANS_SENTIENCE: "#E59500",
-              survey_mapping.ANS_PLAN: "#E5DADA",
-              survey_mapping.ANS_SELF: "#FE6D73",
-              survey_mapping.ANS_PHENOMENOLOGY: "#FFCB77",
-              survey_mapping.ANS_THINK: "#227C9D",
-              survey_mapping.ANS_OTHER: "#02040F"
-              }
-
-    ms_features = analysis_dict["moral_considerations_features"]
-    ms_features.to_csv(os.path.join(result_path, "moral_considerations_features.csv"), index=False)
-
-    ms_features_copy = ms_features[[process_survey.COL_ID, "What do you think is important for moral considerations?"]]
+    # for dummy creation
+    ms_features_copy = ms_features_df[[process_survey.COL_ID, "What do you think is important for moral considerations?"]]
 
     def create_feature_dummies(row):
         return {feature: 1 if feature in row else 0 for feature in survey_mapping.ALL_FEATURES}
@@ -710,49 +692,128 @@ def moral_consideration_features(analysis_dict, save_path):
     """
     # proportion several = how many of all people selected a given feature
     proportions_several = (dummies_df.mean() * 100).to_frame(name="Proportion_all").reset_index(drop=False, inplace=False)
-    proportions_several = proportions_several.sort_values("Proportion_all", ascending=False).reset_index(drop=True,
-                                                                                                         inplace=False)
+    proportions_several = proportions_several.sort_values("Proportion_all", ascending=False).reset_index(drop=True, inplace=False)
     category_order = proportions_several["index"].tolist()
 
     # if participants selected only one to begin with, we didn't ask them to select which they think is the most important
-    # see it here :
-    # filtered_data = ms_features[ms_features["Which do you think is the most important for moral considerations?"].isna()]
-    ms_features.loc[:, "Which do you think is the most important for moral considerations?"] = ms_features[
-        "Which do you think is the most important for moral considerations?"]. \
-        fillna(ms_features["What do you think is important for moral considerations?"])
+    # see it here:
+    # filtered_data = ms_features_df[ms_features_df["Which do you think is the most important for moral considerations?"].isna()]
+    ms_features_df.loc[:, "Which do you think is the most important for moral considerations?"] = ms_features_df["Which do you think is the most important for moral considerations?"].fillna(ms_features_df["What do you think is important for moral considerations?"])
     # now after we have the most important, plot it
-    most_important = ms_features[
-        [process_survey.COL_ID, "Which do you think is the most important for moral considerations?"]]
+    most_important = ms_features_df[[process_survey.COL_ID, "Which do you think is the most important for moral considerations?"]]
     """
-    what the below means, is counting the proportions of selecting a single feature. Note that these are amts, 
+    what the below means is counting the proportions of selecting a single feature. Note that these are amts, 
     and we do not treat within-subject things here. 
     """
     # proportions_one  = how many of all people selected this feature as the most important one
     proportions_one = (most_important["Which do you think is the most important for moral considerations?"].value_counts(
                     normalize=True) * 100).to_frame(name="Proportion_one").reset_index(drop=False, inplace=False)
-    proportions_one.rename(columns={"Which do you think is the most important for moral considerations?": "index"},
-                           inplace=True)
-    proportions_one["index"] = pd.Categorical(proportions_one["index"], categories=category_order,
-                                              ordered=True)  # match order
+    proportions_one.rename(columns={"Which do you think is the most important for moral considerations?": "index"}, inplace=True)
+    proportions_one["index"] = pd.Categorical(proportions_one["index"], categories=category_order, ordered=True)  # match order
     proportions_one = proportions_one.sort_values("index").reset_index(drop=True, inplace=False)
 
-    # diff = out of all the people who selected feature X as *one* of the important features,
-    # how many didn't select it as *the most* important one = the bigger it is, the more people
-    # who selected it did not select it as THE most important
+    """
+    diff = out of all the people who selected feature X as *one* of the important features,
+    how many didn't select it as *the most* important one = the bigger it is, the more people
+    who selected it did not select it as THE most important
+    """
     df_diff = pd.DataFrame()
     df_diff["index"] = category_order
     df_diff["Proportion_diff"] = proportions_several["Proportion_all"] - proportions_one["Proportion_one"]
 
-    df_unified = reduce(lambda left, right: pd.merge(left, right, on=["index"],
-                                                     how="outer"), [proportions_several, proportions_one, df_diff])
+    df_unified = reduce(lambda left, right: pd.merge(left, right, on=["index"], how="outer"), [proportions_several, proportions_one, df_diff])
+    df_unified.to_csv(os.path.join(result_path, f"{save_prefix}important_features.csv"), index=False)
 
-    colors = ["#FFBF00", "#F47F38", "#E83F6F", "#855A8A", "#546798", "#2274A5", "#2A848A", "#32936F", "#99C9B7"]
-    plotter.plot_categorical_bars_layered(categories_prop_df=df_unified, category_col="index",
-                                          full_data_col="Proportion_all", partial_data_col="Proportion_one",
-                                          categories_colors=colors, save_path=result_path,
-                                          save_name="important_features", fmt="svg", y_min=0, y_max=101,
-                                          y_skip=10, inch_w=20, inch_h=12)
-    df_unified.to_csv(os.path.join(result_path, "important_features.csv"), index=False)
+    # plot
+    if feature_color_dict is None:  # else, it already IS a dict with categories and colors
+        # some nice default colors
+        colors = ["#FFBF00", "#F47F38", "#E83F6F", "#855A8A", "#546798", "#2274A5", "#2A848A", "#32936F", "#99C9B7"]
+        feature_color_dict = {df_unified.loc[i, "index"]: colors[i] for i in range(df_unified.shape[0])}
+
+    if feature_order_df is None:
+        plotter.plot_categorical_bars_layered(categories_prop_df=df_unified, category_col="index",
+                                              full_data_col="Proportion_all", partial_data_col="Proportion_one",
+                                              categories_colors=feature_color_dict, save_path=result_path,
+                                              save_name=f"{save_prefix}important_features", fmt="svg", y_min=0, y_max=101,
+                                              y_skip=10, inch_w=20, inch_h=12, order=None)
+    else:
+        plotter.plot_categorical_bars_layered(categories_prop_df=df_unified, category_col="index",
+                                              full_data_col="Proportion_all", partial_data_col="Proportion_one",
+                                              categories_colors=feature_color_dict, save_path=result_path,
+                                              save_name=f"{save_prefix}important_features", fmt="svg", y_min=0,
+                                              y_max=101,
+                                              y_skip=10, inch_w=20, inch_h=12, order=feature_order_df["index"].tolist())
+    # we're getting back the final mapping between features and colors in case we want to re-use it for comparison
+    return df_unified, feature_color_dict
+
+
+def moral_consideration_features(analysis_dict, save_path):
+    """
+    Answers to the question about which features they think are important for moral considerations >
+    This method is only for selecting the population; the actual plotting etc is done by calculate_moral_consideration_features
+    """
+    # save path
+    result_path = os.path.join(save_path, "moral_consideration_features")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    ms_features = analysis_dict["moral_considerations_features"]
+    ms_features.to_csv(os.path.join(result_path, "moral_considerations_features.csv"), index=False)
+
+    ms_features_order_df, feature_colors = calculate_moral_consideration_features(ms_features_df=ms_features,
+                                                                                  result_path=result_path,
+                                                                                  save_prefix="all_",
+                                                                                  feature_order_df=None,
+                                                                                  feature_color_dict=None)
+
+
+    """
+    Break it down by population: one of the items is ANS_PHENOMENOLOGY, which == consciousness only if you have 
+    experience with consciousness science and philosophy. Was this item more important for these people than the rest, 
+    who do not necessarily equate or define consciousness this way?
+    """
+    experience_df_copy = analysis_dict["consciousness_exp"].copy()
+    demographics_df_copy = analysis_dict["demographics"].copy()
+    demographics_df_copy = demographics_df_copy[[process_survey.COL_ID, "What is your education background?", "In what topic?"]]
+    df_list = [ms_features, experience_df_copy, demographics_df_copy]
+    # merge the three dfs
+    ms_features_experience = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID]), df_list)
+    # self-reported consciousness experts (rated 3 and up)
+    cons_experts = ms_features_experience[ms_features_experience["Please specify your experience with this topic"].notnull()].reset_index(drop=True, inplace=False)
+
+    # only acadmeics
+    cons_experts_academics = cons_experts[cons_experts["What is your education background?"].str.contains("Post-secondary") |
+                                          cons_experts["What is your education background?"].str.contains("Graduate")]
+
+    # academics who marked that their experience with consciousness is specifically derived from academia
+    cons_experts_academics_expAcademia = cons_experts_academics[cons_experts_academics["Please specify your experience with this topic"].str.contains("Academic")]
+    # the rest
+    cons_experts_academics_rest = cons_experts_academics[~cons_experts_academics[process_survey.COL_ID].isin(cons_experts_academics_expAcademia[process_survey.COL_ID])]
+
+    # experts who are not academics
+    cons_experts_nonAcademics = cons_experts[~cons_experts[process_survey.COL_ID].isin(cons_experts_academics[process_survey.COL_ID])]
+
+    # people who rated 1/2 (not experts): their experience is null
+    cons_nonExperts = ms_features_experience[~ms_features_experience["Please specify your experience with this topic"].notnull()]
+
+    # so now, we'll take only (1) academic experts who are not experts in this because of academic reasons,
+    # or (2) non experts, or (3) non-academic experts
+    cons_woAcademicExperts = pd.concat([cons_experts_academics_rest, cons_nonExperts, cons_experts_nonAcademics],
+                                       ignore_index=True).drop_duplicates(keep=False)
+
+    # calculate the thing again: only for experts whose expertise is academic
+    calculate_moral_consideration_features(ms_features_df=cons_experts_academics_expAcademia, result_path=result_path,
+                                           save_prefix="only_experts_academic_", feature_order_df=ms_features_order_df, # have the order YOKED to the original one
+                                           feature_color_dict=feature_colors)
+    # calculate the thing again: only for experts who are NOT academic
+    calculate_moral_consideration_features(ms_features_df=cons_experts_academics_rest, result_path=result_path,
+                                           save_prefix="only_experts_nonAcademic_",
+                                           feature_order_df=ms_features_order_df, feature_color_dict=feature_colors)
+    # calculate the thing again: only for NON-experts
+    calculate_moral_consideration_features(ms_features_df=cons_nonExperts, result_path=result_path,
+                                           save_prefix="only_nonExperts_", feature_order_df=ms_features_order_df,
+                                           feature_color_dict=feature_colors)
+
     return
 
 
@@ -789,8 +850,8 @@ def moral_considreation_prios(analysis_dict, save_path):
     c_graded = analysis_dict["consciousness_graded"]
     q_mc_human_prio = "Do you think some people should have a higher moral status than others?"
     q_mc_human_prio_why = "What characterizes people with higher moral status?"
-    ms_prios_relevant = ms_prios.loc[:, ["response_id", q_mc_human_prio, q_mc_human_prio_why]]
-    combined = pd.merge(ms_prios_relevant, c_graded, on="response_id")
+    ms_prios_relevant = ms_prios.loc[:, [process_survey.COL_ID, q_mc_human_prio, q_mc_human_prio_why]]
+    combined = pd.merge(ms_prios_relevant, c_graded, on=process_survey.COL_ID)
     combined.to_csv(os.path.join(result_path, "moral_decisions_prios_graded_c.csv"), index=False)
 
     """
@@ -1290,7 +1351,7 @@ def gender_cross(analysis_dict, save_path):
 
     for topic in cross_df["Topic"].unique().tolist():
         df_topic = cross_df[cross_df["Topic"] == topic]
-        df_topic_meanPerSub = df_topic.groupby(["response_id"], as_index=False)["Rating"].mean()
+        df_topic_meanPerSub = df_topic.groupby([process_survey.COL_ID], as_index=False)["Rating"].mean()
         df_topic_meanPerSub_crossed = pd.merge(df_topic_meanPerSub, gender_df, on=process_survey.COL_ID, how='left')
         plotter.plot_scatter(df=df_topic_meanPerSub_crossed, data_col="Rating", category_col=gender,
                              category_order=gender_order, category_color_dict=gender_color_dict, title_text=f"{gender}",
@@ -1415,10 +1476,7 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     topic/section
     :param save_path: where the results will be saved (csvs, plots)
     """
-    ics(analysis_dict, save_path)
-    kill_for_test(analysis_dict, save_path)
-
-
+    moral_consideration_features(analysis_dict, save_path)
     """
     other_creatures(analysis_dict, save_path, sort_together=False)
     consciousness_intelligence(analysis_dict, save_path)
@@ -1429,6 +1487,7 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     demographics(analysis_dict, save_path)
     experience(analysis_dict, save_path)
     zombie_pill(analysis_dict, save_path)
-    moral_consideration_features(analysis_dict, save_path)
+    ics(analysis_dict, save_path)
+    kill_for_test(analysis_dict, save_path)
     """
     return
