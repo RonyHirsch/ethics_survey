@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import numpy as np
 import re
 from functools import reduce
 from sklearn.preprocessing import LabelEncoder
@@ -722,6 +723,8 @@ def calculate_moral_consideration_features(ms_features_df, result_path, save_pre
     df_diff["Proportion_diff"] = proportions_several["Proportion_all"] - proportions_one["Proportion_one"]
 
     df_unified = reduce(lambda left, right: pd.merge(left, right, on=["index"], how="outer"), [proportions_several, proportions_one, df_diff])
+    all_people = ms_features_copy.shape[0]  # total number of people this was calculated on
+    df_unified["N"] = all_people
     df_unified.to_csv(os.path.join(result_path, f"{save_prefix}important_features.csv"), index=False)
 
     # plot
@@ -766,54 +769,96 @@ def moral_consideration_features(analysis_dict, save_path):
                                                                                   feature_order_df=None,
                                                                                   feature_color_dict=None)
 
-
     """
     Break it down by population: one of the items is ANS_PHENOMENOLOGY, which == consciousness only if you have 
     experience with consciousness science and philosophy. Was this item more important for these people than the rest, 
     who do not necessarily equate or define consciousness this way?
     """
+
+    # prepare the data
     experience_df_copy = analysis_dict["consciousness_exp"].copy()
     demographics_df_copy = analysis_dict["demographics"].copy()
     demographics_df_copy = demographics_df_copy[[process_survey.COL_ID, "What is your education background?", "In what topic?"]]
     df_list = [ms_features, experience_df_copy, demographics_df_copy]
+
     # merge the three dfs
     ms_features_experience = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID]), df_list)
+
     # self-reported consciousness experts (rated 3 and up)
-    cons_experts = ms_features_experience[ms_features_experience["Please specify your experience with this topic"].notnull()].reset_index(drop=True, inplace=False)
+    cons_experts = ms_features_experience[ms_features_experience[survey_mapping.Q_CONSC_EXP] > 2].reset_index(drop=True, inplace=False)
 
-    # only acadmeics
-    cons_experts_academics = cons_experts[cons_experts["What is your education background?"].str.contains("Post-secondary") |
-                                          cons_experts["What is your education background?"].str.contains("Graduate")]
+    # experts: only academics (experts & have higher education)
+    # "contains" as they could have made SEVERAL choices
+    cons_experts_academics = cons_experts[(cons_experts["What is your education background?"] == survey_mapping.EDU_POSTSEC)
+                                          | (cons_experts["What is your education background?"] == survey_mapping.EDU_GRAD)].reset_index(drop=True, inplace=False)
 
-    # academics who marked that their experience with consciousness is specifically derived from academia
-    cons_experts_academics_expAcademia = cons_experts_academics[cons_experts_academics["Please specify your experience with this topic"].str.contains("Academic")]
-    # the rest
-    cons_experts_academics_rest = cons_experts_academics[~cons_experts_academics[process_survey.COL_ID].isin(cons_experts_academics_expAcademia[process_survey.COL_ID])]
-
-    # experts who are not academics
+    # experts who are NOT academics
     cons_experts_nonAcademics = cons_experts[~cons_experts[process_survey.COL_ID].isin(cons_experts_academics[process_survey.COL_ID])]
 
-    # people who rated 1/2 (not experts): their experience is null
-    cons_nonExperts = ms_features_experience[~ms_features_experience["Please specify your experience with this topic"].notnull()]
 
-    # so now, we'll take only (1) academic experts who are not experts in this because of academic reasons,
-    # or (2) non experts, or (3) non-academic experts
-    cons_woAcademicExperts = pd.concat([cons_experts_academics_rest, cons_nonExperts, cons_experts_nonAcademics],
-                                       ignore_index=True).drop_duplicates(keep=False)
+    """
+    Calculate proportions - based on expertise
+    """
+    # [1] academics who marked that their experience with consciousness is specifically derived from *STUDYING* consciousness
+    # Clean up the column (strip whitespace and ensure string type)
+    cons_experts_academics["Please specify your experience with this topic"] = cons_experts_academics["Please specify your experience with this topic"].astype(str).str.strip()
+    cons_experts_academics_expAcademia = cons_experts_academics[cons_experts_academics["Please specify your experience with this topic"].str.contains(re.escape(survey_mapping.ANS_C_ACADEMIA), na=False, case=False)]
+    cons_experts_academics_expAcademia_props, c = calculate_moral_consideration_features(ms_features_df=cons_experts_academics_expAcademia,
+                                                                                         result_path=result_path,
+                                                                                         save_prefix="c-experts_expAcademia_",
+                                                                                         feature_order_df=ms_features_order_df,  # have the order YOKED to the original one
+                                                                                         feature_color_dict=feature_colors)
 
-    # calculate the thing again: only for experts whose expertise is academic
-    calculate_moral_consideration_features(ms_features_df=cons_experts_academics_expAcademia, result_path=result_path,
-                                           save_prefix="only_experts_academic_", feature_order_df=ms_features_order_df, # have the order YOKED to the original one
-                                           feature_color_dict=feature_colors)
-    # calculate the thing again: only for experts who are NOT academic
-    calculate_moral_consideration_features(ms_features_df=cons_experts_academics_rest, result_path=result_path,
-                                           save_prefix="only_experts_nonAcademic_",
-                                           feature_order_df=ms_features_order_df, feature_color_dict=feature_colors)
-    # calculate the thing again: only for NON-experts
-    calculate_moral_consideration_features(ms_features_df=cons_nonExperts, result_path=result_path,
-                                           save_prefix="only_nonExperts_", feature_order_df=ms_features_order_df,
-                                           feature_color_dict=feature_colors)
+    # these are [self-porcalimed experts] & [have higher education] & [did NOT say their experience is from studying consciousness]
+    cons_experts_academics_rest = cons_experts_academics[~cons_experts_academics[process_survey.COL_ID].isin(cons_experts_academics_expAcademia[process_survey.COL_ID])]
 
+    # [2] experts who are not from academia - either academics whose C experience is from other things, OR non-academics
+    cons_experts_expNonAcademia = pd.concat([cons_experts_nonAcademics, cons_experts_academics_rest], ignore_index=True).drop_duplicates(keep=False)
+    cons_experts_expNonAcademia_props, c = calculate_moral_consideration_features(ms_features_df=cons_experts_expNonAcademia,
+                                                                                  result_path=result_path,
+                                                                                  save_prefix="c-experts_expNonAcademia_",
+                                                                                  feature_order_df=ms_features_order_df,
+                                                                                  feature_color_dict=feature_colors)
+    # [3] people who rated 1/2 (not experts)
+    cons_nonExperts = ms_features_experience[ms_features_experience[survey_mapping.Q_CONSC_EXP] < 3].reset_index(drop=True, inplace=False)
+    cons_nonExperts_props, c = calculate_moral_consideration_features(ms_features_df=cons_nonExperts,
+                                                                      result_path=result_path,
+                                                                      save_prefix="c-nonExperts_",
+                                                                      feature_order_df=ms_features_order_df,
+                                                                      feature_color_dict=feature_colors)
+
+    # [4] people who ARE experts (3/4/5), have NO higher education [highschool at best], but their expertise DOES stem
+    # from academic background (studied/teach these topics) somehow..
+    cons_experts_nonAcademics_expYesAcademia = cons_experts_nonAcademics[cons_experts_nonAcademics["Please specify your experience with this topic"].str.contains(re.escape(survey_mapping.ANS_C_ACADEMIA), na=False, case=False)]
+
+    # either: academic experts whose expertise is not from academia [2], non-experts [3], non-academic experts whose experience IS from academia [4]
+    rest = pd.concat([cons_experts_expNonAcademia, cons_nonExperts, cons_experts_nonAcademics_expYesAcademia], ignore_index=True)
+
+    rest_props, c = calculate_moral_consideration_features(ms_features_df=rest, result_path=result_path,
+                                                           save_prefix="c-not[exps_academic_expFromAcademia]_",
+                                                           feature_order_df=ms_features_order_df,
+                                                           feature_color_dict=feature_colors)
+    """
+    Two Proportion Z Test
+    When we want to see if proportions of categories in two groups significantly differ from each other, we use the
+    two-proportion z-test. The null hypothesis would be that the proportion of category selection for each item is the
+    same between the two groups. 
+    """
+
+    # experts from academia vs. non experts at all
+    expsAcedemic_v_nonExps = helper_funcs.two_proportion_ztest(col_items="index", col_prop="Proportion_all", col_n="N",
+                                                               group1="experts-academic",
+                                                               df1=cons_experts_academics_expAcademia_props,
+                                                               group2="non-experts",
+                                                               df2=cons_nonExperts_props)
+    expsAcedemic_v_nonExps.to_csv(os.path.join(result_path, f"z_test_expsAcademic_nonExps.csv"), index=False)
+
+    # experts from academia vs. rest
+    expsAcedemic_v_rest = helper_funcs.two_proportion_ztest(col_items="index", col_prop="Proportion_all", col_n="N",
+                                                               group1="experts-academic",
+                                                               df1=cons_experts_academics_expAcademia_props,
+                                                               group2="rest",
+                                                               df2=rest_props)
     return
 
 

@@ -13,6 +13,7 @@ from scipy.stats import mannwhitneyu
 from scipy.stats import ttest_ind, ttest_1samp
 from scipy.spatial.distance import cdist
 from sklearn.utils import shuffle
+from statsmodels.stats.proportion import proportions_ztest
 import plotter
 
 
@@ -462,6 +463,40 @@ def calculate_distances(df, x_col, y_col, metric='euclidean'):
         distance = cdist(point, diagonal_point, metric=metric)[0, 0]
         distances.append(distance)
     return distances
+
+
+def two_proportion_ztest(group1, df1, group2, df2, col_items, col_prop, col_n):
+
+    # align dfs by items
+    df1 = df1.copy().set_index(col_items)
+    df2 = df2.copy().set_index(col_items)
+    df2 = df2.reindex(df1.index)
+
+    result = []
+
+    for item in df1.index:
+        # Get counts for the item
+        count1 = round(df1.loc[item, col_prop] / 100 * df1.loc[item, col_n])
+        count2 = round(df2.loc[item, col_prop] / 100 * df2.loc[item, col_n])
+
+        # Total number of observations in each group
+        nobs1 = df1.loc[item, col_n]
+        nobs2 = df2.loc[item, col_n]
+
+        # Perform the two-proportion z-test
+        stat, p_value = proportions_ztest([count1, count2], [nobs1, nobs2])
+
+        # Append the results
+        result.append({
+            "Item": item,
+            f"Proportion {group1}": df1.loc[item, col_prop],
+            f"Proportion {group2}": df2.loc[item, col_prop],
+            "z-statistic": stat,
+            "p-value": p_value,
+        })
+
+    # Return the results as a DataFrame
+    return pd.DataFrame(result)
 
 
 
