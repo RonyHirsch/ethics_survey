@@ -665,12 +665,49 @@ def zombie_pill(analysis_dict, save_path):
         os.mkdir(result_path)
 
     # load relevant data
-    df_zombie = analysis_dict["zombification_pill"]
-    category_counts = df_zombie["Would you take the pill?"].value_counts()
-    plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
-                     categories_colors=CAT_COLOR_DICT, title=f"Would you take the pill?",
-                     save_path=result_path, save_name="take_the_pill", format="png")
+    df_zombie = analysis_dict["zombification_pill"].copy()
 
+    # plot
+    ans_map = {"No": 0, "Yes": 1}
+    rating_labels = [survey_mapping.ANS_NO, survey_mapping.ANS_YES]
+    df_q_map = df_zombie.replace({"Would you take the pill?": ans_map})
+    stats = helper_funcs.compute_stats(df_q_map["Would you take the pill?"], possible_values=df_q_map["Would you take the pill?"].unique().tolist())
+    # Create DataFrame for plotting
+    plot_data = {"Would you take the pill?": {
+        "Proportion": stats[0],
+        "Mean": stats[1],
+        "Std Dev": stats[2],
+        "N": stats[3]
+    }}
+    rating_color_list = ["#B26972", "#355070"]
+    sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"], reverse=True)
+    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=1, legend=rating_labels,
+                                         ytick_visible=True, text_width=39, title=f"", show_mean=False, sem_line=False,
+                                         colors=rating_color_list, num_ratings=2, inches_w=18, inches_h=8,
+                                         save_path=result_path, save_name=f"take_the_pill")
+    zombie_data = pd.DataFrame(plot_data)
+    zombie_data.to_csv(os.path.join(result_path, f"take_the_pill.csv"), index=True)  # index is descriptives' names
+
+    """
+    Cross between the zombie-pill and the features people value most for moral considerations. 
+    Do people who agree to be zombies have something in common in terms of what they value for MS? (as from their 
+    reply to the zombie question they do not value consciousness)
+    """
+    ms_features = analysis_dict["moral_considerations_features"].copy()
+    c_graded = analysis_dict["consciousness_graded"].copy()
+    ms_prios = analysis_dict["moral_considerations_prios"].copy()
+    # merge the dfs
+    combined = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID]), [df_zombie, c_graded, ms_features, ms_prios])
+    # take only the ones who agreed to take the pill
+    # for each type of zombie answer, calculate the ms_features thingy
+    for answer in rating_labels:
+        combined_zombie_ans = combined[combined["Would you take the pill?"] == answer]
+        # calculate ms feature thingy
+        ms_features_order_df, feature_colors = calculate_moral_consideration_features(ms_features_df=combined_zombie_ans,
+                                                                                      result_path=result_path,
+                                                                                      save_prefix=f"ms_features_zombie{answer}_",
+                                                                                      feature_order_df=None,
+                                                                                      feature_color_dict=None)
     return
 
 
@@ -1521,7 +1558,9 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     topic/section
     :param save_path: where the results will be saved (csvs, plots)
     """
-    moral_consideration_features(analysis_dict, save_path)
+    #moral_consideration_features(analysis_dict, save_path)
+    #ics(analysis_dict, save_path)
+    zombie_pill(analysis_dict, save_path)
     """
     other_creatures(analysis_dict, save_path, sort_together=False)
     consciousness_intelligence(analysis_dict, save_path)
@@ -1531,8 +1570,8 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     gender_cross(analysis_dict, save_path)  # move to after the individuals
     demographics(analysis_dict, save_path)
     experience(analysis_dict, save_path)
-    zombie_pill(analysis_dict, save_path)
-    ics(analysis_dict, save_path)
+    
+    
     kill_for_test(analysis_dict, save_path)
     """
     return

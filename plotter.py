@@ -688,7 +688,7 @@ def plot_categorical_proportion_bar(categories_prop_df, category_col, data_col, 
 
 def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save_path, save_name, title, legend=None,
                                  show_mean=True, sem_line=True, ytick_visible=True, text_width=max_text_width, fmt="png",
-                                 bar_relative=True, bar_range_min=1, bar_range_max=4):
+                                 bar_relative=True, bar_range_min=1, bar_range_max=4, inches_w=18, inches_h=12):
     """
     Plots horizontal stacked proportion bars for multiple items with optional error bars for mean ratings.
 
@@ -785,7 +785,7 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
 
     # save plot
     figure = plt.gcf()  # get current figure
-    figure.set_size_inches(18, 12)
+    figure.set_size_inches(inches_w, inches_h)
     plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
