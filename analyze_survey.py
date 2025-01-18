@@ -696,8 +696,9 @@ def zombie_pill(analysis_dict, save_path):
     ms_features = analysis_dict["moral_considerations_features"].copy()
     c_graded = analysis_dict["consciousness_graded"].copy()
     ms_prios = analysis_dict["moral_considerations_prios"].copy()
+    demographics = analysis_dict["demographics"].copy()
     # merge the dfs
-    combined = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID]), [df_zombie, c_graded, ms_features, ms_prios])
+    combined = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID]), [df_zombie, c_graded, ms_features, ms_prios, demographics])
     # take only the ones who agreed to take the pill
     # for each type of zombie answer, calculate the ms_features thingy
     for answer in rating_labels:
@@ -708,6 +709,7 @@ def zombie_pill(analysis_dict, save_path):
                                                                                       save_prefix=f"ms_features_zombie{answer}_",
                                                                                       feature_order_df=None,
                                                                                       feature_color_dict=None)
+    combined.to_csv(os.path.join(result_path, f"zombie_with_extra_info.csv"), index=False)
     return
 
 
