@@ -10,7 +10,7 @@ from kmodes.kprototypes import KPrototypes
 import scipy.stats as stats
 from scipy.stats import chi2_contingency
 from scipy.stats import mannwhitneyu
-from scipy.stats import ttest_ind, ttest_1samp
+from scipy.stats import ttest_ind, ttest_1samp, ttest_rel
 from scipy.spatial.distance import cdist
 from sklearn.utils import shuffle
 from statsmodels.stats.proportion import proportions_ztest
@@ -36,6 +36,20 @@ def independent_samples_ttest(list_group1, list_group2):  # continuous data
         "statistic": [t_stat],
         "p": [p_value],
         "df": [len(list_group1) + len(list_group2) - 2]
+    })
+    return result_df
+
+
+def dependent_samples_ttest(list_group1, list_group2, ci=0.95):
+    ttest_result = ttest_rel(list_group1, list_group2)
+    conf_interval = ttest_result.confidence_interval(confidence_level=ci)
+    result_df = pd.DataFrame({
+        "test": ["paired samples t-test"],
+        "statistic": [ttest_result.statistic],
+        "p": [ttest_result.pvalue],
+        "df": [ttest_result.df],
+        f"{ci} CI low": [conf_interval.low],
+        f"{ci} CI high": [conf_interval.high]
     })
     return result_df
 

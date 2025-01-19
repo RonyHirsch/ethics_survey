@@ -259,6 +259,11 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
                                         binary=False, overlaid=True, fmt="svg",
                                         threshold=0)
 
+    """
+    Extract probability to attribute consciousness / moral status to an entity based on binary features
+    """
+    features = {"language"}
+
     return
     #####  TODO: stopped here ---
 
@@ -496,7 +501,7 @@ def ics(analysis_dict, save_path):
         }
     rating_labels = ["No", "Yes"]
     rating_color_list = ["#B26972", "#355070"]
-    sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"])
+    sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"], reverse=True)
     plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=4, legend=rating_labels,
                                          ytick_visible=True, text_width=39, title=f"Do you think A creature/system can be",
                                          show_mean=False, sem_line=False,
@@ -582,7 +587,7 @@ def kill_for_test(analysis_dict, save_path):
         os.mkdir(result_path)
 
     # load relevant data
-    df_test = analysis_dict["important_test_kill"]
+    df_test = analysis_dict["important_test_kill"].copy()
     # all the options for killing (scenarios)
     questions = [c for c in df_test.columns if c.startswith("A creature/system that")]
     ans_map = {"No (will not kill to pass the test)": 0, "Yes (will kill to pass the test)": 1}
@@ -614,19 +619,55 @@ def kill_for_test(analysis_dict, save_path):
                                          save_path=result_path, save_name=f"kill_to_pass")
     # save data
     plot_df = pd.DataFrame(plot_data)
-    plot_df.to_csv(os.path.join(result_path, f"kill_to_pass.csv"), index=True)
+    plot_df.to_csv(os.path.join(result_path, f"kill_to_pass_stats.csv"), index=True)
 
-    # those who answered all "No's"
-    all_nos = df_test[df_test[
-        "You wouldn't eliminate any of the creatures; why?"].notnull()]  # all people who answered "No" to ALL options
+    """
+    Does it matter which two features it is? Or rather the more features the merrier?
+    Test if people keep alive creatures/systems with 2 features rather than 1 overall.
+    """
+    df_test = df_test.rename(columns=survey_mapping.important_test_kill_tokens)  # shorter names
+    # columns
+    one_feature = [survey_mapping.Q_SENSATIONS, survey_mapping.Q_INTENTIONS, survey_mapping.Q_CONSCIOUSNESS]
+    two_features = [survey_mapping.Q_CONSCIOUSNESS_SENSATIONS, survey_mapping.Q_SENSATIONS_INTENTIONS, survey_mapping.Q_VULCAN]
+    df_test_binary = df_test.replace(survey_mapping.ANS_KILLING_MAP, inplace=False)  # convert columns
+    # calculate the average 'yes' responses for each person for 1-feature and 2-feature creatures
+    df_test_binary["kill_one_avg"] = df_test_binary[one_feature].mean(axis=1)
+    df_test_binary["kill_two_avg"] = df_test_binary[two_features].mean(axis=1)
+    df_test.to_csv(os.path.join(result_path, f"kill_to_pass.csv"), index=False)
+    df_test_binary.to_csv(os.path.join(result_path, f"kill_to_pass_coded.csv"), index=False)
+    # paired t-test
+    paired_ttest = helper_funcs.dependent_samples_ttest(list_group1=df_test_binary["kill_one_avg"].tolist(),
+                                                        list_group2=df_test_binary["kill_two_avg"].tolist())
+    paired_ttest.to_csv(os.path.join(result_path, f"kill_oneVtwofeatures_ttest.csv"), index=False)
+
+    """
+    Now, let's focus on the people - who would kill them all? Who wouldn't kill any?
+    """
+    all_features = one_feature + two_features
+
+    # all "Yes"
+    all_yes = df_test[df_test[all_features].eq(survey_mapping.ANS_KILL).all(axis=1)]
+    all_yes_prop = 100 * all_yes.shape[0] / df_test.shape[0]
+
+    # all "No"
+    all_nos = df_test[df_test[all_features].eq(survey_mapping.ANS_NOKILL).all(axis=1)]
     all_nos_prop = 100 * all_nos.shape[0] / df_test.shape[0]
-    rest_prop = 100 * (df_test.shape[0] - all_nos.shape[0]) / df_test.shape[0]
-    cat_names = ["Won't kill any", "Kill at least one"]
-    cat_counts = [all_nos_prop, rest_prop]
-    cat_colors = {"Won't kill any": "#E06C6E", "Kill at least one": "#5288A3"}
+
+    # the rest - would kill at least one, but not all
+    rest_prop = 100 * (df_test.shape[0] - all_yes.shape[0] - all_nos.shape[0]) / df_test.shape[0]
+
+    kill_breakdown = pd.DataFrame({"kill_all_N": [all_yes.shape[0]], "kill_all_prop": [all_yes_prop],
+                                   "kill_none_N": [all_nos.shape[0]], "kill_none_prop": [all_nos_prop],
+                                   "rest_N": [(df_test.shape[0] - all_yes.shape[0] - all_nos.shape[0])], "rest_prop": [rest_prop]})
+    kill_breakdown = kill_breakdown.transpose()
+    kill_breakdown.to_csv(os.path.join(result_path, f"all_yes_no.csv"), index=True)
+
+    cat_names = ["Won't kill any", "Kill at least one", "Kill all entities"]
+    cat_counts = [all_nos_prop, rest_prop, all_yes_prop]
+    cat_colors = {"Won't kill any": "#033860", "Kill at least one": "#C2948A", "Kill all entities": "#723D46"}
     plotter.plot_pie(categories_names=cat_names, categories_counts=cat_counts,
                      categories_colors=cat_colors, title=f"Would kill in any of the scenarios",
-                     save_path=result_path, save_name="all_nos_prop", format="png")
+                     save_path=result_path, save_name="all_yes_no", format="png")
 
     # why?
     colors = {survey_mapping.ANS_ALLNOS_IMMORAL: "#E7A391",
@@ -645,13 +686,9 @@ def kill_for_test(analysis_dict, save_path):
     # flatten the selections
     all_selections = all_nos["You wouldn't eliminate any of the creatures; why?"].str.split(',').explode()
     category_counts = all_selections.value_counts()
-
-    # category_counts = all_nos["You wouldn't eliminate any of the creatures; why?"].value_counts()
-
     plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
                      categories_colors=colors, title=f"You wouldn't eliminate any of the creatures; why?",
                      save_path=result_path, save_name="all_nos_reason", format="png")
-
     return
 
 
@@ -1560,9 +1597,8 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     topic/section
     :param save_path: where the results will be saved (csvs, plots)
     """
-    #moral_consideration_features(analysis_dict, save_path)
-    #ics(analysis_dict, save_path)
-    zombie_pill(analysis_dict, save_path)
+    kill_for_test(analysis_dict, save_path)
+    ics(analysis_dict, save_path)
     """
     other_creatures(analysis_dict, save_path, sort_together=False)
     consciousness_intelligence(analysis_dict, save_path)
@@ -1572,8 +1608,8 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     gender_cross(analysis_dict, save_path)  # move to after the individuals
     demographics(analysis_dict, save_path)
     experience(analysis_dict, save_path)
+    moral_consideration_features(analysis_dict, save_path)
+    zombie_pill(analysis_dict, save_path)
     
-    
-    kill_for_test(analysis_dict, save_path)
     """
     return
