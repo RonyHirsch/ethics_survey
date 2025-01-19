@@ -472,7 +472,7 @@ def ics(analysis_dict, save_path):
         os.mkdir(result_path)
 
     # load relevant data
-    df_ics = analysis_dict["ics"]
+    df_ics = analysis_dict["ics"].copy()
     df_ics.to_csv(os.path.join(result_path, "i_c_s.csv"), index=False)
 
     questions = [c for c in df_ics.columns if c.startswith("Do you think a creature/system")]
@@ -499,7 +499,7 @@ def ics(analysis_dict, save_path):
             "Std Dev": std_dev,
             "N": n
         }
-    rating_labels = ["No", "Yes"]
+    rating_labels = [survey_mapping.ANS_NO, survey_mapping.ANS_YES]
     rating_color_list = ["#B26972", "#355070"]
     sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"], reverse=True)
     plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=4, legend=rating_labels,
@@ -511,7 +511,23 @@ def ics(analysis_dict, save_path):
     plot_df = pd.DataFrame(plot_data)
     plot_df.to_csv(os.path.join(result_path, f"ics.csv"), index=True)
 
-    ## TODO: STOPPED HERE, SORTING DOESN'T WORK ABOVE
+
+    """
+    Follow up questions: examples for cases of X w/o Y
+    """
+    example_q_prefix = "Do you have an example of a case of "
+    followup_cols = [c for c in df_ics.columns if c.startswith(example_q_prefix)]
+    ics_followup = df_ics.loc[:, [process_survey.COL_ID] + followup_cols]
+    for col in followup_cols:
+        col_savename = col.removeprefix(example_q_prefix).removesuffix("?").replace("/", "_")
+        ics_q = ics_followup[ics_followup[col].notnull()]  # actually wrote something in the 'example' field
+        ics_q = ics_q[[process_survey.COL_ID, col]]
+        ics_q = ics_q[~ics_q[col].str.strip().str.fullmatch(r"no", flags=re.IGNORECASE)]  # and that something isn't "no"
+        ics_q.to_csv(os.path.join(result_path, f"{col_savename}.csv"), index=False)  # save answers for examination
+    d = 3
+
+
+    ## TODO:
 
 
     for q in questions:
