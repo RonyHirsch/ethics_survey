@@ -722,8 +722,8 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
         else:
             a = axs[i]
 
-        for j, (response_type, proportion) in enumerate(proportions.items()):
-            a.barh(col, proportion, color=colors[j], label=f'Response {int(response_type)}', edgecolor='none',
+        for j, (response_type, proportion) in enumerate(sorted(proportions.items())):
+            a.barh(col, proportion, color=colors[int(response_type)], label=f'Response {int(response_type)}', edgecolor='none',
                    left=bottom)
             bottom += proportion
 
