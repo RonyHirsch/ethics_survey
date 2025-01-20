@@ -522,74 +522,8 @@ def ics(analysis_dict, save_path):
         col_savename = col.removeprefix(example_q_prefix).removesuffix("?").replace("/", "_")
         ics_q = ics_followup[ics_followup[col].notnull()]  # actually wrote something in the 'example' field
         ics_q = ics_q[[process_survey.COL_ID, col]]
-        ics_q = ics_q[~ics_q[col].str.strip().str.fullmatch(r"no", flags=re.IGNORECASE)]  # and that something isn't "no"
+        ics_q = ics_q[~ics_q[col].str.strip().str.fullmatch(r"No[.,!?]*", flags=re.IGNORECASE)]  # and that something isn't a variation of JUST  a *"no"* (some "no, but..blabla" will appear)
         ics_q.to_csv(os.path.join(result_path, f"{col_savename}.csv"), index=False)  # save answers for examination
-    d = 3
-
-
-    ## TODO:
-
-
-    for q in questions:
-        df_q = df_ics.loc[:, [process_survey.COL_ID, q]]
-        counts = df_q[q].value_counts()
-        q_name = q.replace('Do you think a creature/system', '')[:-1]
-        q_name = q_name.replace('can be', '')
-        q_name = q_name.replace('can have', '')
-        q_name = q_name.replace('/', '-')
-        plotter.plot_pie(categories_names=counts.index.tolist(), categories_counts=counts.tolist(),
-                         categories_labels=CAT_LABEL_DICT,
-                         categories_colors=CAT_COLOR_DICT, title=f"{q}",
-                         save_path=result_path, save_name=q_name, format="png")
-
-    """
-    Follow up #1: valence w/o consciousness.
-    Those who replied YES to having positive and negative sensations of pleasure/pain w/o consciousness, 
-    were asked: "Do you have an example of a case of positive/negative sensations without consciousness?".
-    I want to see what they replied, and see how many themes are common
-    """
-    q_sWc_ex = "Do you have an example of a case of positive/negative sensations without consciousness?"
-    df_ics_exmaples = df_ics[df_ics[q_sWc_ex].notna()]  # only people who answered this question
-    examples = df_ics_exmaples.loc[:, q_sWc_ex].tolist()
-    # filter out answers that are just "No" (as in "I don't have an example"); filter out "NO", "no", "No" and "nO"
-    examples_filtered = sorted([ex for ex in examples if not(re.search(ex.strip(), "No", re.IGNORECASE))])  # strip is for spaces
-
-    # common themes
-    coma = [ex for ex in examples_filtered if re.search("coma", ex, re.IGNORECASE)]
-    vs = [ex for ex in examples_filtered if re.search("vegetative state", ex, re.IGNORECASE)]
-    plants = [ex for ex in examples_filtered if (re.search("plants", ex, re.IGNORECASE) or
-                                                 re.search("plant", ex, re.IGNORECASE) or
-                                                 re.search("sunflower", ex, re.IGNORECASE) or
-                                                 re.search("trees", ex, re.IGNORECASE) or
-                                                 re.search("grass", ex, re.IGNORECASE))]
-    ai = [ex for ex in examples_filtered if re.search("AI", ex)]  # here I don't wanna ignore case
-    animals = [ex for ex in examples_filtered if (re.search("snake", ex, re.IGNORECASE) or
-                                                  re.search("mouse", ex, re.IGNORECASE) or
-                                                  re.search("fish", ex, re.IGNORECASE) or
-                                                  re.search("molluscs", ex, re.IGNORECASE) or  # mollusks
-                                                  re.search("clams", ex, re.IGNORECASE) or
-                                                  re.search("fungus", ex, re.IGNORECASE) or
-                                                  re.search("fungai", ex, re.IGNORECASE) or  # manually saw this response (typo included)
-                                                  re.search("octopus", ex, re.IGNORECASE) or
-                                                  re.search("jellyfish", ex, re.IGNORECASE) or
-                                                  re.search("dog", ex, re.IGNORECASE) or
-                                                  re.search("insects", ex, re.IGNORECASE) or
-                                                  re.search("bugs", ex, re.IGNORECASE) or
-                                                  re.search("bug", ex, re.IGNORECASE) or
-                                                  re.search("worm", ex, re.IGNORECASE) or
-                                                  re.search("fly", ex, re.IGNORECASE) or
-                                                  re.search("animals", ex, re.IGNORECASE) or
-                                                  re.search("animal", ex, re.IGNORECASE))]
-    rest = [ex for ex in examples_filtered if ex not in (coma + vs + plants + ai + animals)]
-
-    result_df = pd.DataFrame({"coma": [len(coma)], "vs": [len(vs)], "plants": [len(plants)], "animals": [len(animals)],
-                              "ai": [len(ai)], "misc": [len(rest)]}).transpose()
-    result_df.rename(columns={result_df.columns[0]: "count"}, inplace=True)
-    result_df.to_csv((os.path.join(result_path, "ics_valence wo consciousness_examples.csv")), index=True)  # index is the type
-    # save the misc ones
-    rest_df = pd.DataFrame({f"miscellaneous examples for {q_sWc_ex}": rest})
-    rest_df.to_csv(os.path.join(result_path, "ics_valence wo consciousness_example_misc.csv"), index=False)
-
     return
 
 
