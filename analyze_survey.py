@@ -399,15 +399,14 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
     Examine the clusters demographically
     """
     # then, we want to examine if there are any demographics that are shared within each cluster.
-    df_zombie = analysis_dict["zombification_pill"]
-    df_zombie_copy = df_zombie.copy()
-    df_zombie_copy["Would you take the pill?"] = df_zombie_copy["Would you take the pill?"].map({"Yes": 1, "No": 0})
+    df_zombie = analysis_dict["zombification_pill"].copy()
+    df_zombie["Would you take the pill?"] = df_zombie["Would you take the pill?"].map({"Yes": 1, "No": 0})
     df_demog = analysis_dict["demographics"]
     df_animalexp = analysis_dict["animal_exp"]
     df_ethicsexp = analysis_dict["ethics_exp"]
     df_aiexp = analysis_dict["ai_exp"]
     df_cexp = analysis_dict["consciousness_exp"]
-    df_list = [df_demog, df_animalexp, df_ethicsexp, df_aiexp, df_cexp, df_zombie_copy]
+    df_list = [df_demog, df_animalexp, df_ethicsexp, df_aiexp, df_cexp, df_zombie]
     unified_df = reduce(lambda x, y: x.merge(y, on=process_survey.COL_ID), df_list)
     unified_df_cluster = pd.merge(unified_df, pca_with_cluster[[process_survey.COL_ID, "Cluster"]],
                                   on=process_survey.COL_ID, how="left")
@@ -450,14 +449,59 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
 
     ordinal_contingency_df = pd.concat(ordinal_contingency_list)
 
-    # Perform a Chi-squared test to examine association between the cluster and the other factors
+    # Perform a Chi-squared test to examine association between the cluster and gender
     gender_contingency_table = pd.crosstab(unified_df_cluster["Cluster"], unified_df_cluster["How do you describe yourself?"])
-    chisquare_result = helper_funcs.chi_squared_test(contingency_table=gender_contingency_table)
-    chisquare_result[f"per"] = ["Gender"]
+    chisquare_gender = helper_funcs.chi_squared_test(contingency_table=gender_contingency_table)
+    chisquare_gender[f"per"] = ["Gender"]
+
+    # Perform a Chi-squared test to examine association between the cluster and country of residence
+    country_contingenty_table = pd.crosstab(unified_df_cluster["Cluster"], unified_df_cluster["In which country do you currently reside?"])
+    chisquare_country, expected_df = helper_funcs.chi_squared_test(contingency_table=country_contingenty_table,
+                                                                   include_expected=True)
+    chisquare_country[f"per"] = ["Country"]
 
     # together
-    clusters_demographic_tests = pd.concat([continuous_contingency_df, ordinal_contingency_df, chisquare_result], ignore_index=True)
+    clusters_demographic_tests = pd.concat([continuous_contingency_df, ordinal_contingency_df, chisquare_gender, chisquare_country], ignore_index=True)
     clusters_demographic_tests.to_csv(os.path.join(result_path, "clusters_by_demographic_stats.csv"), index=False)
+
+    """
+    Examine the standardized residuals to identify which countries contributed most to the difference.
+    Residuals show how much the observed counts deviate from the expected counts for each cluster-country pair. 
+    Standardized residuals are a way to measure the difference between observed and expected frequencies in a 
+    contingency table while accounting for the variability in the data. If the null hypothesis it true, then the
+    standardized residuals should follow an approximately standard normal distribution; meaning, about 95% of the values
+    should fall within 2 standard deviations of the mean. 
+    Haberman, S. J. (1973). The analysis of residuals in cross-classified tables. Biometrics, 205-220.
+    Agresti, A. (2012). Categorical data analysis (Vol. 792). John Wiley & Sons. [p.81]
+    """
+    standardized_residuals = (country_contingenty_table - expected_df) / np.sqrt(expected_df)
+    # values outside this range have a 5% probability under the null hypothesis
+    significant_residuals = standardized_residuals[standardized_residuals.abs() > 2].dropna(how="all", axis=0).dropna(how="all", axis=1)
+    significant_countries = significant_residuals.columns
+    significant_contingency_table = country_contingenty_table[significant_countries]
+    # distribution of countries within each cluster
+    significant_distribution = significant_contingency_table.div(significant_contingency_table.sum(axis=1), axis=0) * 100
+    # significant residuals with distributions for interpretation
+    significant_interpretation_df = pd.concat([significant_contingency_table, significant_residuals, significant_distribution],
+                                              keys=["Observed", "Residuals", "Percentage"], axis=1)
+    print("Examination of residuals: significant countries interpretation df:")
+    print(significant_interpretation_df)
+    print("")
+    significant_interpretation_df.to_csv(os.path.join(result_path, f"clusters_by_country_residuals_significant.csv"), index=True)
+    """
+    Interpreting Significant Residuals: 
+    Residuals - (significant_residuals)
+    Positive residuals: The country is *overrepresented* in the cluster compared to what is expected.
+    (e.g., a positive residual for "US" in cluster 0 >> people from the US are more likely to belong to cluster 0)
+    Negative residuals: The country is *underrepresented* in the cluster compared to what is expected.
+    (e.g., a negative residual for "US" in cluster 1 >> people from the US are less likely to belong to cluster 1)
+    Distribution - (significant_distribution)
+    Showing how individuals are distributed across clusters
+    """
+
+    # proportions for each country within each cluster
+    country_proportions = country_contingenty_table.div(country_contingenty_table.sum(axis=1), axis=0)
+    country_proportions.to_csv(os.path.join(result_path, f"clusters_by_country_proportions_in_cluster.csv"), index=True)
 
     return
 
@@ -1548,10 +1592,12 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     :param save_path: where the results will be saved (csvs, plots)
     """
 
-    other_creatures(analysis_dict, save_path, sort_together=False)
+    earth_in_danger(analysis_dict, save_path)
+
+    """
     consciousness_intelligence(analysis_dict, save_path)
     moral_considreation_prios(analysis_dict, save_path)
-    earth_in_danger(analysis_dict, save_path)
+    other_creatures(analysis_dict, save_path, sort_together=False)
     graded_consciousness(analysis_dict, save_path)
     gender_cross(analysis_dict, save_path)  # move to after the individuals
     demographics(analysis_dict, save_path)
@@ -1560,4 +1606,5 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     zombie_pill(analysis_dict, save_path)
     kill_for_test(analysis_dict, save_path)
     ics(analysis_dict, save_path)
+    """
     return

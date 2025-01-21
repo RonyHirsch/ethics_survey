@@ -17,15 +17,17 @@ from statsmodels.stats.proportion import proportions_ztest
 import plotter
 
 
-def chi_squared_test(contingency_table):
+def chi_squared_test(contingency_table, include_expected=False):
     chi2, p, dof, expected = chi2_contingency(contingency_table)
     result_df = pd.DataFrame({
         "test": ["chi squared"],
         "statistic": [chi2],
         "p": [p],
         "df": [dof],  # Degrees of Freedom
-        #"expected": [expected]  # Expected Frequencies
     })
+    if include_expected:
+        expected_df = pd.DataFrame(expected, index=contingency_table.index, columns=contingency_table.columns)
+        return result_df, expected_df
     return result_df
 
 
