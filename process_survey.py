@@ -41,12 +41,40 @@ def convert_columns(df):
     return df
 
 
-def bot_filter(sub_df):
+def identify_auto_qs(sub_df, prolific_age_mismatch, save_path):
+    """
+    Identify blocks of questions where the pattern of responses indicates participants may have just skipped
+    this part by clicking the same thing over and over
+    """
+
+    """
+    the rating questions are the easiest ones to identify a person who just clicked on one side all along
+    """
+    same_ms_rating = sub_df[sub_df[list(survey_mapping.other_creatures_ms.values())].nunique(axis=1) == 1]
+    same_c_rating = sub_df[sub_df[list(survey_mapping.other_creatures_cons.values())].nunique(axis=1) == 1]
+    intersection = same_ms_rating.merge(same_c_rating, how="inner")
+    print(f"{intersection.shape[0]} participants gave identical ratings in the ms-rating section as well as the c-rating section; check manually")
+    intersection.to_csv(os.path.join(save_path, f"identical_ratings.csv"), index=False)
+    if not(intersection.empty):
+        # if we have people who gave the same ms rating AND the same c rating to everything, we suspect they skimmed it
+        # did they also lie about their age?
+        if prolific_age_mismatch is not None:  # not nan, paid sample
+            intersection_age = intersection[intersection["response_id"].isin(prolific_age_mismatch["response_id"].unique().tolist())]
+            if not(intersection_age.empty):
+                print(f"** SUSPECTED cheating partipants: N={intersection_age.shape[0]}; filtered out")
+                sub_df = sub_df[~sub_df["response_id"].isin(intersection_age["response_id"].tolist())]
+    return sub_df
+
+
+def bot_filter(sub_df, save_path, age_mismatch=None):
     shape_before = sub_df.shape[0]
     print(f"Before filtering: {shape_before} subjects in sample")
     # all those with a reCaptcha score that isn't perfect
     suspected_bot = sub_df[sub_df[COL_BOT] < BOT_PASS]
-    # test 1: did it take them less than MIN_DUR_SEC to answer the survey?
+
+    """
+    test 1: did it take them less than MIN_DUR_SEC to answer the survey?
+    """
     test1 = suspected_bot[suspected_bot[COL_DUR_SEC] < MIN_DUR_SEC]
     if not test1.empty:
         sub_df_filtered = sub_df[~sub_df.isin(test1).all(axis=1)]
@@ -56,18 +84,31 @@ def bot_filter(sub_df):
     shape_after = sub_df.shape[0]
     print(f"Bot filtering: {shape_before - shape_after} were excluded")
 
-    # test 2: did these people even finish the entire study?
+    """
+    test 2: did these people even finish the entire study?
+    """
     sub_df_filtered = sub_df_filtered[sub_df_filtered["Finished"] != "False"]
     sub_df_filtered.reset_index(inplace=True, drop=True)
     shape_finish = sub_df_filtered.shape[0]
     print(f"Partial responses: {shape_after - shape_finish} were excluded")
 
-    # test 3: are respondent in the age of consent?
+    """
+    test 3: are respondent in the age of consent?
+    """
     sub_df_age = sub_df_filtered[sub_df_filtered["How old are you?"] >= AGE_CONSENT]
     sub_df_age.reset_index(inplace=True, drop=True)
-    shape_final = sub_df_age.shape[0]
-    print(f"Underage participants: {shape_finish - shape_final} were excluded")
-    return sub_df_age
+    shape_final_age = sub_df_age.shape[0]
+    print(f"Underage participants: {shape_finish - shape_final_age} were excluded")
+
+    """
+    test 4: did people answer automatically (i.e., consistently replied an answer that's on one side of the screen?)
+    """
+    sub_df_final = identify_auto_qs(sub_df=sub_df_age, prolific_age_mismatch=age_mismatch, save_path=save_path)
+    sub_df_final.reset_index(inplace=True, drop=True)
+    shape_final = sub_df_final.shape[0]
+    print(f"Skipping participants: {shape_final_age - shape_final} were excluded")
+
+    return sub_df_final
 
 
 def analysis_prep(sub_df):
@@ -187,12 +228,12 @@ def process_values(sub_df):
     return sub_df
 
 
-def process_survey(sub_df):
+def process_survey(sub_df, save_path, age_mismatch=None):
     # filter out participants who did not provide consent - they are not counted as participants in the study:
     sub_df = sub_df[sub_df[COL_CONSENT] == CONSENT_YES].reset_index(inplace=False, drop=True)
     # filter out bots:
     print(f"Overall {sub_df.shape[0]} people participated in the study")
-    sub_df = bot_filter(sub_df)
+    sub_df = bot_filter(sub_df=sub_df, age_mismatch=age_mismatch, save_path=save_path)
     print(f"After filtering out suspected bots: {sub_df.shape[0]} participants")
     sub_df = process_values(sub_df)
     return sub_df
@@ -239,7 +280,7 @@ def correct_prolific(df, prolific_data_path, save_path, exclude=False):
     # nans won't be converted into ints, which is why we convert to floats
     merged_df["How old are you?"] = merged_df["How old are you?"].replace("CONSENT_REVOKED", np.nan).astype(float)
 
-    return merged_df
+    return merged_df, mismatch
 
 
 def processed_paid_sample(subject_data_path, prolific_save_path, prolific_data_path, exclude_age_mismatch=False):
@@ -254,13 +295,13 @@ def processed_paid_sample(subject_data_path, prolific_save_path, prolific_data_p
     sub_df = convert_columns(sub_df)  # convert numeric and datetime columns to be as such
 
     # As the sample is paid, cross some of the demographic data with Prolific to ensure correctness
-    subject_processed = correct_prolific(df=sub_df,
-                                         save_path=prolific_save_path,
-                                         prolific_data_path=prolific_data_path,
-                                         exclude=exclude_age_mismatch)
+    subject_processed, age_mismatch = correct_prolific(df=sub_df,
+                                                       save_path=prolific_save_path,
+                                                       prolific_data_path=prolific_data_path,
+                                                       exclude=exclude_age_mismatch)
 
     # process the df
-    subject_processed = process_survey(subject_processed)
+    subject_processed = process_survey(sub_df=subject_processed, age_mismatch=age_mismatch, save_path=prolific_save_path)
 
     # As the sample is paid, there are a few more columns to take care of to ensure de-identification
     subject_processed.drop(columns=survey_mapping.prolific_redundant, inplace=True, errors="ignore")
@@ -286,7 +327,7 @@ def processed_free_sample(subject_data_path, free_save_path):
     sub_df = convert_columns(sub_df)  # convert numeric and datetime columns to be as such
 
     # process the df
-    subject_processed = process_survey(sub_df)
+    subject_processed = process_survey(sub_df=sub_df, save_path=free_save_path)
     subject_processed.to_csv(os.path.join(free_save_path, "processed_data.csv"), index=False)
 
     # prepare the questions for analysis
