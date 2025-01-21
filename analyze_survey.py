@@ -1547,9 +1547,7 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     topic/section
     :param save_path: where the results will be saved (csvs, plots)
     """
-    kill_for_test(analysis_dict, save_path)
-    ics(analysis_dict, save_path)
-    """
+
     other_creatures(analysis_dict, save_path, sort_together=False)
     consciousness_intelligence(analysis_dict, save_path)
     moral_considreation_prios(analysis_dict, save_path)
@@ -1560,6 +1558,6 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     experience(analysis_dict, save_path)
     moral_consideration_features(analysis_dict, save_path)
     zombie_pill(analysis_dict, save_path)
-    
-    """
+    kill_for_test(analysis_dict, save_path)
+    ics(analysis_dict, save_path)
     return

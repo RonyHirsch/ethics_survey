@@ -198,7 +198,16 @@ def process_survey(sub_df):
     return sub_df
 
 
-def correct_prolific(df, prolific_data_path, save_path):
+def correct_prolific(df, prolific_data_path, save_path, exclude=False):
+    """
+    :param df: survey dataframe (processed)
+    :param prolific_data_path: demographic data from the prolific recruitment platform (path to file)
+    :param save_path: where to save the data to
+    :param exclude: whether to exclude participants based on mismatches between the survey demographic data and prolific's;
+    if True, subjects with inconsistencies will be dropped (based on some condition), otherwise we'll report about them
+    and correct based on the prolific as ground-truth
+    :return: the corrected/filtered df
+    """
     prolific_df = pd.read_csv(prolific_data_path)
 
     """
@@ -211,9 +220,18 @@ def correct_prolific(df, prolific_data_path, save_path):
     merged_df = pd.merge(df, prolific_df_relevant, on="PROLIFIC_PID", how="left")
     merged_df["age_verification"] = (merged_df["How old are you?"].replace("CONSENT_REVOKED", np.nan).astype(float) == merged_df["Age"].replace("CONSENT_REVOKED", np.nan).astype(float)).astype(int)
 
-    mismatch = merged_df[merged_df["age_verification"] == 0][["PROLIFIC_PID", "How old are you?", "Age"]]
+    mismatch = merged_df[merged_df["age_verification"] == 0][[COL_ID, "PROLIFIC_PID", "How old are you?", "Age"]]
     mismatch.to_csv(os.path.join(save_path, "age_liars.csv"), index=False)
     print(f"{mismatch.shape[0]} had a mismatch between reported age and Prolific age; took Prolific age")
+
+    if exclude:  # exclude age liars based on some threshold
+        age_thresh = 2
+        # gap between age as reported in prolific and in the survey
+        merged_df["age_gap"] = np.abs(merged_df["How old are you?"].replace("CONSENT_REVOKED", np.nan).astype(float) - merged_df["Age"].replace("CONSENT_REVOKED", np.nan).astype(float))
+        big_gap = merged_df[merged_df["age_gap"] > age_thresh]  # gap is larger than threshold
+        print(f"**EXCLUSION** where age gap is >= {age_thresh}, N={big_gap.shape[0]} participants are excluded")
+        merged_df = merged_df[~merged_df.index.isin(big_gap.index)]
+        merged_df.drop(columns=["age_gap"], inplace=True)
 
     merged_df.loc[merged_df["age_verification"] == 0, "How old are you?"] = merged_df["Age"]
     merged_df.drop(columns=["Age", "age_verification"], inplace=True)
@@ -224,7 +242,7 @@ def correct_prolific(df, prolific_data_path, save_path):
     return merged_df
 
 
-def processed_paid_sample(subject_data_path, prolific_save_path, prolific_data_path):
+def processed_paid_sample(subject_data_path, prolific_save_path, prolific_data_path, exclude_age_mismatch=False):
 
     # extract the data
     subject_data_raw = pd.read_csv(subject_data_path)
@@ -238,7 +256,8 @@ def processed_paid_sample(subject_data_path, prolific_save_path, prolific_data_p
     # As the sample is paid, cross some of the demographic data with Prolific to ensure correctness
     subject_processed = correct_prolific(df=sub_df,
                                          save_path=prolific_save_path,
-                                         prolific_data_path=prolific_data_path)
+                                         prolific_data_path=prolific_data_path,
+                                         exclude=exclude_age_mismatch)
 
     # process the df
     subject_processed = process_survey(subject_processed)
@@ -278,7 +297,7 @@ def processed_free_sample(subject_data_path, free_save_path):
     return subject_dict, subject_processed
 
 
-def manage_processing(prolific_data_path, free_data_path, all_save_path, load=False):
+def manage_processing(prolific_data_path, free_data_path, all_save_path, load=False, exclude_age_mismatch=False):
     if load:
         # load paid
         with open(os.path.join(prolific_data_path, r"processed\processed_data.pkl"), "rb") as f:
@@ -293,7 +312,8 @@ def manage_processing(prolific_data_path, free_data_path, all_save_path, load=Fa
         # paid sample
         prolific_sub_dict, prolific_sub_df = processed_paid_sample(subject_data_path=os.path.join(prolific_data_path, r"raw\prolific_paid_labels.csv"),
                                                                    prolific_save_path=os.path.join(prolific_data_path, r"processed"),
-                                                                   prolific_data_path=os.path.join(prolific_data_path, r"raw\prolific_export_666701f76c6898bb61cdb6c0.csv"))
+                                                                   prolific_data_path=os.path.join(prolific_data_path, r"raw\prolific_export_666701f76c6898bb61cdb6c0.csv"),
+                                                                   exclude_age_mismatch=exclude_age_mismatch)
         analyze_survey.analyze_survey(sub_df=prolific_sub_df.copy(),
                                       analysis_dict=prolific_sub_dict,
                                       save_path=os.path.join(prolific_data_path, r"processed"))
@@ -320,7 +340,8 @@ def manage_processing(prolific_data_path, free_data_path, all_save_path, load=Fa
 
 if __name__ == '__main__':
 
-    manage_processing(prolific_data_path=r"..\prolific",
-                      free_data_path=r"..\free",
-                      all_save_path=r"..\all",
-                      load=True)
+    manage_processing(prolific_data_path=r"...\prolific",
+                      free_data_path=r"...\free",
+                      all_save_path=r"...\all",
+                      load=True,
+                      exclude_age_mismatch=False)
