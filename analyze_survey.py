@@ -197,7 +197,9 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
     ttest_result.to_csv(os.path.join(result_path, f"c_v_ms_avg_per_item_diagonal_ttest.csv"), index=False)
 
     # identify items with the largest deviation from the diagonal
-    top_outliers = long_data_mean_rating.nlargest(6, "dist_from_diagonal")
+    n = 6
+    top_outliers = long_data_mean_rating.nlargest(n, "dist_from_diagonal")
+    top_outliers.to_csv(os.path.join(result_path, f"c_v_ms_dist_from_diagonal_top_{n}.csv"), index=False)
 
     """
     Use clustering to see if there are items can be clustered to groups based on their distance from the diagonal:
@@ -224,80 +226,24 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
 
 
     """
-    Cluster people based on their rating tendencies of different entities' consciousness and moral status >> PER PERSON
+    Cluster people based on their rating tendencies of different entities' consciousness and moral status >> PER ITEM
     """
     df_nosub = df.iloc[:, 1:]  # only rating cols
     label_maps = {**survey_mapping.MS_RATINGS, **survey_mapping.C_RATINGS}
 
-    # Perform PCA
-    pca_df, loadings, explained_variance = helper_funcs.perform_PCA(df_pivot=df_nosub, save_path=result_path,
-                                                                    save_name="people", components=2)
-
-    # Perform k-means clustering
     df_pivot, kmeans = helper_funcs.perform_kmeans(df_pivot=df_nosub, clusters=2,
-                                                   save_path=result_path, save_name="people")
-
-    # Plot k-means clusters in PCA space
-    helper_funcs.plot_kmeans_on_PCA(df_pivot=df_pivot, pca_df=pca_df, save_path=result_path, save_name="people")
-
-    # Plot cluster centroids
-    # Compute the cluster centroids and SEMs
+                                                   save_path=result_path, save_name="items")
     cluster_centroids = df_pivot.groupby("Cluster").mean()
     cluster_sems = df_pivot.groupby("Cluster").sem()
-
-    # plot per cluster
     helper_funcs.plot_cluster_centroids(cluster_centroids=cluster_centroids, cluster_sems=cluster_sems,
-                                        save_path=result_path, save_name="people",
-                                        label_map=label_maps,
-                                        binary=False, overlaid=False, fmt="svg",
-                                        threshold=0)
-
-    # overlaid
-    helper_funcs.plot_cluster_centroids(cluster_centroids=cluster_centroids, cluster_sems=cluster_sems,
-                                        save_path=result_path, save_name="people",
-                                        label_map=label_maps,
-                                        binary=False, overlaid=True, fmt="svg",
-                                        threshold=0)
-
-    """
-    Extract probability to attribute consciousness / moral status to an entity based on binary features
-    """
-    features = {"language"}
-
-    return
-    #####  TODO: stopped here ---
-
-    demog_df = analysis_dict["demographics"]
-    pca_df[process_survey.COL_ID] = df.iloc[:, 0]
-    unified_df = pd.merge(pca_df, demog_df, on=process_survey.COL_ID)
-    unified_df.to_csv(os.path.join(result_path, f"people_PCA_result_with_demographics.csv"), index=False)
-
-    """
-    CONNECTION TO GRADED CONSCIOUSNESS
-    connect between the consciousness and moral status scores, and people's beliefs about graded consciousness
-    """
-
-    # load the relevant data  # TODO: STOPPED HERE
-    df_graded = analysis_dict["consciousness_graded"]
-    x = 3
-
-    """
-    CORRELATION ANALYSIS
-    Calculate for each item separately the correlation between its consciousness rating and its moral status rating. 
-    """
-    helper_funcs.corr_per_item(df=df, items=items, save_path=result_path)
-
-    """
-    LCA ANALYSIS
-    Latent Class Analysis (LCA) on the ratings of consciousness and moral status. 
-    """
-    # PCA (plotted with cluster analysis)
-    # helper_funcs.perform_PCA(df_pivot=df_pivot, save_path=result_path)
-
-    df.drop(columns=[process_survey.COL_ID], inplace=True)  # no need for participants' IDs at this point
-    for col in df.columns.tolist():
-        df[col] = df[col].astype(int)
-    helper_funcs.lca_analysis(df=df, n_classes=3, save_path=result_path)
+                                        save_path=result_path, save_name="items", fmt="svg",
+                                        label_map=label_maps, binary=False,
+                                        threshold=2.5, overlaid=True, cluster_colors_overlaid=["#EDAE49", "#102E4A"])
+    pca_df, loadings, explained_variance = helper_funcs.perform_PCA(df_pivot=df_nosub, save_path=result_path,
+                                                                    save_name="items", components=2)
+    pca_with_cluster = helper_funcs.plot_kmeans_on_PCA(df_pivot=df_pivot, pca_df=pca_df,
+                                                       save_path=result_path, save_name="items")
+    pca_with_cluster.reset_index(inplace=True, drop=False)
 
     return
 
@@ -1592,12 +1538,13 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     :param save_path: where the results will be saved (csvs, plots)
     """
 
-    earth_in_danger(analysis_dict, save_path)
+
+    other_creatures(analysis_dict, save_path, sort_together=False)
 
     """
     consciousness_intelligence(analysis_dict, save_path)
     moral_considreation_prios(analysis_dict, save_path)
-    other_creatures(analysis_dict, save_path, sort_together=False)
+    earth_in_danger(analysis_dict, save_path)
     graded_consciousness(analysis_dict, save_path)
     gender_cross(analysis_dict, save_path)  # move to after the individuals
     demographics(analysis_dict, save_path)

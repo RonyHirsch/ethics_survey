@@ -370,11 +370,15 @@ def plot_overlaid_preferences(all_preferences, all_sems, all_colors, labels, lab
 
     # Map labels to readable names if label_map is provided
     display_labels = [label_map.get(label, label) for label in labels] if label_map else labels
+    # use arbitratily the first label (if not binary) to get min and max
+    if not binary:
+        dummy_label = display_labels[0]
+        min_max = sorted(list(dummy_label.values()))
 
     # Plot centroids for all clusters
     for cluster_idx, (preferences, sems, colors) in enumerate(zip(all_preferences, all_sems, all_colors)):
         for i, (mean, sem, color) in enumerate(zip(preferences, sems, colors)):
-            ax.hlines(y=y_pos[i], xmin=(-1 if binary else threshold - 1), xmax=(1 if binary else threshold + 1),
+            ax.hlines(y=y_pos[i], xmin=(-1 if binary else min_max[0]), xmax=(1 if binary else min_max[1]),
                       color="lightgray", linestyle='--', linewidth=1)
             ax.errorbar(mean, y_pos[i], xerr=sem, fmt='o', color=color, markersize=8,
                         ecolor="black", elinewidth=2, capsize=4)
@@ -385,13 +389,13 @@ def plot_overlaid_preferences(all_preferences, all_sems, all_colors, labels, lab
     ax.set_xlabel("No Preference" if binary else "Threshold", fontsize=15)
     ax.set_title("Overlaid Cluster Centroids", fontsize=15)
     ax.invert_yaxis()
-    ax.set_xlim([-1, 1] if binary else [threshold - 1, threshold + 1])
+    ax.set_xlim([-1, 1] if binary else [min_max[0], min_max[1]])
 
     for i, label in enumerate(display_labels):
         label_0, label_1 = get_labels(label_map[labels[i]]) if binary else get_labels(label_map[labels[i]],
                                                                                       min_val=1, max_val=4)
-        ax.text(-1.05 if binary else threshold - 1.05, i, label_0, va='center', ha='right', fontsize=15, color='black')
-        ax.text(1.05 if binary else threshold + 1.05, i, label_1, va='center', ha='left', fontsize=15, color='black')
+        ax.text(-1.05 if binary else min_max[0] - 0.05, i, label_0, va='center', ha='right', fontsize=15, color='black')
+        ax.text(1.05 if binary else min_max[1] + 0.05, i, label_1, va='center', ha='left', fontsize=15, color='black')
 
     # Add legend for clusters
     handles = [plt.Line2D([0], [0], color=colors[0], lw=4) for colors in all_colors]
@@ -723,7 +727,7 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
             a = axs[i]
 
         for j, (response_type, proportion) in enumerate(sorted(proportions.items())):
-            a.barh(col, proportion, color=colors[int(response_type)], label=f'Response {int(response_type)}', edgecolor='none',
+            a.barh(col, proportion, color=colors[j], label=f'Response {j}', edgecolor='none',
                    left=bottom)
             bottom += proportion
 

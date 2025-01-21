@@ -242,7 +242,6 @@ def perform_kmeans(df_pivot, save_path, save_name, clusters=2, normalize=False):
     chisq_df = pd.DataFrame(result)
     chisq_df.to_csv(os.path.join(save_path, f"{save_name}_cluster_centroids_chisq.csv"), index=False)
 
-
     with open(os.path.join(save_path, f"{save_name}_kmeans_{clusters}_result.txt"), "w") as file:
         for line in txt_output:
             file.write(str(line) + '\n')
