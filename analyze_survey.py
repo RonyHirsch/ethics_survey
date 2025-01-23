@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import re
 from functools import reduce
+from itertools import combinations
 from sklearn.preprocessing import LabelEncoder
 import plotter
 import process_survey
@@ -34,19 +35,18 @@ CAT_LABEL_DICT = {"Person": "Person",
                   }
 
 
-def other_creatures(analysis_dict, save_path, sort_together=True):
+def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_cluster=None):
     # save path
     result_path = os.path.join(save_path, "c_v_ms")
     if not os.path.isdir(result_path):
         os.mkdir(result_path)
 
     # load relevant data
-    df_ms = analysis_dict["other_creatures_ms"]
-    df_c = analysis_dict["other_creatures_cons"]
+    df_ms = analysis_dict["other_creatures_ms"].copy()
+    df_c = analysis_dict["other_creatures_cons"].copy()
     df = pd.merge(df_c, df_ms, on=[process_survey.COL_ID])
 
     df.to_csv(os.path.join(result_path, "c_v_ms.csv"), index=False)
-
 
     # codes and relevant stuff
     items = survey_mapping.other_creatures_general  # all rated items
@@ -62,10 +62,12 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
     # stats: average rating (of C & MS) per item (averaged across all respondents)
     long_data_noid = long_data.drop(process_survey.COL_ID, axis=1, inplace=False)
     long_data_mean_rating = long_data_noid.groupby(["Topic", "Item"]).mean().reset_index(drop=False)
-    long_data_mean_rating = long_data_mean_rating.pivot(index="Item", columns="Topic", values="Rating").reset_index(drop=False)
+    long_data_mean_rating = long_data_mean_rating.pivot(index="Item", columns="Topic", values="Rating").reset_index(
+        drop=False)
     # I'll save long_data_mean_rating below after I add some stuff to it
     long_data_mean_rating_stats = long_data_mean_rating.describe()
-    long_data_mean_rating_stats.to_csv(os.path.join(result_path, f"c_v_ms_avg_per_item_stats.csv"), index=True)  # in 'describe' the index is the desc name
+    long_data_mean_rating_stats.to_csv(os.path.join(result_path, f"c_v_ms_avg_per_item_stats.csv"),
+                                       index=True)  # in 'describe' the index is the desc name
 
     # add some demographic numerical columns
     animal_experience_df = analysis_dict["animal_exp"].loc[:,
@@ -154,7 +156,8 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
     """
 
     # prepare data for analyses
-    df_pivot = long_data.pivot_table(index="Item", columns="Topic", values="Rating", aggfunc="mean").reset_index(drop=False, inplace=False)  # I don't want to 'fillna(0).' this
+    df_pivot = long_data.pivot_table(index="Item", columns="Topic", values="Rating", aggfunc="mean").reset_index(
+        drop=False, inplace=False)  # I don't want to 'fillna(0).' this
 
     colors = [rating_color_list[0], rating_color_list[-1]]
     individual_data = long_data.pivot_table(index=[process_survey.COL_ID, "Item"], columns="Topic",
@@ -221,10 +224,24 @@ def other_creatures(analysis_dict, save_path, sort_together=True):
                                 x_col="Consciousness", x_label="Consciousness", x_min=1, x_max=4, x_ticks=1,
                                 y_col="Moral Status", y_label="Moral Status", y_min=1, y_max=4, y_ticks=1,
                                 save_path=result_path, save_name=f"correlation_c_ms_clustering_{n}", annotate_id=True,
-                                color_col_colors=cluster_colors, color_col="Cluster", corr_line=False, diag_line=True, fmt="svg",
+                                color_col_colors=cluster_colors, color_col="Cluster", corr_line=False, diag_line=True,
+                                fmt="svg",
                                 individual_df=None, id_col=None)
 
+    """
+    If df_earth_cluster is not None, take the clustering from the Earth-in-danger scenarios, and see if they apply 
+    here as well. 
+    """
+    if df_earth_cluster is not None:
+        df_clusters = df_earth_cluster[[process_survey.COL_ID, "Cluster"]]
+        c_cols = df_ms.columns.tolist()[1:]  # w/o response id
 
+        ms_cols = df_c.columns.tolist()[1:]
+        df_ms_with_cluster = pd.merge(df_ms, df_clusters, how="inner", on=process_survey.COL_ID)
+        helper_funcs.manova_test(data=df_ms_with_cluster, columns=ms_cols, by="Cluster")
+        c = 2
+
+    #############################################
     """
     Cluster people based on their rating tendencies of different entities' consciousness and moral status >> PER ITEM
     """
@@ -325,7 +342,6 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
                                         label_map=survey_mapping.EARTH_DANGER_QA_MAP, binary=True,
                                         threshold=0, overlaid=True, cluster_colors_overlaid=["#EDAE49", "#102E4A"])
 
-
     """
     Plot k-means clusters in PCA space: combine the KMeans cluster assignments with the PCA-transformed data into 
     one dataset, to visualize the clusters in the reduced PCA space using a scatter plot.
@@ -340,19 +356,16 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
                                                        save_path=result_path, save_name="items")
     pca_with_cluster.reset_index(inplace=True, drop=False)
 
-
     """
     Examine the clusters demographically
     """
     # then, we want to examine if there are any demographics that are shared within each cluster.
-    df_zombie = analysis_dict["zombification_pill"].copy()
-    df_zombie["Would you take the pill?"] = df_zombie["Would you take the pill?"].map({"Yes": 1, "No": 0})
     df_demog = analysis_dict["demographics"]
     df_animalexp = analysis_dict["animal_exp"]
     df_ethicsexp = analysis_dict["ethics_exp"]
     df_aiexp = analysis_dict["ai_exp"]
     df_cexp = analysis_dict["consciousness_exp"]
-    df_list = [df_demog, df_animalexp, df_ethicsexp, df_aiexp, df_cexp, df_zombie]
+    df_list = [df_demog, df_animalexp, df_ethicsexp, df_aiexp, df_cexp]
     unified_df = reduce(lambda x, y: x.merge(y, on=process_survey.COL_ID), df_list)
     unified_df_cluster = pd.merge(unified_df, pca_with_cluster[[process_survey.COL_ID, "Cluster"]],
                                   on=process_survey.COL_ID, how="left")
@@ -374,15 +387,18 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
     ordinal_contingency_list = list()
     for col in ordinal_contingency_cols:
         if col == "Education":
-            unified_df_cluster.loc[:, ordinal_contingency_cols[col]] = unified_df_cluster[ordinal_contingency_cols[col]].map(survey_mapping.EDU_MAP)
+            unified_df_cluster.loc[:, ordinal_contingency_cols[col]] = unified_df_cluster[
+                ordinal_contingency_cols[col]].map(survey_mapping.EDU_MAP)
         group1 = unified_df_cluster[unified_df_cluster["Cluster"] == 0][ordinal_contingency_cols[col]].tolist()
         group2 = unified_df_cluster[unified_df_cluster["Cluster"] == 1][ordinal_contingency_cols[col]].tolist()
         mu_result = helper_funcs.mann_whitney_utest(list_group1=group1, list_group2=group2)
         mu_result[f"per"] = [col]
         ordinal_contingency_list.append(mu_result)
-        transformed_df = unified_df_cluster.pivot(index=process_survey.COL_ID, columns="Cluster", values=ordinal_contingency_cols[col]).reset_index()
+        transformed_df = unified_df_cluster.pivot(index=process_survey.COL_ID, columns="Cluster",
+                                                  values=ordinal_contingency_cols[col]).reset_index()
         transformed_df.columns = [process_survey.COL_ID, "0", "1"]
-        plotter.plot_raincloud_separate_samples(df=transformed_df, id_col=process_survey.COL_ID, data_col_names=["0", "1"],
+        plotter.plot_raincloud_separate_samples(df=transformed_df, id_col=process_survey.COL_ID,
+                                                data_col_names=["0", "1"],
                                                 data_col_colors={"0": "#EDAE49", "1": "#102E4A"},
                                                 save_path=result_path, save_name=f"clusters_by_{col}",
                                                 x_title="Cluster", x_name_dict={"0": "0", "1": "1"},
@@ -396,18 +412,21 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
     ordinal_contingency_df = pd.concat(ordinal_contingency_list)
 
     # Perform a Chi-squared test to examine association between the cluster and gender
-    gender_contingency_table = pd.crosstab(unified_df_cluster["Cluster"], unified_df_cluster["How do you describe yourself?"])
+    gender_contingency_table = pd.crosstab(unified_df_cluster["Cluster"],
+                                           unified_df_cluster["How do you describe yourself?"])
     chisquare_gender = helper_funcs.chi_squared_test(contingency_table=gender_contingency_table)
     chisquare_gender[f"per"] = ["Gender"]
 
     # Perform a Chi-squared test to examine association between the cluster and country of residence
-    country_contingenty_table = pd.crosstab(unified_df_cluster["Cluster"], unified_df_cluster["In which country do you currently reside?"])
+    country_contingenty_table = pd.crosstab(unified_df_cluster["Cluster"],
+                                            unified_df_cluster["In which country do you currently reside?"])
     chisquare_country, expected_df = helper_funcs.chi_squared_test(contingency_table=country_contingenty_table,
                                                                    include_expected=True)
     chisquare_country[f"per"] = ["Country"]
 
     # together
-    clusters_demographic_tests = pd.concat([continuous_contingency_df, ordinal_contingency_df, chisquare_gender, chisquare_country], ignore_index=True)
+    clusters_demographic_tests = pd.concat(
+        [continuous_contingency_df, ordinal_contingency_df, chisquare_gender, chisquare_country], ignore_index=True)
     clusters_demographic_tests.to_csv(os.path.join(result_path, "clusters_by_demographic_stats.csv"), index=False)
 
     """
@@ -422,18 +441,22 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
     """
     standardized_residuals = (country_contingenty_table - expected_df) / np.sqrt(expected_df)
     # values outside this range have a 5% probability under the null hypothesis
-    significant_residuals = standardized_residuals[standardized_residuals.abs() > 2].dropna(how="all", axis=0).dropna(how="all", axis=1)
+    significant_residuals = standardized_residuals[standardized_residuals.abs() > 2].dropna(how="all", axis=0).dropna(
+        how="all", axis=1)
     significant_countries = significant_residuals.columns
     significant_contingency_table = country_contingenty_table[significant_countries]
     # distribution of countries within each cluster
-    significant_distribution = significant_contingency_table.div(significant_contingency_table.sum(axis=1), axis=0) * 100
+    significant_distribution = significant_contingency_table.div(significant_contingency_table.sum(axis=1),
+                                                                 axis=0) * 100
     # significant residuals with distributions for interpretation
-    significant_interpretation_df = pd.concat([significant_contingency_table, significant_residuals, significant_distribution],
-                                              keys=["Observed", "Residuals", "Percentage"], axis=1)
+    significant_interpretation_df = pd.concat(
+        [significant_contingency_table, significant_residuals, significant_distribution],
+        keys=["Observed", "Residuals", "Percentage"], axis=1)
     print("Examination of residuals: significant countries interpretation df:")
     print(significant_interpretation_df)
     print("")
-    significant_interpretation_df.to_csv(os.path.join(result_path, f"clusters_by_country_residuals_significant.csv"), index=True)
+    significant_interpretation_df.to_csv(os.path.join(result_path, f"clusters_by_country_residuals_significant.csv"),
+                                         index=True)
     """
     Interpreting Significant Residuals: 
     Residuals - (significant_residuals)
@@ -449,7 +472,10 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
     country_proportions = country_contingenty_table.div(country_contingenty_table.sum(axis=1), axis=0)
     country_proportions.to_csv(os.path.join(result_path, f"clusters_by_country_proportions_in_cluster.csv"), index=True)
 
-    return
+    # return the df with the coded answers and cluster taggings for further analyses
+    df_pivot.reset_index(drop=False, inplace=True)
+    df_pivot.to_csv(os.path.join(result_path, f"earth_danger_clusters.csv"), index=False)
+    return df_pivot
 
 
 def ics(analysis_dict, save_path):
@@ -493,14 +519,14 @@ def ics(analysis_dict, save_path):
     rating_color_list = ["#B26972", "#355070"]
     sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"], reverse=True)
     plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=4, legend=rating_labels,
-                                         ytick_visible=True, text_width=39, title=f"Do you think A creature/system can be",
+                                         ytick_visible=True, text_width=39,
+                                         title=f"Do you think A creature/system can be",
                                          show_mean=False, sem_line=False,
                                          colors=rating_color_list, num_ratings=2,
                                          save_path=result_path, save_name=f"ics")
     # save data
     plot_df = pd.DataFrame(plot_data)
     plot_df.to_csv(os.path.join(result_path, f"ics.csv"), index=True)
-
 
     """
     Follow up questions: examples for cases of X w/o Y
@@ -512,7 +538,8 @@ def ics(analysis_dict, save_path):
         col_savename = col.removeprefix(example_q_prefix).removesuffix("?").replace("/", "_")
         ics_q = ics_followup[ics_followup[col].notnull()]  # actually wrote something in the 'example' field
         ics_q = ics_q[[process_survey.COL_ID, col]]
-        ics_q = ics_q[~ics_q[col].str.strip().str.fullmatch(r"No[.,!?]*", flags=re.IGNORECASE)]  # and that something isn't a variation of JUST  a *"no"* (some "no, but..blabla" will appear)
+        ics_q = ics_q[~ics_q[col].str.strip().str.fullmatch(r"No[.,!?]*",
+                                                            flags=re.IGNORECASE)]  # and that something isn't a variation of JUST  a *"no"* (some "no, but..blabla" will appear)
         ics_q.to_csv(os.path.join(result_path, f"{col_savename}.csv"), index=False)  # save answers for examination
     return
 
@@ -568,7 +595,8 @@ def kill_for_test(analysis_dict, save_path):
     df_test = df_test.rename(columns=survey_mapping.important_test_kill_tokens)  # shorter names
     # columns
     one_feature = [survey_mapping.Q_SENSATIONS, survey_mapping.Q_INTENTIONS, survey_mapping.Q_CONSCIOUSNESS]
-    two_features = [survey_mapping.Q_CONSCIOUSNESS_SENSATIONS, survey_mapping.Q_SENSATIONS_INTENTIONS, survey_mapping.Q_VULCAN]
+    two_features = [survey_mapping.Q_CONSCIOUSNESS_SENSATIONS, survey_mapping.Q_SENSATIONS_INTENTIONS,
+                    survey_mapping.Q_VULCAN]
     df_test_binary = df_test.replace(survey_mapping.ANS_KILLING_MAP, inplace=False)  # convert columns
     # calculate the average 'yes' responses for each person for 1-feature and 2-feature creatures
     df_test_binary["kill_one_avg"] = df_test_binary[one_feature].mean(axis=1)
@@ -598,7 +626,8 @@ def kill_for_test(analysis_dict, save_path):
 
     kill_breakdown = pd.DataFrame({"kill_all_N": [all_yes.shape[0]], "kill_all_prop": [all_yes_prop],
                                    "kill_none_N": [all_nos.shape[0]], "kill_none_prop": [all_nos_prop],
-                                   "rest_N": [(df_test.shape[0] - all_yes.shape[0] - all_nos.shape[0])], "rest_prop": [rest_prop]})
+                                   "rest_N": [(df_test.shape[0] - all_yes.shape[0] - all_nos.shape[0])],
+                                   "rest_prop": [rest_prop]})
     kill_breakdown = kill_breakdown.transpose()
     kill_breakdown.to_csv(os.path.join(result_path, f"all_yes_no.csv"), index=True)
 
@@ -632,7 +661,7 @@ def kill_for_test(analysis_dict, save_path):
     return
 
 
-def zombie_pill(analysis_dict, save_path):
+def zombie_pill(analysis_dict, save_path, feature_order_df=None, feature_color_map=None):
     """
     Answers to the question about whether they would take a zombification pill.
     """
@@ -648,7 +677,8 @@ def zombie_pill(analysis_dict, save_path):
     ans_map = {"No": 0, "Yes": 1}
     rating_labels = [survey_mapping.ANS_NO, survey_mapping.ANS_YES]
     df_q_map = df_zombie.replace({"Would you take the pill?": ans_map})
-    stats = helper_funcs.compute_stats(df_q_map["Would you take the pill?"], possible_values=df_q_map["Would you take the pill?"].unique().tolist())
+    stats = helper_funcs.compute_stats(df_q_map["Would you take the pill?"],
+                                       possible_values=df_q_map["Would you take the pill?"].unique().tolist())
     # Create DataFrame for plotting
     plot_data = {"Would you take the pill?": {
         "Proportion": stats[0],
@@ -665,41 +695,45 @@ def zombie_pill(analysis_dict, save_path):
     zombie_data = pd.DataFrame(plot_data)
     zombie_data.to_csv(os.path.join(result_path, f"take_the_pill.csv"), index=True)  # index is descriptives' names
 
-    """
-    Cross between the zombie-pill and the features people value most for moral considerations. 
-    Do people who agree to be zombies have something in common in terms of what they value for MS? (as from their 
-    reply to the zombie question they do not value consciousness)
-    """
-    ms_features = analysis_dict["moral_considerations_features"].copy()
-    c_graded = analysis_dict["consciousness_graded"].copy()
-    ms_prios = analysis_dict["moral_considerations_prios"].copy()
-    demographics = analysis_dict["demographics"].copy()
-    # merge the dfs
-    combined = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID]), [df_zombie, c_graded, ms_features, ms_prios, demographics])
-    # take only the ones who agreed to take the pill
-    # for each type of zombie answer, calculate the ms_features thingy
-    for answer in rating_labels:
-        combined_zombie_ans = combined[combined["Would you take the pill?"] == answer]
-        # calculate ms feature thingy
-        ms_features_order_df, feature_colors = calculate_moral_consideration_features(ms_features_df=combined_zombie_ans,
-                                                                                      result_path=result_path,
-                                                                                      save_prefix=f"ms_features_zombie{answer}_",
-                                                                                      feature_order_df=None,
-                                                                                      feature_color_dict=None)
-    combined.to_csv(os.path.join(result_path, f"zombie_with_extra_info.csv"), index=False)
+    if feature_order_df:
+        """
+        Cross between the zombie-pill and the features people value most for moral considerations. 
+        Do people who agree to be zombies have something in common in terms of what they value for MS? (as from their 
+        reply to the zombie question they do not value consciousness)
+        """
+        ms_features = analysis_dict["moral_considerations_features"].copy()
+        c_graded = analysis_dict["consciousness_graded"].copy()
+        ms_prios = analysis_dict["moral_considerations_prios"].copy()
+        demographics = analysis_dict["demographics"].copy()
+        # merge the dfs
+        combined = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID]),
+                          [df_zombie, c_graded, ms_features, ms_prios, demographics])
+        # take only the ones who agreed to take the pill
+        # for each type of zombie answer, calculate the ms_features thingy
+        for answer in rating_labels:
+            combined_zombie_ans = combined[combined["Would you take the pill?"] == answer]
+            # calculate ms feature thingy
+            ms_features_order_df, feature_colors = calculate_moral_consideration_features(
+                ms_features_df=combined_zombie_ans,
+                result_path=result_path,
+                save_prefix=f"ms_features_zombie{answer}_",
+                feature_order_df=feature_order_df,
+                feature_color_dict=feature_color_map)
+        combined.to_csv(os.path.join(result_path, f"zombie_with_extra_info.csv"), index=False)
     return
 
 
 def calculate_moral_consideration_features(ms_features_df, result_path, save_prefix="",
                                            feature_order_df=None, feature_color_dict=None):
-
     # for dummy creation
-    ms_features_copy = ms_features_df[[process_survey.COL_ID, "What do you think is important for moral considerations?"]]
+    ms_features_copy = ms_features_df[
+        [process_survey.COL_ID, "What do you think is important for moral considerations?"]]
 
     def create_feature_dummies(row):
         return {feature: 1 if feature in row else 0 for feature in survey_mapping.ALL_FEATURES}
 
-    dummies_df = ms_features_copy["What do you think is important for moral considerations?"].apply(create_feature_dummies).apply(pd.Series)
+    dummies_df = ms_features_copy["What do you think is important for moral considerations?"].apply(
+        create_feature_dummies).apply(pd.Series)
 
     """
     this is the proportion of selecting each category NORMALIZED by the TOTAL NUMBER of RESPONSES (i.e., the number
@@ -708,25 +742,33 @@ def calculate_moral_consideration_features(ms_features_df, result_path, save_pre
     corresponding number of "single" dummy subjects, so that we can compare it to the "most important feature" below]
     """
     # proportion several = how many of all people selected a given feature
-    proportions_several = (dummies_df.mean() * 100).to_frame(name="Proportion_all").reset_index(drop=False, inplace=False)
-    proportions_several = proportions_several.sort_values("Proportion_all", ascending=False).reset_index(drop=True, inplace=False)
+    proportions_several = (dummies_df.mean() * 100).to_frame(name="Proportion_all").reset_index(drop=False,
+                                                                                                inplace=False)
+    proportions_several = proportions_several.sort_values("Proportion_all", ascending=False).reset_index(drop=True,
+                                                                                                         inplace=False)
     category_order = proportions_several["index"].tolist()
 
     # if participants selected only one to begin with, we didn't ask them to select which they think is the most important
     # see it here:
     # filtered_data = ms_features_df[ms_features_df["Which do you think is the most important for moral considerations?"].isna()]
-    ms_features_df.loc[:, "Which do you think is the most important for moral considerations?"] = ms_features_df["Which do you think is the most important for moral considerations?"].fillna(ms_features_df["What do you think is important for moral considerations?"])
+    ms_features_df.loc[:, "Which do you think is the most important for moral considerations?"] = ms_features_df[
+        "Which do you think is the most important for moral considerations?"].fillna(
+        ms_features_df["What do you think is important for moral considerations?"])
     # now after we have the most important, plot it
-    most_important = ms_features_df[[process_survey.COL_ID, "Which do you think is the most important for moral considerations?"]]
+    most_important = ms_features_df[
+        [process_survey.COL_ID, "Which do you think is the most important for moral considerations?"]]
     """
     what the below means is counting the proportions of selecting a single feature. Note that these are amts, 
     and we do not treat within-subject things here. 
     """
     # proportions_one  = how many of all people selected this feature as the most important one
-    proportions_one = (most_important["Which do you think is the most important for moral considerations?"].value_counts(
+    proportions_one = (
+                most_important["Which do you think is the most important for moral considerations?"].value_counts(
                     normalize=True) * 100).to_frame(name="Proportion_one").reset_index(drop=False, inplace=False)
-    proportions_one.rename(columns={"Which do you think is the most important for moral considerations?": "index"}, inplace=True)
-    proportions_one["index"] = pd.Categorical(proportions_one["index"], categories=category_order, ordered=True)  # match order
+    proportions_one.rename(columns={"Which do you think is the most important for moral considerations?": "index"},
+                           inplace=True)
+    proportions_one["index"] = pd.Categorical(proportions_one["index"], categories=category_order,
+                                              ordered=True)  # match order
     proportions_one = proportions_one.sort_values("index").reset_index(drop=True, inplace=False)
 
     """
@@ -738,7 +780,8 @@ def calculate_moral_consideration_features(ms_features_df, result_path, save_pre
     df_diff["index"] = category_order
     df_diff["Proportion_diff"] = proportions_several["Proportion_all"] - proportions_one["Proportion_one"]
 
-    df_unified = reduce(lambda left, right: pd.merge(left, right, on=["index"], how="outer"), [proportions_several, proportions_one, df_diff])
+    df_unified = reduce(lambda left, right: pd.merge(left, right, on=["index"], how="outer"),
+                        [proportions_several, proportions_one, df_diff])
     df_unified.sort_values(by=["Proportion_all"], ascending=False, inplace=True)  # sort by overall proportions
     df_unified.reset_index(drop=True, inplace=True)
     all_people = ms_features_copy.shape[0]  # total number of people this was calculated on
@@ -755,7 +798,8 @@ def calculate_moral_consideration_features(ms_features_df, result_path, save_pre
         plotter.plot_categorical_bars_layered(categories_prop_df=df_unified, category_col="index",
                                               full_data_col="Proportion_all", partial_data_col="Proportion_one",
                                               categories_colors=feature_color_dict, save_path=result_path,
-                                              save_name=f"{save_prefix}important_features", fmt="svg", y_min=0, y_max=101,
+                                              save_name=f"{save_prefix}important_features", fmt="svg", y_min=0,
+                                              y_max=101,
                                               y_skip=10, inch_w=20, inch_h=12, order=None)
     else:
         plotter.plot_categorical_bars_layered(categories_prop_df=df_unified, category_col="index",
@@ -768,7 +812,7 @@ def calculate_moral_consideration_features(ms_features_df, result_path, save_pre
     return df_unified, feature_color_dict
 
 
-def moral_consideration_features(analysis_dict, save_path):
+def moral_consideration_features(analysis_dict, save_path, df_earth_cluster=None):
     """
     Answers to the question about which features they think are important for moral considerations >
     This method is only for selecting the population; the actual plotting etc is done by calculate_moral_consideration_features
@@ -778,7 +822,7 @@ def moral_consideration_features(analysis_dict, save_path):
     if not os.path.isdir(result_path):
         os.mkdir(result_path)
 
-    ms_features = analysis_dict["moral_considerations_features"]
+    ms_features = analysis_dict["moral_considerations_features"].copy()
     ms_features.to_csv(os.path.join(result_path, "moral_considerations_features.csv"), index=False)
 
     ms_features_order_df, feature_colors = calculate_moral_consideration_features(ms_features_df=ms_features,
@@ -796,49 +840,61 @@ def moral_consideration_features(analysis_dict, save_path):
     # prepare the data
     experience_df_copy = analysis_dict["consciousness_exp"].copy()
     demographics_df_copy = analysis_dict["demographics"].copy()
-    demographics_df_copy = demographics_df_copy[[process_survey.COL_ID, "What is your education background?", "In what topic?"]]
+    demographics_df_copy = demographics_df_copy[
+        [process_survey.COL_ID, "What is your education background?", "In what topic?"]]
     df_list = [ms_features, experience_df_copy, demographics_df_copy]
 
     # merge the three dfs
     ms_features_experience = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID]), df_list)
 
     # self-reported consciousness experts (rated 3 and up)
-    cons_experts = ms_features_experience[ms_features_experience[survey_mapping.Q_CONSC_EXP] > 2].reset_index(drop=True, inplace=False)
+    cons_experts = ms_features_experience[ms_features_experience[survey_mapping.Q_CONSC_EXP] > 2].reset_index(drop=True,
+                                                                                                              inplace=False)
 
     # experts: only academics (experts & have higher education)
     # "contains" as they could have made SEVERAL choices
-    cons_experts_academics = cons_experts[(cons_experts["What is your education background?"] == survey_mapping.EDU_POSTSEC)
-                                          | (cons_experts["What is your education background?"] == survey_mapping.EDU_GRAD)].reset_index(drop=True, inplace=False)
+    cons_experts_academics = cons_experts[
+        (cons_experts["What is your education background?"] == survey_mapping.EDU_POSTSEC)
+        | (cons_experts["What is your education background?"] == survey_mapping.EDU_GRAD)].reset_index(drop=True,
+                                                                                                       inplace=False)
 
     # experts who are NOT academics
-    cons_experts_nonAcademics = cons_experts[~cons_experts[process_survey.COL_ID].isin(cons_experts_academics[process_survey.COL_ID])]
-
+    cons_experts_nonAcademics = cons_experts[
+        ~cons_experts[process_survey.COL_ID].isin(cons_experts_academics[process_survey.COL_ID])]
 
     """
     Calculate proportions - based on expertise
     """
     # [1] academics who marked that their experience with consciousness is specifically derived from *STUDYING* consciousness
     # Clean up the column (strip whitespace and ensure string type)
-    cons_experts_academics["Please specify your experience with this topic"] = cons_experts_academics["Please specify your experience with this topic"].astype(str).str.strip()
-    cons_experts_academics_expAcademia = cons_experts_academics[cons_experts_academics["Please specify your experience with this topic"].str.contains(re.escape(survey_mapping.ANS_C_ACADEMIA), na=False, case=False)]
-    cons_experts_academics_expAcademia_props, c = calculate_moral_consideration_features(ms_features_df=cons_experts_academics_expAcademia,
-                                                                                         result_path=result_path,
-                                                                                         save_prefix="c-experts_expAcademia_",
-                                                                                         feature_order_df=ms_features_order_df,  # have the order YOKED to the original one
-                                                                                         feature_color_dict=feature_colors)
+    cons_experts_academics["Please specify your experience with this topic"] = cons_experts_academics[
+        "Please specify your experience with this topic"].astype(str).str.strip()
+    cons_experts_academics_expAcademia = cons_experts_academics[
+        cons_experts_academics["Please specify your experience with this topic"].str.contains(
+            re.escape(survey_mapping.ANS_C_ACADEMIA), na=False, case=False)]
+    cons_experts_academics_expAcademia_props, c = calculate_moral_consideration_features(
+        ms_features_df=cons_experts_academics_expAcademia,
+        result_path=result_path,
+        save_prefix="c-experts_expAcademia_",
+        feature_order_df=ms_features_order_df,  # have the order YOKED to the original one
+        feature_color_dict=feature_colors)
 
     # these are [self-porcalimed experts] & [have higher education] & [did NOT say their experience is from studying consciousness]
-    cons_experts_academics_rest = cons_experts_academics[~cons_experts_academics[process_survey.COL_ID].isin(cons_experts_academics_expAcademia[process_survey.COL_ID])]
+    cons_experts_academics_rest = cons_experts_academics[
+        ~cons_experts_academics[process_survey.COL_ID].isin(cons_experts_academics_expAcademia[process_survey.COL_ID])]
 
     # [2] experts who are not from academia - either academics whose C experience is from other things, OR non-academics
-    cons_experts_expNonAcademia = pd.concat([cons_experts_nonAcademics, cons_experts_academics_rest], ignore_index=True).drop_duplicates(keep=False)
-    cons_experts_expNonAcademia_props, c = calculate_moral_consideration_features(ms_features_df=cons_experts_expNonAcademia,
-                                                                                  result_path=result_path,
-                                                                                  save_prefix="c-experts_expNonAcademia_",
-                                                                                  feature_order_df=ms_features_order_df,
-                                                                                  feature_color_dict=feature_colors)
+    cons_experts_expNonAcademia = pd.concat([cons_experts_nonAcademics, cons_experts_academics_rest],
+                                            ignore_index=True).drop_duplicates(keep=False)
+    cons_experts_expNonAcademia_props, c = calculate_moral_consideration_features(
+        ms_features_df=cons_experts_expNonAcademia,
+        result_path=result_path,
+        save_prefix="c-experts_expNonAcademia_",
+        feature_order_df=ms_features_order_df,
+        feature_color_dict=feature_colors)
     # [3] people who rated 1/2 (not experts)
-    cons_nonExperts = ms_features_experience[ms_features_experience[survey_mapping.Q_CONSC_EXP] < 3].reset_index(drop=True, inplace=False)
+    cons_nonExperts = ms_features_experience[ms_features_experience[survey_mapping.Q_CONSC_EXP] < 3].reset_index(
+        drop=True, inplace=False)
     cons_nonExperts_props, c = calculate_moral_consideration_features(ms_features_df=cons_nonExperts,
                                                                       result_path=result_path,
                                                                       save_prefix="c-nonExperts_",
@@ -847,10 +903,13 @@ def moral_consideration_features(analysis_dict, save_path):
 
     # [4] people who ARE experts (3/4/5), have NO higher education [highschool at best], but their expertise DOES stem
     # from academic background (studied/teach these topics) somehow..
-    cons_experts_nonAcademics_expYesAcademia = cons_experts_nonAcademics[cons_experts_nonAcademics["Please specify your experience with this topic"].str.contains(re.escape(survey_mapping.ANS_C_ACADEMIA), na=False, case=False)]
+    cons_experts_nonAcademics_expYesAcademia = cons_experts_nonAcademics[
+        cons_experts_nonAcademics["Please specify your experience with this topic"].str.contains(
+            re.escape(survey_mapping.ANS_C_ACADEMIA), na=False, case=False)]
 
     # either: academic experts whose expertise is not from academia [2], non-experts [3], non-academic experts whose experience IS from academia [4]
-    rest = pd.concat([cons_experts_expNonAcademia, cons_nonExperts, cons_experts_nonAcademics_expYesAcademia], ignore_index=True)
+    rest = pd.concat([cons_experts_expNonAcademia, cons_nonExperts, cons_experts_nonAcademics_expYesAcademia],
+                     ignore_index=True)
     rest_props, c = calculate_moral_consideration_features(ms_features_df=rest, result_path=result_path,
                                                            save_prefix="c-not[exps_academic_expFromAcademia]_",
                                                            feature_order_df=ms_features_order_df,
@@ -871,12 +930,42 @@ def moral_consideration_features(analysis_dict, save_path):
     expsAcedemic_v_nonExps.to_csv(os.path.join(result_path, f"z_test_expsAcademic_nonExps.csv"), index=False)
 
     # experts from academia vs. experts not from academia
-    expsAcedemic_v_expNonAcademic = helper_funcs.two_proportion_ztest(col_items="index", col_prop="Proportion_all", col_n="N",
+    expsAcedemic_v_expNonAcademic = helper_funcs.two_proportion_ztest(col_items="index", col_prop="Proportion_all",
+                                                                      col_n="N",
                                                                       group1="experts-academic",
                                                                       df1=cons_experts_academics_expAcademia_props,
                                                                       group2="experts-nonAcademia",
                                                                       df2=cons_experts_expNonAcademia_props)
-    return
+
+    """
+    Relationship between Earth-in-danger clusters and moral consideration features
+    """
+    if df_earth_cluster is not None:  # we have an actual df
+        clusters = sorted(df_earth_cluster["Cluster"].unique().tolist())  # list all the possible clusters
+        cluster_props = {clusters[i]: pd.DataFrame() for i in range(len(clusters))}
+        for cluster in clusters:
+            df_cluster = df_earth_cluster[df_earth_cluster["Cluster"] == cluster]  # subset
+            cluster_subs = df_cluster[process_survey.COL_ID].tolist()
+            ms_features_cluster = ms_features[ms_features[process_survey.COL_ID].isin(cluster_subs)].reset_index(drop=True, inplace=False)
+            cluster_order_df, cluster_colors = calculate_moral_consideration_features(ms_features_df=ms_features_cluster,
+                                                                                      result_path=result_path,
+                                                                                      save_prefix=f"earthInDanger_cluster{cluster}_",
+                                                                                      feature_order_df=ms_features_order_df,
+                                                                                      feature_color_dict=feature_colors)
+            cluster_props[cluster] = cluster_order_df
+
+        # test statistical difference between pairs of clusters
+        for cluster_pair in combinations(clusters, 2):  # for each pair of clusters
+            cluster_comp = helper_funcs.two_proportion_ztest(col_items="index", col_prop="Proportion_all",
+                                                                      col_n="N",
+                                                                      group1=f"cluster-{cluster_pair[0]}",
+                                                                      df1=cluster_props[cluster_pair[0]],
+                                                                      group2=f"cluster-{cluster_pair[1]}",
+                                                                      df2=cluster_props[cluster_pair[1]])
+            cluster_comp.to_csv(os.path.join(result_path, f"z_test_earthInDanger_cluster{cluster_pair[0]}_cluster{cluster_pair[1]}.csv"), index=False)
+
+    # return the order and colors so other questions can use them
+    return ms_features_order_df, feature_colors
 
 
 def moral_considreation_prios(analysis_dict, save_path):
@@ -1036,11 +1125,13 @@ def graded_consciousness(analysis_dict, save_path):
                                                   survey_mapping.Q_GRADED_MATTERMORE] == survey_mapping.ANS_NO)]
     not_equal_count = df_graded_exp_filtered.shape[0]  # only those who think C is not equal saw this question
     yes_count = \
-    df_graded_exp_filtered[df_graded_exp_filtered[survey_mapping.Q_GRADED_MATTERMORE] == survey_mapping.ANS_YES].shape[
-        0]
+        df_graded_exp_filtered[
+            df_graded_exp_filtered[survey_mapping.Q_GRADED_MATTERMORE] == survey_mapping.ANS_YES].shape[
+            0]
     yes_prop = 100 * (yes_count / not_equal_count)
     no_count = \
-    df_graded_exp_filtered[df_graded_exp_filtered[survey_mapping.Q_GRADED_MATTERMORE] == survey_mapping.ANS_NO].shape[0]
+        df_graded_exp_filtered[
+            df_graded_exp_filtered[survey_mapping.Q_GRADED_MATTERMORE] == survey_mapping.ANS_NO].shape[0]
     no_prop = 100 * (no_count / not_equal_count)
 
     df_graded_extra = pd.DataFrame({"N": [all_count], "N_interestQ": [not_equal_count],
@@ -1095,9 +1186,10 @@ def consciousness_intelligence(analysis_dict, save_path):
     con_intellect_d.to_csv(os.path.join(result_path, "common_denominator.csv"), index=False)
     answers = con_intellect_d[common_denominator].tolist()
 
-    information_processing = [ex for ex in answers if (re.search("process and interpret information", ex, re.IGNORECASE) or
-                                                       (re.search("processing power", ex, re.IGNORECASE)) or
-                                                       (re.search("computation", ex, re.IGNORECASE)))]
+    information_processing = [ex for ex in answers if
+                              (re.search("process and interpret information", ex, re.IGNORECASE) or
+                               (re.search("processing power", ex, re.IGNORECASE)) or
+                               (re.search("computation", ex, re.IGNORECASE)))]
     cognition = [ex for ex in answers if (re.search("cognition", ex, re.IGNORECASE) or
                                           (re.search("cognitive processing", ex, re.IGNORECASE)) or
                                           (re.search("cognitive system", ex, re.IGNORECASE)) or
@@ -1112,7 +1204,7 @@ def consciousness_intelligence(analysis_dict, save_path):
                                            re.search("adaptation", ex, re.IGNORECASE) or
                                            re.search("advanced brain structure", ex, re.IGNORECASE))]
     emotions = [ex for ex in answers if (re.search("emotion", ex, re.IGNORECASE) or
-                                                 (re.search("emotions", ex, re.IGNORECASE)))]
+                                         (re.search("emotions", ex, re.IGNORECASE)))]
     goals_actions = [ex for ex in answers if (re.search("goals", ex, re.IGNORECASE) or
                                               (re.search("actions", ex, re.IGNORECASE)) or
                                               (re.search("decision making", ex, re.IGNORECASE)) or
@@ -1133,7 +1225,6 @@ def consciousness_intelligence(analysis_dict, save_path):
     # save the misc ones
     rest_df = pd.DataFrame({f"common denominator_miscellaneous examples": rest})
     rest_df.to_csv(os.path.join(result_path, "common denominator_examples_misc.csv"), index=False)
-
 
     return
 
@@ -1169,8 +1260,6 @@ def demographics(analysis_dict, save_path):
 
     merged_df = pd.merge(age_counts_df, age_props_df, on=age)
     merged_df.to_csv(os.path.join(result_path, "age.csv"), index=False)
-
-
 
     """
     Country of Residence
@@ -1379,10 +1468,12 @@ def demographics(analysis_dict, save_path):
     substantial_df = employment_props.loc[employment_props["proportion"] > threshold]
     substantial_list = substantial_df[employment].tolist()
 
-    category_counts = [employment_counts[employment] if employment in employment_counts else 0 for employment in employment_order]
+    category_counts = [employment_counts[employment] if employment in employment_counts else 0 for employment in
+                       employment_order]
 
     plotter.plot_pie(categories_names=employment_order,
-                     categories_counts=category_counts,  #[employment_counts[employment] for employment in employment_order]
+                     categories_counts=category_counts,
+                     #[employment_counts[employment] for employment in employment_order]
                      categories_colors=employment_colors, title=f"{employment}", edge_color="none",
                      pie_direction=180, annot_groups=True, annot_group_selection=substantial_list, annot_props=False,
                      save_path=result_path, save_name=f"employment", format="png")
@@ -1425,7 +1516,6 @@ def gender_cross(analysis_dict, save_path):
 
 
 def experience(analysis_dict, save_path):
-
     # save path
     result_path = os.path.join(save_path, "experience")
     if not os.path.isdir(result_path):
@@ -1460,7 +1550,6 @@ def experience(analysis_dict, save_path):
 
     experience_counts = pd.concat([ethics_counts, animal_counts, ai_counts, consciousness_counts], ignore_index=True)
     experience_counts.to_csv(os.path.join(result_path, "experience_proportions.csv"), index=False)
-
 
     """
     Does experience with animals affect answers related to animal C / MS ? 
@@ -1530,29 +1619,38 @@ def experience(analysis_dict, save_path):
     return
 
 
-def analyze_survey(sub_df, analysis_dict, save_path):
+def analyze_survey(sub_df, analysis_dict, save_path, load=False):
     """
     The method which manages all the processing of specific survey data for analyses.
     :param sub_df: the dataframe of all participants' responses
     :param analysis_dict: dictionary where key=topic, value=a dataframe containing all the columns relevant for this
     topic/section
     :param save_path: where the results will be saved (csvs, plots)
+    :param load: for stuff that takes a ton of time to run every time
     """
 
-    moral_consideration_features(analysis_dict, save_path)
-    other_creatures(analysis_dict, save_path, sort_together=False)
+    if load:  # load the earth-in-danger things
+        df_earth_cluster = pd.read_csv(os.path.join(save_path, "earth_danger", f"earth_danger_clusters.csv"))
 
-    """
+    else:
+        df_earth_cluster = earth_in_danger(analysis_dict, save_path)
+
+    other_creatures(analysis_dict=analysis_dict, save_path=save_path,
+                    sort_together=False, df_earth_cluster=df_earth_cluster)
+    ms_features_order_df, feature_colors = moral_consideration_features(analysis_dict=analysis_dict,
+                                                                        save_path=save_path,
+                                                                        df_earth_cluster=df_earth_cluster)
+    zombie_pill(analysis_dict, save_path, feature_order_df=ms_features_order_df, feature_color_map=feature_colors)
+
+
     consciousness_intelligence(analysis_dict, save_path)
     moral_considreation_prios(analysis_dict, save_path)
-    earth_in_danger(analysis_dict, save_path)
     graded_consciousness(analysis_dict, save_path)
     gender_cross(analysis_dict, save_path)  # move to after the individuals
     demographics(analysis_dict, save_path)
     experience(analysis_dict, save_path)
-    
-    zombie_pill(analysis_dict, save_path)
+
     kill_for_test(analysis_dict, save_path)
     ics(analysis_dict, save_path)
-    """
+
     return

@@ -14,7 +14,31 @@ from scipy.stats import ttest_ind, ttest_1samp, ttest_rel
 from scipy.spatial.distance import cdist
 from sklearn.utils import shuffle
 from statsmodels.stats.proportion import proportions_ztest
+from statsmodels.multivariate.manova import MANOVA
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
 import plotter
+
+
+def fit_glm(data, columns, by):
+    results = dict()
+    for col in columns:  # Perform a GLM for each column, with the cluster as a categorical predictor.
+        formula = f"{col} ~ {by}"  # Model each column against the cluster
+        model = smf.ols(formula, data=data).fit()  # OLS as a simpler alternative to ordinal regression
+        results[col] = model.summary()
+
+    for entity, result in results.items():  # Check if the cluster significantly predicts the rating for each entity
+        print(f"Results for {entity}:")
+        print(result)
+    return
+
+
+def manova_test(data, columns, by):
+    columns_escaped = [f"`{col}`" for col in columns]
+    formula = f"{' + '.join(columns_escaped)} ~ {by}"
+    manova = MANOVA.from_formula(formula, data=data)
+    print(manova.mv_test())
+    return
 
 
 def chi_squared_test(contingency_table, include_expected=False):
