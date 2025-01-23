@@ -739,7 +739,7 @@ def calculate_moral_consideration_features(ms_features_df, result_path, save_pre
     df_diff["Proportion_diff"] = proportions_several["Proportion_all"] - proportions_one["Proportion_one"]
 
     df_unified = reduce(lambda left, right: pd.merge(left, right, on=["index"], how="outer"), [proportions_several, proportions_one, df_diff])
-    df_unified.sort_values(by=["Proportion_all"], ascending=False, inplace=True)  # sort by overall proportions
+    df_unified.sort_values(by=["Proportion_all"], ascending=False, inplace=False).reset_index(drop=True, inplace=True)  # sort by overall proportions
     all_people = ms_features_copy.shape[0]  # total number of people this was calculated on
     df_unified["N"] = all_people
     df_unified.to_csv(os.path.join(result_path, f"{save_prefix}important_features.csv"), index=False)
