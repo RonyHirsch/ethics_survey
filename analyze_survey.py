@@ -973,7 +973,7 @@ def moral_consideration_features(analysis_dict, save_path, df_earth_cluster=None
     return ms_features_order_df, feature_colors
 
 
-def moral_considreation_prios(analysis_dict, save_path):
+def moral_considreation_prios(analysis_dict, save_path, df_earth_cluster=None):
     """
     Answers to the question about whether different creatures deserve moral considerations
     """
@@ -982,7 +982,7 @@ def moral_considreation_prios(analysis_dict, save_path):
     if not os.path.isdir(result_path):
         os.mkdir(result_path)
 
-    ms_prios = analysis_dict["moral_considerations_prios"]
+    ms_prios = analysis_dict["moral_considerations_prios"].copy()
     ms_prios.to_csv(os.path.join(result_path, "moral_decisions_prios.csv"), index=False)
 
     questions = [c for c in ms_prios.columns if c.startswith("Do you think")]
@@ -1003,7 +1003,7 @@ def moral_considreation_prios(analysis_dict, save_path):
     Relations to graded consciousness: How many people who think some people should have higher MS than others think
     that consciousness is a graded phenomenon?
     """
-    c_graded = analysis_dict["consciousness_graded"]
+    c_graded = analysis_dict["consciousness_graded"].copy()
     q_mc_human_prio = "Do you think some people should have a higher moral status than others?"
     q_mc_human_prio_why = "What characterizes people with higher moral status?"
     ms_prios_relevant = ms_prios.loc[:, [process_survey.COL_ID, q_mc_human_prio, q_mc_human_prio_why]]
@@ -1046,6 +1046,33 @@ def moral_considreation_prios(analysis_dict, save_path):
     for human_prio in human_prios.keys():
         df = human_prios[human_prio]
         plot_graded_consciousness_given_df(df=df, save_path=result_path, prefix="", suffix=f"_{human_prio}")
+
+
+    """
+    If df_earth_cluster is not None, take the clustering from the Earth-in-danger scenarios, and see if they apply 
+    here as well. 
+    """
+    if df_earth_cluster is not None:
+        ncon_moral_prio_q = "Do you think non-conscious creatures/systems should be taken into account in moral decisions?"
+        people_moral_prio_q = "Do you think some people should have a higher moral status than others?"
+
+        q_map = [ncon_moral_prio_q, people_moral_prio_q]
+        result_list = list()
+        for q in q_map:
+            ms_prios_relevant = ms_prios.loc[:, [process_survey.COL_ID, q]]
+            df_clusters = df_earth_cluster[[process_survey.COL_ID, "Cluster"]]
+            ms_prios_relevant_with_cluster = pd.merge(ms_prios_relevant, df_clusters, how="inner", on=process_survey.COL_ID).reset_index(drop=True,inplace=False)
+            """
+            create a contingency table for a chi-squared test to check whether the clusters significantly differ in their 
+            proportion of people who said "Yes"
+            """
+            contingency_table = pd.crosstab(ms_prios_relevant_with_cluster["Cluster"], ms_prios_relevant_with_cluster[q])
+            chisquare_result = helper_funcs.chi_squared_test(contingency_table=contingency_table)
+            chisquare_result[f"Question"] = [q]
+            chisquare_result[f"per"] = ["Earth-in-danger cluster"]
+            result_list.append(chisquare_result)
+        result_df = pd.concat(result_list)
+        result_df.to_csv(os.path.join(result_path, f"chisqared_earthInDanger_clusters_per_Q.csv"), index=False)
 
     return
 
@@ -1640,6 +1667,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     else:
         df_earth_cluster = earth_in_danger(analysis_dict, save_path)
 
+    moral_considreation_prios(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
     other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False, df_earth_cluster=df_earth_cluster)
     ms_features_order_df, feature_colors = moral_consideration_features(analysis_dict=analysis_dict,
                                                                         save_path=save_path,
@@ -1647,7 +1675,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     zombie_pill(analysis_dict, save_path, feature_order_df=ms_features_order_df, feature_color_map=feature_colors)
 
     consciousness_intelligence(analysis_dict, save_path)
-    moral_considreation_prios(analysis_dict, save_path)
+
     graded_consciousness(analysis_dict, save_path)
     gender_cross(analysis_dict, save_path)  # move to after the individuals
     demographics(analysis_dict, save_path)
