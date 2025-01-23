@@ -52,7 +52,40 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
     items = survey_mapping.other_creatures_general  # all rated items
     topic_name_map = {"c": "Consciousness", "ms": "Moral Status"}
 
-    # melt to a long format
+    # experience columns
+    animal_experience_df = analysis_dict["animal_exp"].loc[:,
+                           [process_survey.COL_ID, survey_mapping.Q_ANIMAL_EXP]].rename(
+        columns={survey_mapping.Q_ANIMAL_EXP: "exp_animals"}, inplace=False)
+    ai_experience_df = analysis_dict["ai_exp"].loc[:, [process_survey.COL_ID, survey_mapping.Q_AI_EXP]].rename(
+        columns={survey_mapping.Q_AI_EXP: "exp_ai"}, inplace=False)
+    ethics_experience_df = analysis_dict["ethics_exp"].loc[:,
+                           [process_survey.COL_ID, survey_mapping.Q_ETHICS_EXP]].rename(
+        columns={survey_mapping.Q_ETHICS_EXP: "exp_ethics"}, inplace=False)
+    con_experience_df = analysis_dict["consciousness_exp"].loc[:,
+                        [process_survey.COL_ID, survey_mapping.Q_CONSC_EXP]].rename(
+        columns={survey_mapping.Q_CONSC_EXP: "exp_consc"}, inplace=False)
+    demos_df = analysis_dict["demographics"].loc[:, [process_survey.COL_ID, "How old are you?"]].rename(
+        columns={"How old are you?": "age"}, inplace=False)
+
+    """
+    Cross people's ratings with their experience 
+    """
+    experience_types = ["exp_animals", "exp_ai", "exp_ethics", "exp_consc"]
+    item_cols = df_ms.columns[1:].tolist() + df_c.columns[1:].tolist()
+    df_list = [df.copy(), animal_experience_df, ai_experience_df, ethics_experience_df, con_experience_df]
+    df_with_experience = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID]), df_list)
+
+    # permanova per each experience column to see if there's any type of experience that affects people's rating patterns
+    permanova_list = list()
+    for exp in experience_types:
+        permanova_result = helper_funcs.permanova_on_pairwise_distances(data=df_with_experience, columns=item_cols, by=exp)
+        permanova_result["Experience type"] = [exp]
+        permanova_list.append(permanova_result)
+    permanova_df = pd.concat(permanova_list)
+    permanova_df.to_csv(os.path.join(result_path, f"permanova_ratings_per_experience_types.cvs"), index=False)
+
+
+    # melt the df to a long format
     long_data = pd.melt(df, id_vars=[process_survey.COL_ID], var_name="Item_Topic",
                         value_name="Rating")
     long_data[["Topic", "Item"]] = long_data["Item_Topic"].str.split('_', expand=True)
@@ -69,24 +102,9 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
     long_data_mean_rating_stats.to_csv(os.path.join(result_path, f"c_v_ms_avg_per_item_stats.csv"),
                                        index=True)  # in 'describe' the index is the desc name
 
-    # add some demographic numerical columns
-    animal_experience_df = analysis_dict["animal_exp"].loc[:,
-                           [process_survey.COL_ID, survey_mapping.Q_ANIMAL_EXP]].rename(
-        columns={survey_mapping.Q_ANIMAL_EXP: "exp_animals"}, inplace=False)
-    ai_experience_df = analysis_dict["ai_exp"].loc[:, [process_survey.COL_ID, survey_mapping.Q_AI_EXP]].rename(
-        columns={survey_mapping.Q_AI_EXP: "exp_ai"}, inplace=False)
-    ethics_experience_df = analysis_dict["ethics_exp"].loc[:,
-                           [process_survey.COL_ID, survey_mapping.Q_ETHICS_EXP]].rename(
-        columns={survey_mapping.Q_ETHICS_EXP: "exp_ethics"}, inplace=False)
-    con_experience_df = analysis_dict["consciousness_exp"].loc[:,
-                        [process_survey.COL_ID, survey_mapping.Q_CONSC_EXP]].rename(
-        columns={survey_mapping.Q_CONSC_EXP: "exp_consc"}, inplace=False)
-    demos_df = analysis_dict["demographics"].loc[:, [process_survey.COL_ID, "How old are you?"]].rename(
-        columns={"How old are you?": "age"}, inplace=False)
 
-    result_df = long_data.copy()
-    for dataframe in [animal_experience_df, ai_experience_df, ethics_experience_df, con_experience_df, demos_df]:
-        result_df = pd.merge(result_df, dataframe, on=[process_survey.COL_ID])
+    dataframes = [long_data.copy(), animal_experience_df, ai_experience_df, ethics_experience_df, con_experience_df, demos_df]
+    result_df = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID]), dataframes)
     result_df["non_human_animal"] = result_df["Item"].map(survey_mapping.other_creatures_isNonHumanAnimal)
     result_df.to_csv(os.path.join(result_path, "c_v_ms_long.csv"), index=False)
 
@@ -238,34 +256,12 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
         df_cols = df.columns.tolist()[1:]
         df_with_cluster = pd.merge(df, df_clusters, how="inner", on=process_survey.COL_ID).reset_index(drop=True, inplace=False)
         """
-        Check whether the clusters differ in their rating patterns by representing each subjec'ts overall ratings as 
+        Check whether the clusters differ in their rating patterns by representing each subject's overall ratings as 
         a vector, and comparing the distances between vectors within each cluster vs. between clusters.  
         """
-        permanova_result = helper_funcs.permanova_on_pairwise_distances(data=df_with_cluster,columns=df_cols, by="Cluster")
+        permanova_result = helper_funcs.permanova_on_pairwise_distances(data=df_with_cluster, columns=df_cols, by="Cluster")
         permanova_result.to_csv(os.path.join(result_path, f"permanova_ratings_per_earthInDanger_clusters.csv"),index=False)
 
-
-
-    ######################################################################################
-    """
-    Cluster people based on their rating tendencies of different entities' consciousness and moral status >> PER ITEM
-    """
-    df_nosub = df.iloc[:, 1:]  # only rating cols
-    label_maps = {**survey_mapping.MS_RATINGS, **survey_mapping.C_RATINGS}
-
-    df_pivot, kmeans = helper_funcs.perform_kmeans(df_pivot=df_nosub, clusters=2,
-                                                   save_path=result_path, save_name="items")
-    cluster_centroids = df_pivot.groupby("Cluster").mean()
-    cluster_sems = df_pivot.groupby("Cluster").sem()
-    helper_funcs.plot_cluster_centroids(cluster_centroids=cluster_centroids, cluster_sems=cluster_sems,
-                                        save_path=result_path, save_name="items", fmt="svg",
-                                        label_map=label_maps, binary=False,
-                                        threshold=2.5, overlaid=True, cluster_colors_overlaid=["#EDAE49", "#102E4A"])
-    pca_df, loadings, explained_variance = helper_funcs.perform_PCA(df_pivot=df_nosub, save_path=result_path,
-                                                                    save_name="items", components=2)
-    pca_with_cluster = helper_funcs.plot_kmeans_on_PCA(df_pivot=df_pivot, pca_df=pca_df,
-                                                       save_path=result_path, save_name="items")
-    pca_with_cluster.reset_index(inplace=True, drop=False)
 
     return
 
@@ -1667,8 +1663,9 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     else:
         df_earth_cluster = earth_in_danger(analysis_dict, save_path)
 
+    other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False,
+                    df_earth_cluster=df_earth_cluster)
     moral_considreation_prios(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
-    other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False, df_earth_cluster=df_earth_cluster)
     ms_features_order_df, feature_colors = moral_consideration_features(analysis_dict=analysis_dict,
                                                                         save_path=save_path,
                                                                         df_earth_cluster=df_earth_cluster)
