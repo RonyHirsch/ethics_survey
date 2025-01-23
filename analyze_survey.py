@@ -739,6 +739,7 @@ def calculate_moral_consideration_features(ms_features_df, result_path, save_pre
     df_diff["Proportion_diff"] = proportions_several["Proportion_all"] - proportions_one["Proportion_one"]
 
     df_unified = reduce(lambda left, right: pd.merge(left, right, on=["index"], how="outer"), [proportions_several, proportions_one, df_diff])
+    df_unified.sort_values(by=["Proportion_all"], ascending=False, inplace=True)  # sort by overall proportions
     all_people = ms_features_copy.shape[0]  # total number of people this was calculated on
     df_unified["N"] = all_people
     df_unified.to_csv(os.path.join(result_path, f"{save_prefix}important_features.csv"), index=False)
@@ -849,7 +850,6 @@ def moral_consideration_features(analysis_dict, save_path):
 
     # either: academic experts whose expertise is not from academia [2], non-experts [3], non-academic experts whose experience IS from academia [4]
     rest = pd.concat([cons_experts_expNonAcademia, cons_nonExperts, cons_experts_nonAcademics_expYesAcademia], ignore_index=True)
-
     rest_props, c = calculate_moral_consideration_features(ms_features_df=rest, result_path=result_path,
                                                            save_prefix="c-not[exps_academic_expFromAcademia]_",
                                                            feature_order_df=ms_features_order_df,
@@ -869,12 +869,12 @@ def moral_consideration_features(analysis_dict, save_path):
                                                                df2=cons_nonExperts_props)
     expsAcedemic_v_nonExps.to_csv(os.path.join(result_path, f"z_test_expsAcademic_nonExps.csv"), index=False)
 
-    # experts from academia vs. rest
-    expsAcedemic_v_rest = helper_funcs.two_proportion_ztest(col_items="index", col_prop="Proportion_all", col_n="N",
-                                                               group1="experts-academic",
-                                                               df1=cons_experts_academics_expAcademia_props,
-                                                               group2="rest",
-                                                               df2=rest_props)
+    # experts from academia vs. experts not from academia
+    expsAcedemic_v_expNonAcademic = helper_funcs.two_proportion_ztest(col_items="index", col_prop="Proportion_all", col_n="N",
+                                                                      group1="experts-academic",
+                                                                      df1=cons_experts_academics_expAcademia_props,
+                                                                      group2="experts-nonAcademia",
+                                                                      df2=cons_experts_expNonAcademia_props)
     return
 
 
@@ -1538,7 +1538,7 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     :param save_path: where the results will be saved (csvs, plots)
     """
 
-
+    moral_consideration_features(analysis_dict, save_path)
     other_creatures(analysis_dict, save_path, sort_together=False)
 
     """
@@ -1549,7 +1549,7 @@ def analyze_survey(sub_df, analysis_dict, save_path):
     gender_cross(analysis_dict, save_path)  # move to after the individuals
     demographics(analysis_dict, save_path)
     experience(analysis_dict, save_path)
-    moral_consideration_features(analysis_dict, save_path)
+    
     zombie_pill(analysis_dict, save_path)
     kill_for_test(analysis_dict, save_path)
     ics(analysis_dict, save_path)
