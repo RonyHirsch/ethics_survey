@@ -4,8 +4,10 @@ import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.mixture import GaussianMixture
 from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import silhouette_score, pairwise_distances
 from sklearn.preprocessing import StandardScaler
+from skbio.stats.distance import permanova
+from skbio.stats.distance import DistanceMatrix
 from kmodes.kprototypes import KPrototypes
 import scipy.stats as stats
 from scipy.stats import chi2_contingency
@@ -15,30 +17,48 @@ from scipy.spatial.distance import cdist
 from sklearn.utils import shuffle
 from statsmodels.stats.proportion import proportions_ztest
 from statsmodels.multivariate.manova import MANOVA
-import statsmodels.api as sm
-import statsmodels.formula.api as smf
 import plotter
 
 
-def fit_glm(data, columns, by):
-    results = dict()
-    for col in columns:  # Perform a GLM for each column, with the cluster as a categorical predictor.
-        formula = f"{col} ~ {by}"  # Model each column against the cluster
-        model = smf.ols(formula, data=data).fit()  # OLS as a simpler alternative to ordinal regression
-        results[col] = model.summary()
+def permanova_on_pairwise_distances(data, columns, by, dist_metric="euclidean", perm_num=1000):
+    """
+    PERMANOVA  (Permutational Multivariate Analysis of Variance) is a non-parametric method that tests whether two
+    or more groups whether are significantly different based on a categorical factor.
+    Here, the categorical factor we choose is a DISTANCE metric.
+    It is conceptually similar to ANOVA except that it operates on a distance matrix,
+    which allows for multivariate analysis. PERMANOVA computes a pseudo-F statistic.
+    https://scikit.bio/docs/dev/generated/skbio.stats.distance.permanova.html
 
-    for entity, result in results.items():  # Check if the cluster significantly predicts the rating for each entity
-        print(f"Results for {entity}:")
-        print(result)
-    return
+    It compares the variance of distances (e.g., Euclidean, Manhattan) within and between groups.
+    We will treat each person (=row) as a vector (data[sub, columns]),
+    compute the distance between all people's vectors,
+    and test if the distances between groups (="by") are significantly larger than within each group.
 
+    Statistical significance is assessed via a permutation test.
+    Unlike PCA + MANOVA, this method doesn't assume linear relationships and is robust to outliars.
+    """
 
-def manova_test(data, columns, by):
-    columns_escaped = [f"`{col}`" for col in columns]
-    formula = f"{' + '.join(columns_escaped)} ~ {by}"
-    manova = MANOVA.from_formula(formula, data=data)
-    print(manova.mv_test())
-    return
+    relevant_data = data[columns]
+    groups = data[by]
+    # pairwise distances
+    distance_matrix = pairwise_distances(relevant_data, metric=dist_metric)
+    # convert to DistanceMatrix: https://scikit.bio/docs/dev/generated/skbio.stats.distance.permanova.html
+    distance_matrix = DistanceMatrix(distance_matrix, ids=relevant_data.index.astype(str))
+    # permanova time
+    permanova_results = permanova(distance_matrix, grouping=list(groups), permutations=perm_num)
+    # save
+    # calculate dof
+    df_between = groups.nunique() - 1
+    df_residual = len(groups) - groups.nunique()
+    result_df = pd.DataFrame({
+        "test": [permanova_results["test statistic name"]],
+        "statistic": [permanova_results["test statistic"]],
+        "p": [permanova_results["p-value"]],
+        "df": [f"({df_between}, {df_residual})"],
+        "N": [permanova_results["sample size"]],
+        "Groups": [permanova_results["number of groups"]]
+    })
+    return result_df
 
 
 def chi_squared_test(contingency_table, include_expected=False):

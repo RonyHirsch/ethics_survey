@@ -228,20 +228,25 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
                                 fmt="svg",
                                 individual_df=None, id_col=None)
 
+
     """
     If df_earth_cluster is not None, take the clustering from the Earth-in-danger scenarios, and see if they apply 
     here as well. 
     """
     if df_earth_cluster is not None:
         df_clusters = df_earth_cluster[[process_survey.COL_ID, "Cluster"]]
-        c_cols = df_ms.columns.tolist()[1:]  # w/o response id
+        df_cols = df.columns.tolist()[1:]
+        df_with_cluster = pd.merge(df, df_clusters, how="inner", on=process_survey.COL_ID).reset_index(drop=True, inplace=False)
+        """
+        Check whether the clusters differ in their rating patterns by representing each subjec'ts overall ratings as 
+        a vector, and comparing the distances between vectors within each cluster vs. between clusters.  
+        """
+        permanova_result = helper_funcs.permanova_on_pairwise_distances(data=df_with_cluster,columns=df_cols, by="Cluster")
+        permanova_result.to_csv(os.path.join(result_path, f"permanova_ratings_per_earthInDanger_clusters.csv"),index=False)
 
-        ms_cols = df_c.columns.tolist()[1:]
-        df_ms_with_cluster = pd.merge(df_ms, df_clusters, how="inner", on=process_survey.COL_ID)
-        helper_funcs.manova_test(data=df_ms_with_cluster, columns=ms_cols, by="Cluster")
-        c = 2
 
-    #############################################
+
+    ######################################################################################
     """
     Cluster people based on their rating tendencies of different entities' consciousness and moral status >> PER ITEM
     """
@@ -695,7 +700,7 @@ def zombie_pill(analysis_dict, save_path, feature_order_df=None, feature_color_m
     zombie_data = pd.DataFrame(plot_data)
     zombie_data.to_csv(os.path.join(result_path, f"take_the_pill.csv"), index=True)  # index is descriptives' names
 
-    if feature_order_df:
+    if feature_order_df is not None:
         """
         Cross between the zombie-pill and the features people value most for moral considerations. 
         Do people who agree to be zombies have something in common in terms of what they value for MS? (as from their 
@@ -1619,7 +1624,7 @@ def experience(analysis_dict, save_path):
     return
 
 
-def analyze_survey(sub_df, analysis_dict, save_path, load=False):
+def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     The method which manages all the processing of specific survey data for analyses.
     :param sub_df: the dataframe of all participants' responses
@@ -1635,13 +1640,11 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=False):
     else:
         df_earth_cluster = earth_in_danger(analysis_dict, save_path)
 
-    other_creatures(analysis_dict=analysis_dict, save_path=save_path,
-                    sort_together=False, df_earth_cluster=df_earth_cluster)
+    other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False, df_earth_cluster=df_earth_cluster)
     ms_features_order_df, feature_colors = moral_consideration_features(analysis_dict=analysis_dict,
                                                                         save_path=save_path,
                                                                         df_earth_cluster=df_earth_cluster)
     zombie_pill(analysis_dict, save_path, feature_order_df=ms_features_order_df, feature_color_map=feature_colors)
-
 
     consciousness_intelligence(analysis_dict, save_path)
     moral_considreation_prios(analysis_dict, save_path)
