@@ -742,13 +742,14 @@ def zombie_pill(analysis_dict, save_path, feature_order_df=None, feature_color_m
 
 
 def calculate_moral_consideration_features(ms_features_df, result_path, save_prefix="",
-                                           feature_order_df=None, feature_color_dict=None):
+                                           feature_order_df=None, feature_list=survey_mapping.ALL_FEATURES,
+                                           feature_color_dict=None):
     # for dummy creation
     ms_features_copy = ms_features_df[
         [process_survey.COL_ID, "What do you think is important for moral considerations?"]]
 
     def create_feature_dummies(row):
-        return {feature: 1 if feature in row else 0 for feature in survey_mapping.ALL_FEATURES}
+        return {feature: 1 if feature in row else 0 for feature in feature_list}
 
     dummies_df = ms_features_copy["What do you think is important for moral considerations?"].apply(
         create_feature_dummies).apply(pd.Series)
@@ -982,6 +983,60 @@ def moral_consideration_features(analysis_dict, save_path, df_earth_cluster=None
                                                                       group2=f"cluster-{cluster_pair[1]}",
                                                                       df2=cluster_props[cluster_pair[1]])
             cluster_comp.to_csv(os.path.join(result_path, f"z_test_earthInDanger_cluster{cluster_pair[0]}_cluster{cluster_pair[1]}.csv"), index=False)
+
+
+        """
+        Relationship with consciousness/sensations/intentions: 
+        Group moral consideration features together to resemble i_c_s, and show what it does to the proportions
+        """
+
+        ms_features_q = "What do you think is important for moral considerations?"
+        ms_important_q = "Which do you think is the most important for moral considerations?"
+
+        features_groups = {  # 'c' group: self awareness, sensory abilities, something it is like to be
+            survey_mapping.ANS_SELF: "Consciousness",
+            survey_mapping.ANS_SENS: "Consciousness",
+            survey_mapping.ANS_PHENOMENOLOGY: "Consciousness",
+            # 'i' group: planning/goals, thinking, language
+            survey_mapping.ANS_PLAN: "Intentions",
+            survey_mapping.ANS_THINK: "Intentions",
+            survey_mapping.ANS_LANG: "Intentions",
+            # 's' group: valence
+            survey_mapping.ANS_SENTIENCE: "Sensations",
+            # other
+            survey_mapping.ANS_OTHER: "Other"
+        }
+
+        def map_strings(cell):  # Replace each substring using the mapping, keeping it unchanged if not in the mapping
+            result = []
+            matched_substrings = set()
+
+            for substring in survey_mapping.ALL_FEATURES:
+                if substring in cell and substring not in matched_substrings:
+                    result.append(features_groups[substring])
+                    matched_substrings.add(substring)
+
+            # remove duplicates (so we won't have 'intentions,intentions,intentions')
+            unique_result = sorted(set(result))
+            return ','.join(unique_result)
+
+        # map into groups
+        ms_features_grouped = ms_features.copy()
+        ms_features_grouped[ms_features_q] = ms_features_grouped[ms_features_q].apply(map_strings)  # multi-select
+        ms_features_grouped[ms_important_q] = ms_features_grouped[ms_important_q].replace(
+            features_groups)  # single-select
+        # if the 'most important' column is nan, it means they only selected 1 feature to begin with
+        ms_features_grouped[ms_important_q] = ms_features_grouped[ms_important_q].replace('nan', pd.NA)
+        ms_features_grouped[ms_important_q] = ms_features_grouped[ms_important_q].fillna(
+            ms_features_grouped[ms_features_q])
+
+        calculate_moral_consideration_features(ms_features_df=ms_features_grouped,
+                                               result_path=result_path,
+                                               save_prefix="all_GROUPED-i_c_s_",
+                                               feature_list=["Consciousness", "Intentions", "Sensations", "Other"],
+                                               feature_order_df=None,
+                                               feature_color_dict=None)
+
 
     # return the order and colors so other questions can use them
     return ms_features_order_df, feature_colors
