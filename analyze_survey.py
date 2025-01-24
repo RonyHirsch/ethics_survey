@@ -939,7 +939,7 @@ def moral_consideration_features(analysis_dict, save_path, df_earth_cluster=None
     same between the two groups. 
     """
 
-    # experts from academia vs. non experts at all
+    # experts from academia vs. NON experts at all
     expsAcedemic_v_nonExps = helper_funcs.two_proportion_ztest(col_items="index", col_prop="Proportion_all", col_n="N",
                                                                group1="experts-academic",
                                                                df1=cons_experts_academics_expAcademia_props,
@@ -947,13 +947,14 @@ def moral_consideration_features(analysis_dict, save_path, df_earth_cluster=None
                                                                df2=cons_nonExperts_props)
     expsAcedemic_v_nonExps.to_csv(os.path.join(result_path, f"z_test_expsAcademic_nonExps.csv"), index=False)
 
-    # experts from academia vs. experts not from academia
+    # experts from academia vs. OTHER EXPERTS whose expertise is NOT from academia
     expsAcedemic_v_expNonAcademic = helper_funcs.two_proportion_ztest(col_items="index", col_prop="Proportion_all",
                                                                       col_n="N",
                                                                       group1="experts-academic",
                                                                       df1=cons_experts_academics_expAcademia_props,
                                                                       group2="experts-nonAcademia",
                                                                       df2=cons_experts_expNonAcademia_props)
+    expsAcedemic_v_expNonAcademic.to_csv(os.path.join(result_path, f"z_test_expsAcademic_expNonAcademia.csv"), index=False)
 
     """
     Relationship between Earth-in-danger clusters and moral consideration features
@@ -1680,12 +1681,15 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     else:
         df_earth_cluster = earth_in_danger(analysis_dict, save_path)
 
-    other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False,
-                    df_earth_cluster=df_earth_cluster)
-    moral_considreation_prios(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
     ms_features_order_df, feature_colors = moral_consideration_features(analysis_dict=analysis_dict,
                                                                         save_path=save_path,
                                                                         df_earth_cluster=df_earth_cluster)
+
+    other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False,
+                    df_earth_cluster=df_earth_cluster)
+
+    moral_considreation_prios(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
+
     zombie_pill(analysis_dict, save_path, feature_order_df=ms_features_order_df, feature_color_map=feature_colors)
 
     consciousness_intelligence(analysis_dict, save_path)
