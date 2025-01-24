@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import numpy as np
+from itertools import combinations
 from sklearn.decomposition import PCA
 from sklearn.mixture import GaussianMixture
 from sklearn.cluster import KMeans
@@ -8,19 +9,20 @@ from sklearn.metrics import silhouette_score, pairwise_distances
 from sklearn.preprocessing import StandardScaler
 from skbio.stats.distance import permanova
 from skbio.stats.distance import DistanceMatrix
+from skbio.stats.ordination import pcoa
 from kmodes.kprototypes import KPrototypes
 import scipy.stats as stats
-from scipy.stats import chi2_contingency
-from scipy.stats import mannwhitneyu
-from scipy.stats import ttest_ind, ttest_1samp, ttest_rel
+from scipy.stats import chi2_contingency, mannwhitneyu, ttest_ind, ttest_1samp, ttest_rel, f_oneway, kruskal, shapiro, levene
 from scipy.spatial.distance import cdist
 from sklearn.utils import shuffle
 from statsmodels.stats.proportion import proportions_ztest
+from statsmodels.stats.multitest import multipletests
 from statsmodels.multivariate.manova import MANOVA
 import plotter
 
 
-def permanova_on_pairwise_distances(data, columns, by, dist_metric="euclidean", perm_num=1000):
+def permanova_on_pairwise_distances(data, columns, group_col, dist_metric="euclidean", perm_num=1000,
+                                    multicomp_method="bonferroni"):
     """
     PERMANOVA  (Permutational Multivariate Analysis of Variance) is a non-parametric method that tests whether two
     or more groups whether are significantly different based on a categorical factor.
@@ -39,17 +41,17 @@ def permanova_on_pairwise_distances(data, columns, by, dist_metric="euclidean", 
     """
 
     relevant_data = data[columns]
-    groups = data[by]
+    groups = data[group_col]
     # pairwise distances
     distance_matrix = pairwise_distances(relevant_data, metric=dist_metric)
     # convert to DistanceMatrix: https://scikit.bio/docs/dev/generated/skbio.stats.distance.permanova.html
     distance_matrix = DistanceMatrix(distance_matrix, ids=relevant_data.index.astype(str))
     # permanova time
     permanova_results = permanova(distance_matrix, grouping=list(groups), permutations=perm_num)
-    # save
     # calculate dof
     df_between = groups.nunique() - 1
     df_residual = len(groups) - groups.nunique()
+    # save
     result_df = pd.DataFrame({
         "test": [permanova_results["test statistic name"]],
         "statistic": [permanova_results["test statistic"]],
@@ -58,7 +60,54 @@ def permanova_on_pairwise_distances(data, columns, by, dist_metric="euclidean", 
         "N": [permanova_results["sample size"]],
         "Groups": [permanova_results["number of groups"]]
     })
-    return result_df
+
+
+    """
+    Post Hoc - which ratings are the most likely to contribute to the difference between the groups?
+    Perform a one-way ANOVA  
+    """
+    clusters = data[group_col].unique()
+    anova_results = list()
+    descriptives = list()
+
+    for column in relevant_data.columns:
+        groups = [relevant_data[data[group_col] == cluster][column] for cluster in data[group_col].unique()]
+        # assumption checks
+        normality_pvals = [shapiro(group)[1] for group in groups if len(group) > 3]  # only test if group size > 3
+        variance_pval = levene(*groups)[1] if len(groups) > 1 else 1  # Levene's test for homogeneity of variance
+        # if anova assumptions don't break
+        if all(p > 0.05 for p in normality_pvals) and variance_pval > 0.05:
+            # Perform ANOVA
+            stat, p = f_oneway(*groups)
+            test_type = "ANOVA"
+            df_between = len(clusters) - 1
+            df_residual = len(data) - len(clusters)
+            degrees_of_freedom = f"({df_between}, {df_residual})"
+        else:  # assumptions break, do a Kruskal-Wallis
+            stat, p = kruskal(*groups)
+            test_type = "Kruskal-Wallis"
+            degrees_of_freedom = f"{len(clusters) - 1}"
+        # summarize results
+        anova_results.append({
+            "feature": column,
+            "test": test_type,
+            "statistic": stat,
+            "p-value": p,
+            "df": degrees_of_freedom,
+        })
+        # add interpretation:
+        descriptive_stats = relevant_data.groupby(data[group_col])[column].agg(["mean", "std"]).reset_index()
+        descriptive_stats = descriptive_stats.rename(columns={group_col: "group"})
+        descriptive_stats["feature"] = column
+        descriptives.append(descriptive_stats)
+
+    anova_df = pd.DataFrame(anova_results)
+    # correct p-value for multiple comparisons
+    anova_df[f"p {multicomp_method}"] = multipletests(anova_df["p-value"], method=multicomp_method)[1]
+    anova_df.sort_values(f"p {multicomp_method}", ascending=True, inplace=True)
+    descriptives_df = pd.concat(descriptives, ignore_index=True)
+
+    return result_df, anova_df.reset_index(inplace=False, drop=True), descriptives_df
 
 
 def chi_squared_test(contingency_table, include_expected=False):

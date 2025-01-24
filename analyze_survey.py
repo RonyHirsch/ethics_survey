@@ -77,13 +77,29 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
 
     # permanova per each experience column to see if there's any type of experience that affects people's rating patterns
     permanova_list = list()
+    posthoc_list = list()
+    descriptives_list = list()
     for exp in experience_types:
-        permanova_result = helper_funcs.permanova_on_pairwise_distances(data=df_with_experience, columns=item_cols, by=exp)
-        permanova_result["Experience type"] = [exp]
+        permanova_result, posthoc, descriptives = helper_funcs.permanova_on_pairwise_distances(data=df_with_experience,
+                                                                                               columns=item_cols,
+                                                                                               group_col=exp)
+        permanova_result["experience type"] = [exp]
+        posthoc["experience type"] = exp
+        descriptives["experience type"] = exp
         permanova_list.append(permanova_result)
-    permanova_df = pd.concat(permanova_list)
-    permanova_df.to_csv(os.path.join(result_path, f"permanova_ratings_per_experience_types.cvs"), index=False)
+        posthoc_list.append(posthoc)
+        descriptives_list.append(descriptives)
+    permanova_df = pd.concat(permanova_list, ignore_index=True)
+    permanova_df.to_csv(os.path.join(result_path, f"permanova_ratings_per_experience_types.csv"), index=False)
+    posthoc_df = pd.concat(posthoc_list, ignore_index=True)
+    posthoc_df.to_csv(os.path.join(result_path, f"permanova_ratings_per_experience_types_posthoc.csv"), index=False)
+    descriptives_df = pd.concat(descriptives_list, ignore_index=True)
+    descriptives_df.to_csv(os.path.join(result_path, f"permanova_ratings_per_experience_types_descriptives.csv"), index=False)
 
+
+    """
+    Relationship between C ratings and MS ratings
+    """
 
     # melt the df to a long format
     long_data = pd.melt(df, id_vars=[process_survey.COL_ID], var_name="Item_Topic",
@@ -259,7 +275,8 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
         Check whether the clusters differ in their rating patterns by representing each subject's overall ratings as 
         a vector, and comparing the distances between vectors within each cluster vs. between clusters.  
         """
-        permanova_result = helper_funcs.permanova_on_pairwise_distances(data=df_with_cluster, columns=df_cols, by="Cluster")
+        permanova_result, posthoc, descriptives = helper_funcs.permanova_on_pairwise_distances(data=df_with_cluster, columns=df_cols,
+                                                                        group_col="Cluster")
         permanova_result.to_csv(os.path.join(result_path, f"permanova_ratings_per_earthInDanger_clusters.csv"),index=False)
 
 
