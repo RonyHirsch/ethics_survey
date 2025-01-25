@@ -496,19 +496,7 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
     return df_pivot
 
 
-def ics(analysis_dict, save_path):
-    """
-    Answers to the "Do you think a creature/system can have intentions/consciousness/sensations w/o having..?" section
-    """
-    # save path
-    result_path = os.path.join(save_path, "i_c_s")
-    if not os.path.isdir(result_path):
-        os.mkdir(result_path)
-
-    # load relevant data
-    df_ics = analysis_dict["ics"].copy()
-    df_ics.to_csv(os.path.join(result_path, "i_c_s.csv"), index=False)
-
+def calculate_ics_proportions(df_ics, save_path, prefix="", suffix=""):
     questions = [c for c in df_ics.columns if c.startswith("Do you think a creature/system")]
     ans_map = {"No": 0, "Yes": 1}
     # plot a collapsed figure where each creature is a bar, with the proportion of how many would kill it
@@ -516,10 +504,10 @@ def ics(analysis_dict, save_path):
     labels = list()
     for q in questions:
         df_q = df_ics.loc[:, [process_survey.COL_ID, q]]
-        q_name = q.replace('Do you think a creature/system', '')[:-1]
-        q_name = q_name.replace('can be', '')
-        q_name = q_name.replace('can have', '')
-        q_name = q_name.replace('/', '-')
+        q_name = q.replace("Do you think a creature/system", "")[:-1]
+        q_name = q_name.replace("can be", "")
+        q_name = q_name.replace("can have", "")
+        q_name = q_name.replace("/", "-")
         labels.append(q_name)
         df_q_map = df_q.replace({q: ans_map})
         stats[q_name] = helper_funcs.compute_stats(df_q_map[q], possible_values=df_q_map[q].unique().tolist())
@@ -541,10 +529,27 @@ def ics(analysis_dict, save_path):
                                          title=f"Do you think A creature/system can be",
                                          show_mean=False, sem_line=False,
                                          colors=rating_color_list, num_ratings=2,
-                                         save_path=result_path, save_name=f"ics")
+                                         save_path=save_path, save_name=f"{prefix}ics{suffix}")
     # save data
     plot_df = pd.DataFrame(plot_data)
-    plot_df.to_csv(os.path.join(result_path, f"ics.csv"), index=True)
+    plot_df.to_csv(os.path.join(save_path, f"{prefix}ics{suffix}.csv"), index=True)
+    return plot_df
+
+
+def ics(analysis_dict, save_path, df_earth_cluster=None):
+    """
+    Answers to the "Do you think a creature/system can have intentions/consciousness/sensations w/o having..?" section
+    """
+    # save path
+    result_path = os.path.join(save_path, "i_c_s")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    # load relevant data
+    df_ics = analysis_dict["ics"].copy()
+    df_ics.to_csv(os.path.join(result_path, "i_c_s.csv"), index=False)
+
+    plot_df = calculate_ics_proportions(df_ics=df_ics, save_path=result_path, suffix="_all")
 
     """
     Follow up questions: examples for cases of X w/o Y
@@ -559,6 +564,42 @@ def ics(analysis_dict, save_path):
         ics_q = ics_q[~ics_q[col].str.strip().str.fullmatch(r"No[.,!?]*",
                                                             flags=re.IGNORECASE)]  # and that something isn't a variation of JUST  a *"no"* (some "no, but..blabla" will appear)
         ics_q.to_csv(os.path.join(result_path, f"{col_savename}.csv"), index=False)  # save answers for examination
+
+    """
+    Follow up: do the two Earth-in-danger clusters differ in what they think?
+    """
+    if df_earth_cluster is not None:  # we have an actual df
+        clusters = sorted(df_earth_cluster["Cluster"].unique().tolist())  # list all the possible clusters
+        for cluster in clusters:
+            subs_cluster = df_earth_cluster[df_earth_cluster["Cluster"] == cluster]
+            subs_cluster_list = subs_cluster.loc[:, process_survey.COL_ID].tolist()
+            df_ics_cluster = df_ics[df_ics[process_survey.COL_ID].isin(subs_cluster_list)].reset_index(drop=True, inplace=False)
+            # plot
+            calculate_ics_proportions(df_ics=df_ics_cluster, save_path=result_path, suffix=f"_cluster{cluster}")
+
+        """
+        create a contingency table for a chi-squared test to check whether the clusters significantly differ in  
+        their proportion of people who said "Yes"
+        """
+        questions = [c for c in df_ics.columns if c.startswith("Do you think a creature/system")]
+        result_list = list()
+        for q in questions:
+            df_ics_relevant = df_ics.loc[:, [process_survey.COL_ID, q]]
+            df_clusters = df_earth_cluster[[process_survey.COL_ID, "Cluster"]]
+            df_ics_relevant_with_cluster = pd.merge(df_ics_relevant, df_clusters, how="inner",
+                                                    on=process_survey.COL_ID).reset_index(drop=True, inplace=False)
+            """
+            create a contingency table for a chi-squared test to check whether the clusters significantly differ in  
+            their proportion of people who said "Yes"
+            """
+            contingency_table = pd.crosstab(df_ics_relevant_with_cluster["Cluster"],
+                                            df_ics_relevant_with_cluster[q])
+            chisquare_result = helper_funcs.chi_squared_test(contingency_table=contingency_table)
+            chisquare_result[f"Question"] = [q]
+            chisquare_result[f"per"] = ["Earth-in-danger cluster"]
+            result_list.append(chisquare_result)
+        result_df = pd.concat(result_list)
+        result_df.to_csv(os.path.join(result_path, f"chisqared_earthInDanger_clusters_per_Q.csv"), index=False)
     return
 
 
@@ -1037,7 +1078,6 @@ def moral_consideration_features(analysis_dict, save_path, df_earth_cluster=None
                                                feature_order_df=None,
                                                feature_color_dict=None)
 
-
     # return the order and colors so other questions can use them
     return ms_features_order_df, feature_colors
 
@@ -1132,8 +1172,8 @@ def moral_considreation_prios(analysis_dict, save_path, df_earth_cluster=None):
             df_clusters = df_earth_cluster[[process_survey.COL_ID, "Cluster"]]
             ms_prios_relevant_with_cluster = pd.merge(ms_prios_relevant, df_clusters, how="inner", on=process_survey.COL_ID).reset_index(drop=True,inplace=False)
             """
-            create a contingency table for a chi-squared test to check whether the clusters significantly differ in their 
-            proportion of people who said "Yes"
+            create a contingency table for a chi-squared test to check whether the clusters significantly differ in  
+            their proportion of people who said "Yes"
             """
             contingency_table = pd.crosstab(ms_prios_relevant_with_cluster["Cluster"], ms_prios_relevant_with_cluster[q])
             chisquare_result = helper_funcs.chi_squared_test(contingency_table=contingency_table)
@@ -1736,6 +1776,8 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     else:
         df_earth_cluster = earth_in_danger(analysis_dict, save_path)
 
+    ics(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
+
     ms_features_order_df, feature_colors = moral_consideration_features(analysis_dict=analysis_dict,
                                                                         save_path=save_path,
                                                                         df_earth_cluster=df_earth_cluster)
@@ -1755,6 +1797,6 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     experience(analysis_dict, save_path)
 
     kill_for_test(analysis_dict, save_path)
-    ics(analysis_dict, save_path)
+
 
     return
