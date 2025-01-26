@@ -717,6 +717,24 @@ def kill_for_test(analysis_dict, save_path):
     plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
                      categories_colors=colors, title=f"You wouldn't eliminate any of the creatures; why?",
                      save_path=result_path, save_name="all_nos_reason", format="png")
+
+    """
+    Follow up: Separate the killing choices based on people who even think it's possible to have one feature without
+    the others ('Yes' in the ics cluster of questions), and those who do not ('No') and see if they differ.
+    """
+    df_ics = analysis_dict["ics"].copy()
+    # key = ics question (is it possible); value = kill question (would you kill it)
+    ics_v_kill = {"Do you think a creature/system can have intentions/goals without being conscious?":
+                      ["A creature/system that only has plans/goals and intentions (can plan to perform certain actions in the future), but is not conscious (not experiencing) and cannot feel positive/negative sensations (pleasure/pain)",
+                       "A creature/system that can feel positive/negative sensations (pleasure/pain) and also has plans/goals and intentions (can plan to perform certain actions in the future), but is not conscious (not experiencing)"],
+                  "Do you think a creature/system can be conscious without having intentions/goals?":
+                      ["A creature/system that does not have plans/goals or intentions, and cannot feel positive/negative sensations (pleasure/pain), but is conscious (for example, sees colors, but does not feel anything negative or positive, and cannot plan)",
+                       "A creature/system that is both conscious (has experiences) and can feel positive/negative sensations (pleasure/pain), but does not have plans/goals or intentions (for example, can't plan to avoid something that causes pain)"],
+                  "Do you think a creature/system can have positive or negative sensations (pleasure/pain) without being conscious?":
+                      ["A creature/system that can only feel positive/negative sensations (pleasure/pain), but is not conscious (not experiencing) and does not have plans/goals or intentions (for example, can't plan to avoid something that causes pain)"],
+                  "Do you think a creature/system can be conscious without having positive or negative sensations (pleasure/pain)?":
+                      ["A creature/system that is both conscious (has experiences) and has plans/goals and intentions (can plan to perform certain actions in the future), but cannot feel positive/negative sensations (pleasure/pain)"]}
+
     return
 
 
@@ -1778,6 +1796,8 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
 
     ics(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
+    kill_for_test(analysis_dict=analysis_dict, save_path=save_path)
+
     ms_features_order_df, feature_colors = moral_consideration_features(analysis_dict=analysis_dict,
                                                                         save_path=save_path,
                                                                         df_earth_cluster=df_earth_cluster)
@@ -1796,7 +1816,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     demographics(analysis_dict, save_path)
     experience(analysis_dict, save_path)
 
-    kill_for_test(analysis_dict, save_path)
+
 
 
     return
