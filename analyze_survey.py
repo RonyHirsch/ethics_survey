@@ -603,26 +603,16 @@ def ics(analysis_dict, save_path, df_earth_cluster=None):
     return
 
 
-def kill_for_test(analysis_dict, save_path):
-    """
-    Answers to the "Do you think a creature/system can have intentions/consciousness/sensations w/o having..?" section
-    """
-    # save path
-    result_path = os.path.join(save_path, "kill_for_test")
-    if not os.path.isdir(result_path):
-        os.mkdir(result_path)
-
-    # load relevant data
-    df_test = analysis_dict["important_test_kill"].copy()
+def calculate_kill_for_test(df, save_path, prefix="", suffix=""):
     # all the options for killing (scenarios)
-    questions = [c for c in df_test.columns if c.startswith("A creature/system that")]
+    questions = [c for c in df.columns if c.startswith("A creature/system that")]
     ans_map = {"No (will not kill to pass the test)": 0, "Yes (will kill to pass the test)": 1}
 
     # plot a collapsed figure where each creature is a bar, with the proportion of how many would kill it
     stats = dict()
     labels = list()
     for q in questions:
-        df_q = df_test.loc[:, [process_survey.COL_ID, q]]
+        df_q = df.loc[:, [process_survey.COL_ID, q]]
         q_name = survey_mapping.important_test_kill_tokens[q]
         df_q_map = df_q.replace({q: ans_map})
         stats[q_name] = helper_funcs.compute_stats(df_q_map[q], possible_values=df_q_map[q].unique().tolist())
@@ -642,16 +632,34 @@ def kill_for_test(analysis_dict, save_path):
     plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=6, legend=rating_labels,
                                          ytick_visible=True, text_width=39, title=f"", show_mean=False, sem_line=False,
                                          colors=rating_color_list, num_ratings=2,
-                                         save_path=result_path, save_name=f"kill_to_pass")
+                                         save_path=save_path, save_name=f"{prefix}kill_to_pass{suffix}")
     # save data
     plot_df = pd.DataFrame(plot_data)
-    plot_df.to_csv(os.path.join(result_path, f"kill_to_pass_stats.csv"), index=True)
+    plot_df.to_csv(os.path.join(save_path, f"{prefix}kill_to_pass_stats{suffix}.csv"), index=True)
+    return
+
+
+def kill_for_test(analysis_dict, save_path, df_earth_cluster):
+    """
+    Answers to the "Do you think a creature/system can have intentions/consciousness/sensations w/o having..?" section
+    """
+    # save path
+    result_path = os.path.join(save_path, "kill_for_test")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    # load relevant data
+    df_test_orig = analysis_dict["important_test_kill"].copy()
+    df_test_orig.to_csv(os.path.join(result_path, f"kill_to_pass.csv"), index=False)
+
+    # calculate the proportions of yes and no for each scenario and plot it
+    calculate_kill_for_test(df=df_test_orig, save_path=result_path)
 
     """
     Does it matter which two features it is? Or rather the more features the merrier?
     Test if people keep alive creatures/systems with 2 features rather than 1 overall.
     """
-    df_test = df_test.rename(columns=survey_mapping.important_test_kill_tokens)  # shorter names
+    df_test = df_test_orig.rename(columns=survey_mapping.important_test_kill_tokens, inplace=False)  # shorter names
     # columns
     one_feature = [survey_mapping.Q_SENSATIONS, survey_mapping.Q_INTENTIONS, survey_mapping.Q_CONSCIOUSNESS]
     two_features = [survey_mapping.Q_CONSCIOUSNESS_SENSATIONS, survey_mapping.Q_SENSATIONS_INTENTIONS,
@@ -660,7 +668,6 @@ def kill_for_test(analysis_dict, save_path):
     # calculate the average 'yes' responses for each person for 1-feature and 2-feature creatures
     df_test_binary["kill_one_avg"] = df_test_binary[one_feature].mean(axis=1)
     df_test_binary["kill_two_avg"] = df_test_binary[two_features].mean(axis=1)
-    df_test.to_csv(os.path.join(result_path, f"kill_to_pass.csv"), index=False)
     df_test_binary.to_csv(os.path.join(result_path, f"kill_to_pass_coded.csv"), index=False)
     # paired t-test
     paired_ttest = helper_funcs.dependent_samples_ttest(list_group1=df_test_binary["kill_one_avg"].tolist(),
@@ -717,6 +724,39 @@ def kill_for_test(analysis_dict, save_path):
     plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
                      categories_colors=colors, title=f"You wouldn't eliminate any of the creatures; why?",
                      save_path=result_path, save_name="all_nos_reason", format="png")
+
+    """
+    If df_earth_cluster is not None, take the clustering from the Earth-in-danger scenarios, and see if they apply 
+    here as well. 
+    """
+    if df_earth_cluster is not None:
+        questions = [c for c in df_test_orig.columns if c.startswith("A creature/system that")]
+        df_clusters = df_earth_cluster[[process_survey.COL_ID, "Cluster"]]
+        clusters = df_clusters["Cluster"].unique().tolist()
+        df_with_cluster = pd.merge(df_test_orig, df_clusters, how="inner", on=process_survey.COL_ID).reset_index(drop=True, inplace=False)
+        # descriptives and figure
+        for cluster in clusters:
+            df_cluster = df_with_cluster[df_with_cluster["Cluster"] == cluster]
+            calculate_kill_for_test(df=df_cluster, save_path=result_path, prefix=f"earth_cluster{cluster}_", suffix="")
+        # statistical analysis
+        stats_list = list()
+        for q in questions:
+            df_kill_relevant = df_test_orig.loc[:, [process_survey.COL_ID, q]]
+            df_kill_relevant_with_cluster = pd.merge(df_kill_relevant, df_clusters, how="inner", on=process_survey.COL_ID).reset_index(drop=True,inplace=False)
+            """
+            create a contingency table for a chi-squared test to check whether the clusters significantly differ in  
+            their proportion of people who said "Yes"
+            """
+            contingency_table = pd.crosstab(df_kill_relevant_with_cluster["Cluster"], df_kill_relevant_with_cluster[q])
+            chisquare_result = helper_funcs.chi_squared_test(contingency_table=contingency_table)
+            chisquare_result[f"Question"] = [q]
+            chisquare_result[f"per"] = ["Earth-in-danger cluster"]
+            stats_list.append(chisquare_result)
+        result_df = pd.concat(stats_list)
+        result_df.to_csv(os.path.join(result_path, f"chisqared_earthInDanger_clusters_per_Q.csv"), index=False)
+
+    c = 3  # TODO: DELETE THIS
+
 
     """
     Follow up: Separate the killing choices based on people who even think it's possible to have one feature without
@@ -1115,10 +1155,11 @@ def moral_considreation_prios(analysis_dict, save_path, df_earth_cluster=None):
     questions = [c for c in ms_prios.columns if c.startswith("Do you think")]
     for q in questions:
         df_q = ms_prios.loc[:, [process_survey.COL_ID, q]]
-        category_counts = df_q[q].value_counts()
-        plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
+        category_counts = df_q[q].value_counts().reset_index(inplace=False, drop=False)
+        plotter.plot_pie(categories_names=category_counts.loc[:, q].tolist(), categories_counts=category_counts.loc[:, "count"].tolist(),
                          categories_colors=CAT_COLOR_DICT, title=f"{q}",
                          save_path=result_path, save_name=f"{q.replace('?', '').replace('/', '-')}", format="png")
+        category_counts.to_csv(os.path.join(result_path, f"{q.replace('?', '').replace('/', '-')}.csv"), index=False)
 
     reasons = [c for c in ms_prios.columns if c not in questions]
     for r in reasons:
@@ -1794,9 +1835,13 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     else:
         df_earth_cluster = earth_in_danger(analysis_dict, save_path)
 
+    kill_for_test(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
+
+    moral_considreation_prios(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
+
     ics(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
-    kill_for_test(analysis_dict=analysis_dict, save_path=save_path)
+
 
     ms_features_order_df, feature_colors = moral_consideration_features(analysis_dict=analysis_dict,
                                                                         save_path=save_path,
@@ -1805,7 +1850,6 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False,
                     df_earth_cluster=df_earth_cluster)
 
-    moral_considreation_prios(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
     zombie_pill(analysis_dict, save_path, feature_order_df=ms_features_order_df, feature_color_map=feature_colors)
 
