@@ -692,7 +692,8 @@ def plot_categorical_proportion_bar(categories_prop_df, category_col, data_col, 
 
 def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save_path, save_name, title, legend=None,
                                  show_mean=True, sem_line=True, ytick_visible=True, text_width=max_text_width, fmt="png",
-                                 bar_relative=True, bar_range_min=1, bar_range_max=4, inches_w=18, inches_h=12):
+                                 bar_relative=True, bar_range_min=1, bar_range_max=4, inches_w=18, inches_h=12,
+                                 split=False, yes_all_proportion=None, no_all_proportion=None, punishment_alpha=0.6):
     """
     Plots horizontal stacked proportion bars for multiple items with optional error bars for mean ratings.
 
@@ -726,9 +727,25 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
         else:
             a = axs[i]
 
-        for j, (response_type, proportion) in enumerate(sorted(proportions.items())):
-            a.barh(col, proportion, color=colors[j], label=f'Response {j}', edgecolor='none',
-                   left=bottom)
+        if split:
+            no_to_all = int(no_all_proportion * n)  # absolute number of people who answered 'No' to all
+            no_to_this = int(proportions[0] * (n / 100) - no_to_all)  # subtract the fixed "No to all" portion
+            yes_to_all = int(yes_all_proportion * n)  # absolute number of people who answered 'Yes' to all
+            yes_to_this = int(proportions[1] * (n / 100) - yes_to_all)
+            sorted_proportions = [
+                ("No to all", 100 * no_to_all / n, colors[0], punishment_alpha),  # "No to all" with reduced alpha
+                ("No", 100 * no_to_this / n, colors[0], 1.0),
+                ("Yes", 100 * yes_to_this / n, colors[1], 1.0),
+                ("Yes to all", 100 * yes_to_all / n, colors[1], punishment_alpha)  # "Yes to all" with reduced alpha
+            ]
+        else:
+            sorted_proportions = [
+                ("No", proportions[0], colors[0], 1.0),
+                ("Yes", proportions[1], colors[1], 1.0)
+            ]
+
+        for j, (label, proportion, color, alpha_value) in enumerate(sorted_proportions):
+            a.barh(col, proportion, color=color, label=label, edgecolor='none', left=bottom, alpha=alpha_value)
             bottom += proportion
 
         if show_mean:

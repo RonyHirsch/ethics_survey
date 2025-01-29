@@ -102,8 +102,7 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
     """
 
     # melt the df to a long format
-    long_data = pd.melt(df, id_vars=[process_survey.COL_ID], var_name="Item_Topic",
-                        value_name="Rating")
+    long_data = pd.melt(df, id_vars=[process_survey.COL_ID], var_name="Item_Topic", value_name="Rating")
     long_data[["Topic", "Item"]] = long_data["Item_Topic"].str.split('_', expand=True)
     long_data = long_data.drop(columns=["Item_Topic"])
     long_data["Topic"] = long_data["Topic"].map(topic_name_map)
@@ -117,7 +116,6 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
     long_data_mean_rating_stats = long_data_mean_rating.describe()
     long_data_mean_rating_stats.to_csv(os.path.join(result_path, f"c_v_ms_avg_per_item_stats.csv"),
                                        index=True)  # in 'describe' the index is the desc name
-
 
     dataframes = [long_data.copy(), animal_experience_df, ai_experience_df, ethics_experience_df, con_experience_df, demos_df]
     result_df = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID]), dataframes)
@@ -134,10 +132,8 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
     """
     Plot at the ratings individually for each item 
     """
-
     rating_color_list = ["#DB5461", "#fb9a99", "#70a0a4", "#26818B"]
     rating_labels = ["Does Not Have", "Probably Doesn't Have", "Probably Has", "Has"]
-
     sorting_method = None
     sorted_suffix = ""
 
@@ -185,32 +181,28 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
                                              save_path=result_path, fmt="svg",
                                              save_name=f"ratings_{topic_name.lower()}{sorted_suffix}")
 
+
     """
     Plot "other creatures" judgments of Consciousness vs. of Moral Status. >> PER ITEM
     """
-
     # prepare data for analyses
     df_pivot = long_data.pivot_table(index="Item", columns="Topic", values="Rating", aggfunc="mean").reset_index(
         drop=False, inplace=False)  # I don't want to 'fillna(0).' this
 
     colors = [rating_color_list[0], rating_color_list[-1]]
-    individual_data = long_data.pivot_table(index=[process_survey.COL_ID, "Item"], columns="Topic",
-                                            values="Rating").reset_index(drop=False, inplace=False)
-    # with individual lines
-    plotter.plot_scatter_xy(df=df_pivot, identity_col="Item",
-                            x_col="Consciousness", x_label="Consciousness", x_min=1, x_max=4, x_ticks=1,
-                            y_col="Moral Status", y_label="Moral Status", y_min=1, y_max=4, y_ticks=1,
-                            save_path=result_path, save_name=f"correlation_c_ms_individual", annotate_id=True,
-                            palette_bounds=colors, corr_line=False, diag_line=True, fmt="svg",
-                            individual_df=individual_data, id_col=process_survey.COL_ID)
+
+    # create a plotting version of df-pivot, deleting a prefix of a/an
+    df_pivot_plotting = df_pivot.copy()
+    df_pivot_plotting["Item"] = df_pivot_plotting["Item"].str.replace(r'^(A|An)\s+', '', regex=True).str.capitalize()
 
     # collapsed across everyone, no individuation, diagonal line
-    plotter.plot_scatter_xy(df=df_pivot, identity_col="Item",
+    plotter.plot_scatter_xy(df=df_pivot_plotting, identity_col="Item",
                             x_col="Consciousness", x_label="Consciousness", x_min=1, x_max=4, x_ticks=1,
                             y_col="Moral Status", y_label="Moral Status", y_min=1, y_max=4, y_ticks=1,
                             save_path=result_path, save_name=f"correlation_c_ms", annotate_id=True,
                             palette_bounds=colors, corr_line=False, diag_line=True, fmt="svg",
                             individual_df=None, id_col=None)
+
 
     """
     The scatter plot above (plot_scatter_xy) has a diagonal line. The interesting part is the off-diagonal items; 
@@ -262,7 +254,6 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
                                 fmt="svg",
                                 individual_df=None, id_col=None)
 
-
     """
     If df_earth_cluster is not None, take the clustering from the Earth-in-danger scenarios, and see if they apply 
     here as well. 
@@ -272,12 +263,38 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
         df_cols = df.columns.tolist()[1:]
         df_with_cluster = pd.merge(df, df_clusters, how="inner", on=process_survey.COL_ID).reset_index(drop=True, inplace=False)
         """
+        Check whether moral status ratings are affected by consciousness ratings and by the earth-in-danger clusters. 
+        Let's do a mixed-effects model on to model the dependency of moral status ratings on consciousness ratings and 
+        cluster membership.  
+        """
+        c_cols = df_c.columns[1:].tolist()
+        ms_cols = df_ms.columns[1:].tolist()
+        cluster_col = ["Cluster"]
+        indep_cols = c_cols + cluster_col
+        long_df_with_cluster = df_with_cluster.melt(id_vars=[process_survey.COL_ID, "Cluster"], value_vars=ms_cols, var_name="feature", value_name="moral_status_rating")
+        long_df_with_cluster["consciousness_rating"] = df_with_cluster.melt(id_vars=[process_survey.COL_ID, "Cluster"], value_vars=c_cols)["value"]
+        result_df, residuals_df, r2_df, summary_df, descriptive_stats, posthoc_df = helper_funcs.mixed_effects_model(
+            long_df=long_df_with_cluster, cols_to_standardize=["consciousness_rating", "moral_status_rating"],
+            dep_col="moral_status_rating", ind_col1="consciousness_rating", ind_col2="Cluster",
+            id_col=process_survey.COL_ID)
+        # save all model outputs to excel
+        with pd.ExcelWriter(os.path.join(result_path, f"earth_in_danger_clusters_model_outputs.xlsx"),
+                            engine="xlsxwriter") as writer:
+            result_df.to_excel(writer, sheet_name="Fixed_Effects", index=False)
+            residuals_df.to_excel(writer, sheet_name="Residuals", index=False)
+            r2_df.to_excel(writer, sheet_name="R2_Values", index=False)
+            summary_df.to_excel(writer, sheet_name="Model_Summary", index=False)
+            descriptive_stats.to_excel(writer, sheet_name="Descriptive_Stats", index=False)
+            posthoc_df.to_excel(writer, sheet_name="Posthoc_Results", index=False)
+        c = 44
+
+        """
+        DEPRECATED
         Check whether the clusters differ in their rating patterns by representing each subject's overall ratings as 
         a vector, and comparing the distances between vectors within each cluster vs. between clusters.  
         """
-        permanova_result, posthoc, descriptives = helper_funcs.permanova_on_pairwise_distances(data=df_with_cluster, columns=df_cols,
-                                                                        group_col="Cluster")
-        permanova_result.to_csv(os.path.join(result_path, f"permanova_ratings_per_earthInDanger_clusters.csv"),index=False)
+        #permanova_result, posthoc, descriptives = helper_funcs.permanova_on_pairwise_distances(data=df_with_cluster, columns=df_cols,group_col="Cluster")
+        #permanova_result.to_csv(os.path.join(result_path, f"permanova_ratings_per_earthInDanger_clusters.csv"),index=False)
 
 
     return
@@ -617,6 +634,11 @@ def calculate_kill_for_test(df, save_path, prefix="", suffix=""):
         df_q_map = df_q.replace({q: ans_map})
         stats[q_name] = helper_funcs.compute_stats(df_q_map[q], possible_values=df_q_map[q].unique().tolist())
         labels.append(q_name)
+
+    """
+    Plot OVERALL 'Yes' / 'No'
+    """
+
     # Create DataFrame for plotting
     plot_data = {}
     for item, (proportions, mean_rating, std_dev, n) in stats.items():
@@ -636,6 +658,24 @@ def calculate_kill_for_test(df, save_path, prefix="", suffix=""):
     # save data
     plot_df = pd.DataFrame(plot_data)
     plot_df.to_csv(os.path.join(save_path, f"{prefix}kill_to_pass_stats{suffix}.csv"), index=True)
+
+    """
+    This might be misleading, as some people were not affected at all by the entity, and either would kill none of the 
+    creatures, or actually - would kill all of them regardless of the entity. So we'd like to plot those in a reduced
+    opacity. 
+    """
+
+    # Identify the people who answered 'Yes' or 'No' to all questions
+    df_yes_all = df[questions].apply(lambda row: all(row == "Yes (will kill to pass the test)"), axis=1)
+    df_no_all = df[questions].apply(lambda row: all(row == "No (will not kill to pass the test)"), axis=1)
+    yes_all_proportion = df_yes_all.sum() / len(df)
+    no_all_proportion = df_no_all.sum() / len(df)
+    # plot again, discounting the all-yes, and all-no
+    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=6, legend=rating_labels,
+                                         ytick_visible=True, text_width=39, title=f"", show_mean=False, sem_line=False,
+                                         colors=rating_color_list, num_ratings=2, save_path=save_path,
+                                         save_name=f"{prefix}kill_to_pass_allYesNoDiscount{suffix}", split=True,
+                                         yes_all_proportion=yes_all_proportion, no_all_proportion=no_all_proportion)
     return
 
 
@@ -1292,6 +1332,9 @@ def graded_consciousness(analysis_dict, save_path):
     # Plot the answers to the rating questions (agreement) in a stacked bar plot
     plot_graded_consciousness_given_df(df=c_graded, save_path=result_path)
 
+    # contradicting themselves
+    c_graded_contradiction = c_graded[(c_graded[survey_mapping.Q_GRADED_EQUAL] >= 3) & (c_graded[survey_mapping.Q_GRADED_UNEQUAL] >= 3)]
+
     # now, other things
 
     """
@@ -1837,30 +1880,24 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
 
     kill_for_test(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
-    moral_considreation_prios(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
-
-    ics(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
-
-
-
-    ms_features_order_df, feature_colors = moral_consideration_features(analysis_dict=analysis_dict,
-                                                                        save_path=save_path,
-                                                                        df_earth_cluster=df_earth_cluster)
+    graded_consciousness(analysis_dict, save_path)
 
     other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False,
                     df_earth_cluster=df_earth_cluster)
 
 
-    zombie_pill(analysis_dict, save_path, feature_order_df=ms_features_order_df, feature_color_map=feature_colors)
+    moral_considreation_prios(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
+    ics(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
+
+    ms_features_order_df, feature_colors = moral_consideration_features(analysis_dict=analysis_dict,
+                                                                        save_path=save_path,
+                                                                        df_earth_cluster=df_earth_cluster)
+
+    zombie_pill(analysis_dict, save_path, feature_order_df=ms_features_order_df, feature_color_map=feature_colors)
     consciousness_intelligence(analysis_dict, save_path)
 
-    graded_consciousness(analysis_dict, save_path)
     gender_cross(analysis_dict, save_path)  # move to after the individuals
     demographics(analysis_dict, save_path)
     experience(analysis_dict, save_path)
-
-
-
-
     return

@@ -17,8 +17,82 @@ from scipy.spatial.distance import cdist
 from sklearn.utils import shuffle
 from statsmodels.stats.proportion import proportions_ztest
 from statsmodels.stats.multitest import multipletests
+import statsmodels.formula.api as smf
+from statsmodels.stats.anova import anova_lm
 from statsmodels.multivariate.manova import MANOVA
 import plotter
+
+
+def mixed_effects_model(long_df, dep_col, ind_col1, ind_col2, id_col, cols_to_standardize=list()):
+    np.random.seed(42)
+    scaler = StandardScaler()
+    if len(cols_to_standardize) > 0:
+        long_df[cols_to_standardize] = scaler.fit_transform(long_df[cols_to_standardize])
+    # Fit a mixed-effects model: dep_col ~ ind_col1 + ind_col2 + (1 | id_col)
+    model = smf.mixedlm(f"{dep_col} ~ {ind_col1} + {ind_col2}", data=long_df, groups=id_col, re_formula="~1")
+    result = model.fit()
+    summary = result.summary().as_text()
+
+    # fixed effect coefficients
+    fixed_feature_weights = result.fe_params
+
+    result_df = pd.DataFrame({
+        "Coefficient": result.fe_params.index
+    })
+    result_df["Value"] = result.fe_params.values
+    result_df["Standard Error"] = result.bse.loc[result.fe_params.index].values  # Align lengths
+    result_df["T-Statistic"] = result.tvalues.loc[result.fe_params.index].values
+    result_df["p-value"] = result.pvalues.loc[result.fe_params.index].values
+
+    # Residuals for each observation
+    residuals_df = pd.DataFrame({
+        "Observation": long_df.index,
+        "Residual": result.resid,
+        "Fitted Value": result.fittedvalues,
+        dep_col: long_df[dep_col]
+    })
+
+    # Variance explained
+    # Marginal R²: Fixed effects only
+    fixed_effect_variance = result.rsquared if hasattr(result, 'rsquared') else None
+
+    # Conditional R²: Fixed + random effects
+    random_variance = result.cov_re.iloc[0, 0]  # Random effect variance
+    residual_variance = result.scale  # Residual variance
+    conditional_r2 = random_variance / (random_variance + residual_variance)
+    r2_df = pd.DataFrame({
+        "Metric": ["Marginal R²", "Conditional R²"],
+        "Value": [fixed_effect_variance, conditional_r2]
+    })
+
+    # Descriptive statistics grouped by ind_col2
+    descriptive_stats = long_df.groupby(ind_col2)[[dep_col, ind_col1]].describe().reset_index()
+
+    # Convert model summary to DataFrame for saving
+    summary_df = pd.DataFrame({
+        "Summary": summary.split("\n")
+    })
+
+    """
+    Posthoc
+    """
+    # Welch's t-test for post-hoc analysis (ind_col2 must have exactly 2 levels)
+    if long_df[ind_col2].nunique() == 2:
+        group_0 = long_df[long_df[ind_col2] == 0][dep_col]
+        group_1 = long_df[long_df[ind_col2] == 1][dep_col]
+        t_stat, p_value = ttest_ind(group_0, group_1, equal_var=False)
+        posthoc_df = pd.DataFrame({
+            "Test": ["Welch's t-test"],
+            "Statistic": [t_stat],
+            "P-Value": [p_value],
+            "Interpretation": ["Significant" if p_value < 0.05 else "Not Significant"]
+        })
+    else:
+        posthoc_df = pd.DataFrame({
+            "Error": ["Post-hoc test requires exactly 2 levels in ind_col2"]
+        })
+
+    return result_df, residuals_df, r2_df, summary_df, descriptive_stats, posthoc_df
 
 
 def permanova_on_pairwise_distances(data, columns, group_col, dist_metric="euclidean", perm_num=1000,
