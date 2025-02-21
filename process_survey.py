@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import survey_mapping
 import analyze_survey
+from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
 
 # column names
 COL_ID = "response_id"
@@ -54,7 +55,7 @@ def identify_auto_qs(sub_df, prolific_age_mismatch, save_path):
     same_c_rating = sub_df[sub_df[list(survey_mapping.other_creatures_cons.values())].nunique(axis=1) == 1]
     intersection = same_ms_rating.merge(same_c_rating, how="inner")
     print(f"{intersection.shape[0]} participants gave identical ratings in the ms-rating section as well as the c-rating section; check manually")
-    intersection.to_csv(os.path.join(save_path, f"identical_ratings.csv"), index=False)
+    intersection.to_csv(os.path.join(save_path, f"identical_ratings.csv"), index=False)  # 0 were excluded for that
     if not(intersection.empty):
         # if we have people who gave the same ms rating AND the same c rating to everything, we suspect they skimmed it
         # did they also lie about their age?
@@ -82,7 +83,7 @@ def bot_filter(sub_df, save_path, age_mismatch=None):
     else:
         sub_df_filtered = sub_df
     shape_after = sub_df.shape[0]
-    print(f"Bot filtering: {shape_before - shape_after} were excluded")
+    print(f"Bot filtering: {shape_before - shape_after} were excluded")  # in the free sample: 0
 
     """
     test 2: did these people even finish the entire study?
@@ -93,7 +94,7 @@ def bot_filter(sub_df, save_path, age_mismatch=None):
     print(f"Partial responses: {shape_after - shape_finish} were excluded")
 
     """
-    test 3: are respondent in the age of consent?
+    test 3: are respondents in the age of consent?
     """
     sub_df_age = sub_df_filtered[sub_df_filtered["How old are you?"] >= AGE_CONSENT]
     sub_df_age.reset_index(inplace=True, drop=True)
@@ -230,7 +231,7 @@ def process_values(sub_df):
 
 def process_survey(sub_df, save_path, age_mismatch=None):
     # filter out participants who did not provide consent - they are not counted as participants in the study:
-    sub_df = sub_df[sub_df[COL_CONSENT] == CONSENT_YES].reset_index(inplace=False, drop=True)
+    sub_df = sub_df[sub_df[COL_CONSENT] == CONSENT_YES].reset_index(inplace=False, drop=True)  # in the free sample all of them consented (0 dropouts)
     # filter out bots:
     print(f"Overall {sub_df.shape[0]} people participated in the study")
     sub_df = bot_filter(sub_df=sub_df, age_mismatch=age_mismatch, save_path=save_path)
@@ -338,6 +339,65 @@ def processed_free_sample(subject_data_path, free_save_path):
     return subject_dict, subject_processed
 
 
+def define_exploratory_replication_pops(sub_df, sub_dict, replication_prop):
+    categorical_cols = [
+        "source",
+        "Current primary employment domain",
+        "What is your education background?",
+        "In what topic?",  # might contain NaNs
+        "In which country do you currently reside?",
+        "How do you describe yourself?",
+        "Do you have a pet?"
+    ]
+
+    ordinal_cols = [
+        "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in ethics and morality?",
+        "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in the science of consciousness?",
+        "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your level of interaction or experience with animals?",
+        "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in artificial intelligence (AI) systems?"
+    ]
+
+    age_col = "How old are you?"
+
+    # Convert ordinal variables to numeric, filling NaNs with the median
+    for col in ordinal_cols:
+        sub_df[col] = pd.to_numeric(sub_df[col], errors="coerce")
+        sub_df[col].fillna(sub_df[col].median(), inplace=True)
+
+    # age is numeric, but what we want to balance is actually age-bins and not actual age-numbers
+    age_bins = [18, 25, 35, 45, 55, 65, 75, 120]
+    age_labels = ["18-25", "26-35", "36-45", "46-55", "56-65", "66-75", "76+"]
+    # now, make a categorical column, and that's what we will balance
+    sub_df["age_group"] = pd.cut(sub_df[age_col], bins=age_bins, labels=age_labels, include_lowest=True).astype(str)
+
+    # Convert categorical variables to strings and fill NaNs so that they will be trated as a 'category'
+    sub_df[categorical_cols] = sub_df[categorical_cols].fillna("None").astype(str)
+
+    # Create a stratification matrix by encoding categorical features
+    encoded_cats = pd.get_dummies(sub_df[categorical_cols + ["age_group"]])
+
+
+    # Normalize ordinal features for fair weighting: NO NEED, as they are all on the same scale
+    normalized_ordinals = sub_df[ordinal_cols]
+
+    # Combine categorical and numeric for stratification
+    stratification_matrix = pd.concat([encoded_cats, normalized_ordinals], axis=1)
+
+    # Use iterative stratified split to maintain balance across multiple dimensions
+    splitter = MultilabelStratifiedShuffleSplit(n_splits=1, test_size=replication_prop, random_state=42)
+    train_idx, test_idx = next(splitter.split(sub_df, stratification_matrix))
+
+    # Create the exploratory and retest datasets
+    exploratory_df = sub_df.iloc[train_idx].reset_index(inplace=False, drop=True)
+    retest_df = sub_df.iloc[test_idx].reset_index(inplace=False, drop=True)
+
+    # Now create the corresponding exploratory and retests dicts
+    exploratory_dict = {key: df[df["response_id"].isin(exploratory_df["response_id"])].reset_index(inplace=False, drop=True) for key, df in sub_dict.items()}
+    retest_dict = {key: df[df["response_id"].isin(retest_df["response_id"])].reset_index(inplace=False, drop=True) for key, df in sub_dict.items()}
+
+    return exploratory_df, exploratory_dict, retest_df, retest_dict
+
+
 def manage_processing(prolific_data_path, free_data_path, all_save_path, load=False, exclude_age_mismatch=False):
     if load:
         # load paid
@@ -355,16 +415,10 @@ def manage_processing(prolific_data_path, free_data_path, all_save_path, load=Fa
                                                                    prolific_save_path=os.path.join(prolific_data_path, r"processed"),
                                                                    prolific_data_path=os.path.join(prolific_data_path, r"raw\prolific_export_666701f76c6898bb61cdb6c0.csv"),
                                                                    exclude_age_mismatch=exclude_age_mismatch)
-        analyze_survey.analyze_survey(sub_df=prolific_sub_df.copy(),
-                                      analysis_dict=prolific_sub_dict,
-                                      save_path=os.path.join(prolific_data_path, r"processed"))
 
         # free sample
         free_sub_dict, free_sub_df = processed_free_sample(subject_data_path=os.path.join(free_data_path, r"raw\ethics_free_labels.csv"),
                                                            free_save_path=os.path.join(free_data_path, r"processed"))
-        analyze_survey.analyze_survey(sub_df=free_sub_df.copy(),
-                                      analysis_dict=free_sub_dict,
-                                      save_path=os.path.join(free_data_path, r"processed"))
 
     # collapse both samples
     prolific_sub_df["source"] = "Prolific"
@@ -375,14 +429,62 @@ def manage_processing(prolific_data_path, free_data_path, all_save_path, load=Fa
     total_dict = dict()
     for key in prolific_sub_dict.keys():
         total_dict[key] = pd.concat([prolific_sub_dict[key], free_sub_dict[key]], ignore_index=True)
-    analyze_survey.analyze_survey(sub_df=total_df, analysis_dict=total_dict, save_path=all_save_path)
+
+
+    """
+    Split the data into training and test. 
+    This needs to be balanced, and we chose to balance it by demotraphics. 
+    """
+
+    exploratory_df, exploratory_dict, replication_df, replication_dict = define_exploratory_replication_pops(sub_df=total_df,
+                                                                                                             sub_dict=total_dict,
+                                                                                                             replication_prop=0.7)
+
+    """
+    Save the exploratory and replication dataframes for further analysis.
+    """
+    exploratory_df.to_csv(os.path.join(all_save_path, "exploratory_df.csv"), index=False)
+    with open(os.path.join(all_save_path, "exploratory_dict.pkl"), "wb") as f:
+        pickle.dump(exploratory_dict, f)
+
+    replication_df.to_csv(os.path.join(all_save_path, "replication_df.csv"), index=False)
+    with open(os.path.join(all_save_path, "replication_dict.pkl"), "wb") as f:
+        pickle.dump(replication_dict, f)
+
+    return
+
+
+def manage_analysis(all_save_path, sample="exploratory"):
+    """
+
+    :param all_save_path:
+    :param sample: exploratory, replication
+    :return:
+    """
+
+    # load the right sample:
+    sub_df = pd.read_csv(os.path.join(all_save_path, f"{sample}_df.csv"))
+    with open(os.path.join(all_save_path, rf"{sample}_dict.pkl"), "rb") as f:
+        sub_dict = pickle.load(f)
+
+    # define the folder to save the results
+    sample_save_path = os.path.join(all_save_path, f"{sample}")
+    if not os.path.exists(sample_save_path):
+        os.makedirs(sample_save_path)
+
+    analyze_survey.analyze_survey(sub_df=sub_df, analysis_dict=sub_dict, save_path=sample_save_path)
     return
 
 
 if __name__ == '__main__':
+    # pre-process data and split to exploratory and replication samples.
+    #manage_processing(prolific_data_path=r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\prolific",
+    #                  free_data_path=r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\free",
+    #                  all_save_path=r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all",
+    #                  load=False,
+    #                  exclude_age_mismatch=False)
 
-    manage_processing(prolific_data_path=r"...\prolific",
-                      free_data_path=r"...\free",
-                      all_save_path=r"...\all",
-                      load=True,
-                      exclude_age_mismatch=False)
+    # analyze the relevant sample
+    manage_analysis(all_save_path=r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all",
+                    sample="exploratory")
+

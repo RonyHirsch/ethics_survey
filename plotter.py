@@ -690,10 +690,13 @@ def plot_categorical_proportion_bar(categories_prop_df, category_col, data_col, 
     return
 
 
-def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save_path, save_name, title, legend=None,
-                                 show_mean=True, sem_line=True, ytick_visible=True, text_width=max_text_width, fmt="png",
+def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save_path, save_name, title, legend_labels=None,
+                                 show_mean=True, sem_line=True, ytick_visible=True, y_title=None,
+                                 default_ticks=True,
+                                 text_width=max_text_width, fmt="png",
                                  bar_relative=True, bar_range_min=1, bar_range_max=4, inches_w=18, inches_h=12,
-                                 split=False, yes_all_proportion=None, no_all_proportion=None, punishment_alpha=0.6):
+                                 split=False, relative=True, yes_all_proportion=None, no_all_proportion=None,
+                                 punishment_alpha=0.6):
     """
     Plots horizontal stacked proportion bars for multiple items with optional error bars for mean ratings.
 
@@ -739,14 +742,22 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
                 ("Yes to all", 100 * yes_to_all / n, colors[1], punishment_alpha)  # "Yes to all" with reduced alpha
             ]
         else:
-            sorted_proportions = [
-                ("No", proportions[0], colors[0], 1.0),
-                ("Yes", proportions[1], colors[1], 1.0)
-            ]
+            if num_ratings == 2:
+                sorted_proportions = [
+                    ("No", proportions[0], colors[0], 1.0),
+                    ("Yes", proportions[1], colors[1], 1.0)
+                ]
+            else:
+                sorted_proportions = [(legend_labels[i], proportions[i+1], colors[i], 1.0) for i in range(num_ratings)]
 
-        for j, (label, proportion, color, alpha_value) in enumerate(sorted_proportions):
-            a.barh(col, proportion, color=color, label=label, edgecolor='none', left=bottom, alpha=alpha_value)
-            bottom += proportion
+        if relative:
+            for j, (label, proportion, color, alpha_value) in enumerate(sorted_proportions):
+                a.barh(col, proportion, color=color, label=label, edgecolor='none', left=bottom, alpha=alpha_value)
+                bottom += proportion
+        else:
+            for j, (label, proportion, color, alpha_value) in enumerate(sorted_proportions):
+                a.barh(0, proportion, color=color, label=label, edgecolor='none', left=bottom, alpha=alpha_value)
+                bottom += proportion
 
         if show_mean:
             # plot the mean rating as a dot
@@ -777,10 +788,14 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
         # customize each subplot
         a.tick_params(axis='x', labelsize=18)
         if ytick_visible:
-            wrapped_col_name = textwrap.fill(col, width=text_width)  # limit the text line width
+            wrapped_col_name = textwrap.fill(str(col), width=text_width)  # limit the text line width
             yticks = a.get_yticks()  # current y-tick positions
-            a.set_yticks(yticks)  # explicitly set them to satisfy FixedLocator
-            a.set_yticklabels([wrapped_col_name] * len(yticks), fontsize=18)
+            if default_ticks:
+                a.set_yticks(yticks)  # explicitly set them to satisfy FixedLocator
+                a.set_yticklabels([wrapped_col_name] * len(yticks), fontsize=18)
+            else:
+                a.set_yticks(np.array([0]))
+                a.set_yticklabels([wrapped_col_name], fontsize=18)
         else:
             a.set_yticklabels("")
             a.spines["left"].set_visible(False)
@@ -790,16 +805,19 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
     # finalize figure
     fig.text(0.5, 0.06, "Proportion of Responses (%)", ha="center", fontsize=18)
     fig.suptitle(f"{title}", fontsize=25, y=0.94)
+    # y axis
+    if y_title is not None:
+        fig.text(0.06, 0.5, y_title, ha="center", va="center", rotation="vertical", fontsize=18)
 
     # legend
-    if legend is not None:
-        handles = [plt.Line2D([0], [0], color=colors[i], lw=10) for i in range(len(legend))]
+    if legend_labels is not None:
+        handles = [plt.Line2D([0], [0], color=colors[i], lw=10) for i in range(len(legend_labels))]
         fig.legend(
             handles=handles,
-            labels=legend,
+            labels=legend_labels,
             loc="upper center",
             bbox_to_anchor=(0.5, 0.925),  # adjust y value to position the legend
-            ncol=len(legend),  # arrange in a single row
+            ncol=len(handles),  # arrange in a single row
             frameon=False,
             fontsize=18
         )

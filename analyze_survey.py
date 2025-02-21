@@ -286,7 +286,6 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
             summary_df.to_excel(writer, sheet_name="Model_Summary", index=False)
             descriptive_stats.to_excel(writer, sheet_name="Descriptive_Stats", index=False)
             posthoc_df.to_excel(writer, sheet_name="Posthoc_Results", index=False)
-        c = 44
 
         """
         DEPRECATED
@@ -1859,10 +1858,112 @@ def experience(analysis_dict, save_path):
                      pie_direction=180, annot_groups=True, annot_group_selection=substantial_list, annot_props=False,
                      save_path=result_path, save_name="exp_animal_types", format="png")
 
+
+    """
+    Consciousness / Moral Status in Other Creatures, by experience
+    """
+
+    df_ms = analysis_dict["other_creatures_ms"].copy()
+    df_c = analysis_dict["other_creatures_cons"].copy()
+    df = pd.merge(df_c, df_ms, on=[process_survey.COL_ID])
+
+    # experience columns
+    animal_experience_df = analysis_dict["animal_exp"].loc[:,
+                           [process_survey.COL_ID, survey_mapping.Q_ANIMAL_EXP]].rename(
+        columns={survey_mapping.Q_ANIMAL_EXP: "exp_animals"}, inplace=False)
+    ai_experience_df = analysis_dict["ai_exp"].loc[:, [process_survey.COL_ID, survey_mapping.Q_AI_EXP]].rename(
+        columns={survey_mapping.Q_AI_EXP: "exp_ai"}, inplace=False)
+    ethics_experience_df = analysis_dict["ethics_exp"].loc[:,
+                           [process_survey.COL_ID, survey_mapping.Q_ETHICS_EXP]].rename(
+        columns={survey_mapping.Q_ETHICS_EXP: "exp_ethics"}, inplace=False)
+    con_experience_df = analysis_dict["consciousness_exp"].loc[:,
+                        [process_survey.COL_ID, survey_mapping.Q_CONSC_EXP]].rename(
+        columns={survey_mapping.Q_CONSC_EXP: "exp_consc"}, inplace=False)
+    demos_df = analysis_dict["demographics"].loc[:, [process_survey.COL_ID, "How old are you?"]].rename(
+        columns={"How old are you?": "age"}, inplace=False)
+
+    """
+    Cross people's ratings with their experience 
+    """
+    df_list = [df.copy(), animal_experience_df, ai_experience_df, ethics_experience_df, con_experience_df]
+    df_with_experience = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID]), df_list)
+
+    """
+    Experience with AI: 
+    Take people's self-reports about their experience with ai (exp_ai). 
+    Then, look only at the LLM item of the other creatures (out of the 24 creatures, what did people say about 
+    LLM being conscious, and about LLM having moral status). 
+    Break it down by experience with AI. 
+    """
+
+    ai_exp_col = "exp_ai"
+    c_llm_col = "c_A large language model"
+    ms_llm_col = "ms_A large language model"
+
+    df = df_with_experience.loc[:, ["response_id", c_llm_col, ms_llm_col, ai_exp_col]]
+
+    rating_color_list = ["#DB5461", "#fb9a99", "#70a0a4", "#26818B"]
+    c_rating_labels = ["Does not have consciousness", "Probably doesn't have consciousness",
+                       "Probably has consciousness", "Has consciousness"]
+    experience_levels = [1, 2, 3, 4, 5]
+    stats = {}
+    for experience in experience_levels:
+        df_experience = df[df[ai_exp_col] == experience]
+        # CONSCIOUSNESS
+        stats[experience] = helper_funcs.compute_stats(df_experience[c_llm_col], possible_values=[1, 2, 3, 4])
+    plot_data = {}
+    for item, (proportions, mean_rating, std_dev, n) in stats.items():
+        plot_data[item] = {
+            "Proportion": proportions,
+            "Mean": mean_rating,
+            "Std Dev": std_dev,
+            "N": n
+        }
+    # Sort the data by the MEAN rating (Python 3.7+ dictionaries maintain the insertion order of keys)
+    sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"], reverse=True)
+    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=len(experience_levels),
+                                         legend_labels=c_rating_labels, y_title="Experience with AI",
+                                         colors=rating_color_list, num_ratings=4, default_ticks=False,
+                                         title=f"Indicate whether A large-language model has consciousness",
+                                         save_path=result_path,
+                                         save_name=f"LLM_conscious_by_experience_with_AI",
+                                         text_width=39, relative=False, fmt="svg")
+
+    ma_rating_labels = ["Does not have moral status", "Probably doesn't have moral status",
+                        "Probably has moral status", "Has moral status"]
+    stats = {}
+    for experience in experience_levels:
+        df_experience = df[df[ai_exp_col] == experience]
+        # CONSCIOUSNESS
+        stats[experience] = helper_funcs.compute_stats(df_experience[ms_llm_col], possible_values=[1, 2, 3, 4])
+    plot_data = {}
+    for item, (proportions, mean_rating, std_dev, n) in stats.items():
+        plot_data[item] = {
+            "Proportion": proportions,
+            "Mean": mean_rating,
+            "Std Dev": std_dev,
+            "N": n
+        }
+    # Sort the data by the MEAN rating (Python 3.7+ dictionaries maintain the insertion order of keys)
+    sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"], reverse=True)
+    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=len(experience_levels),
+                                         legend_labels=ma_rating_labels, y_title="Experience with AI",
+                                         colors=rating_color_list, num_ratings=4, default_ticks=False,
+                                         title=f"Indicate whether A large-language model has moral status",
+                                         save_path=result_path,
+                                         save_name=f"LLM_ms_by_experience_with_AI",
+                                         text_width=39, relative=False, fmt="svg")
+
+    # correlation between LLM consciousness and LLM moral status
+    plotter.plot_scatter_xy(df=df, identity_col="response_id", x_col=c_llm_col, x_label="LLM Consciousness",
+                            x_min=1, x_max=4, x_ticks=1,
+                            y_col=ms_llm_col, y_label="LLM Moral Status", y_min=1, y_max=4, y_ticks=1,
+                            save_path=result_path, save_name=f"LLM_c_by_ms", annotate_id=False, title_text="",
+                            fmt="svg", size=400, corr_line=True, diag_line=True)
     return
 
 
-def analyze_survey(sub_df, analysis_dict, save_path, load=True):
+def analyze_survey(sub_df, analysis_dict, save_path, load=False):
     """
     The method which manages all the processing of specific survey data for analyses.
     :param sub_df: the dataframe of all participants' responses
@@ -1883,8 +1984,11 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     graded_consciousness(analysis_dict, save_path)
 
     other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False,
-                    df_earth_cluster=df_earth_cluster)
+                    df_earth_cluster=None)
 
+    demographics(analysis_dict, save_path)
+
+    experience(analysis_dict, save_path)
 
     moral_considreation_prios(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
@@ -1895,9 +1999,9 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
                                                                         df_earth_cluster=df_earth_cluster)
 
     zombie_pill(analysis_dict, save_path, feature_order_df=ms_features_order_df, feature_color_map=feature_colors)
+
     consciousness_intelligence(analysis_dict, save_path)
 
     gender_cross(analysis_dict, save_path)  # move to after the individuals
-    demographics(analysis_dict, save_path)
-    experience(analysis_dict, save_path)
+
     return
