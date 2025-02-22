@@ -876,12 +876,12 @@ def plot_scatter_xy_panel(df, identity_col, x_col, x_label, x_min, x_max, x_tick
     # regression line
     if corr_line is True:
         sns.regplot(data=df, x=x_col, y=y_col, scatter=False, ci=None, order=1,  # linear
-                    line_kws=dict(color="black", lw=1.25, linestyle="--"))
+                    line_kws=dict(color="black", lw=1.50, linestyle="-"))
 
     if diag_line is True:
         start = math.floor(min(df[x_col].tolist()))
         end = math.ceil(max(df[x_col].tolist()))
-        plt.plot([start, end], [start, end], color="#1F2041", linestyle="dashed", linewidth=1.25, zorder=2)
+        plt.plot([start, end], [start, end], color="gray", linestyle="dashed", linewidth=1.30, zorder=2)
 
     # jitter
     counts = df.groupby([x_col, y_col]).size().reset_index(name="counts")
@@ -953,7 +953,7 @@ def plot_scatter_xy_panel(df, identity_col, x_col, x_label, x_min, x_max, x_tick
 def plot_multiple_scatter_xy(data, identity_col, x_col, y_col, x_label, y_label,
                              x_min, x_max, x_ticks, y_min, y_max, y_ticks, panel_per_col,
                              save_path, save_name, panel_order=None, color_col=None, color_col_colors=None,
-                             palette_bounds=None, annotate_id=True, title_text="", fmt="png",
+                             palette_bounds=None, annotate_id=True, fmt="png",
                              size=400, alpha=1, corr_line=False, diag_line=False,
                              vertical_jitter=0, horizontal_jitter=0,
                              rows=4, cols=6, title_size=14, axis_size=12, hide_axes_names=False):

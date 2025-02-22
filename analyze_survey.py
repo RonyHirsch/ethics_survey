@@ -206,8 +206,8 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
                                      y_col="Moral Status", x_label="Consciousness", y_label="Moral Status",
                                      x_min=1, x_max=4.2, x_ticks=1, y_min=1, y_max=4.2, y_ticks=1,
                                      save_path=result_path, save_name="correlation_c_ms_panels",
-                                     palette_bounds=colors, annotate_id=False, title_text="",
-                                     fmt="svg", size=50, alpha=0.6, corr_line=False, diag_line=True,
+                                     palette_bounds=colors, annotate_id=False,
+                                     fmt="svg", size=50, alpha=0.6, corr_line=True, diag_line=True,
                                      vertical_jitter=0.25, horizontal_jitter=0.25,
                                      panel_per_col="Item", panel_order=sorted_items, rows=4, cols=6,
                                      title_size=20, axis_size=14,hide_axes_names=True)
