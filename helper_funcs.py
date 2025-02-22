@@ -363,7 +363,8 @@ def perform_kmeans(df_pivot, save_path, save_name, clusters=2, normalize=False):
     # Perform k-means clustering
     # The n_init parameter controls the number of times the KMeans algorithm is run with different centroid seeds; 10 is the default
     kmeans = KMeans(n_clusters=clusters, random_state=42, n_init=10)
-    df_pivot["Cluster"] = kmeans.fit_predict(df_pivot)
+    df_pivot = df_pivot.copy()
+    df_pivot.loc[:, "Cluster"] = kmeans.fit_predict(df_pivot)
 
     # Calculate silhouette score
     """
@@ -381,7 +382,7 @@ def perform_kmeans(df_pivot, save_path, save_name, clusters=2, normalize=False):
         silhouette_score(df_pivot.drop(columns="Cluster"), np.random.randint(0, clusters, size=df_pivot.shape[0]))
         for _ in range(n_iterations)
     ]
-    p_value = np.mean(silhouette_avg < np.array(random_silhouette_scores))
+    p_value = np.mean(silhouette_avg <= np.array(random_silhouette_scores))
     line = f"P-value of Silhouette Score compared to random clusters ({n_iterations} iterations): {p_value:.4f}"
     print(line)
     txt_output.append(line)

@@ -339,43 +339,51 @@ def processed_free_sample(subject_data_path, free_save_path):
     return subject_dict, subject_processed
 
 
-def define_exploratory_replication_pops(sub_df, sub_dict, replication_prop):
-    categorical_cols = [
-        "source",
-        "Current primary employment domain",
-        "What is your education background?",
-        "In what topic?",  # might contain NaNs
-        "In which country do you currently reside?",
-        "How do you describe yourself?",
-        "Do you have a pet?"
-    ]
+def calculate_proportions(df, categorical_cols, ordinal_cols):
+    proportions = {}
+    for col in categorical_cols:
+        proportions[col] = (df[col].value_counts(normalize=True) * 100).to_dict()
+    for col in ordinal_cols:
+        proportions[col] = (df[col].value_counts(normalize=True) * 100).to_dict()
+    proportions_df = pd.DataFrame(proportions).transpose()
+    return proportions_df
 
-    ordinal_cols = [
-        "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in ethics and morality?",
-        "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in the science of consciousness?",
-        "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your level of interaction or experience with animals?",
-        "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in artificial intelligence (AI) systems?"
-    ]
 
-    age_col = "How old are you?"
+def compare_proportions(df1, df1_name, df2, df2_name, df3, df3_name):
+    diff_df1_df2 = (df1 - df2).abs()
+    diff_df1_df3 = (df1 - df3).abs()
+    diff_df2_df3 = (df2 - df3).abs()
+
+    comparison_df = pd.concat(
+        [diff_df1_df2, diff_df1_df3, diff_df2_df3],
+        axis=1,
+        keys=[f"{df1_name}_vs_{df2_name}", f"{df1_name}_vs_{df3_name}", f"{df2_name}_vs_{df3_name}"]
+    )
+
+    # Compute overall mean difference for ranking
+    comparison_df["average_difference"] = comparison_df.mean(axis=1)
+
+    # Rank columns based on differences
+    most_different_cols = comparison_df["average_difference"].sort_values(ascending=False)
+
+    # re-order the columns (cosmetics)
+    comparison_df = comparison_df.T.reset_index(drop=False).T
+
+    return comparison_df, most_different_cols
+
+
+def define_exploratory_replication_pops(sub_df, sub_dict, categorical_cols, ordinal_cols, replication_prop):
 
     # Convert ordinal variables to numeric, filling NaNs with the median
     for col in ordinal_cols:
         sub_df[col] = pd.to_numeric(sub_df[col], errors="coerce")
         sub_df[col].fillna(sub_df[col].median(), inplace=True)
 
-    # age is numeric, but what we want to balance is actually age-bins and not actual age-numbers
-    age_bins = [18, 25, 35, 45, 55, 65, 75, 120]
-    age_labels = ["18-25", "26-35", "36-45", "46-55", "56-65", "66-75", "76+"]
-    # now, make a categorical column, and that's what we will balance
-    sub_df["age_group"] = pd.cut(sub_df[age_col], bins=age_bins, labels=age_labels, include_lowest=True).astype(str)
-
     # Convert categorical variables to strings and fill NaNs so that they will be trated as a 'category'
     sub_df[categorical_cols] = sub_df[categorical_cols].fillna("None").astype(str)
 
     # Create a stratification matrix by encoding categorical features
-    encoded_cats = pd.get_dummies(sub_df[categorical_cols + ["age_group"]])
-
+    encoded_cats = pd.get_dummies(sub_df[categorical_cols])
 
     # Normalize ordinal features for fair weighting: NO NEED, as they are all on the same scale
     normalized_ordinals = sub_df[ordinal_cols]
@@ -420,7 +428,9 @@ def manage_processing(prolific_data_path, free_data_path, all_save_path, load=Fa
         free_sub_dict, free_sub_df = processed_free_sample(subject_data_path=os.path.join(free_data_path, r"raw\ethics_free_labels.csv"),
                                                            free_save_path=os.path.join(free_data_path, r"processed"))
 
-    # collapse both samples
+    """
+    Unify both samples
+    """
     prolific_sub_df["source"] = "Prolific"
     free_sub_df["source"] = "Free"
     total_df = pd.concat([prolific_sub_df, free_sub_df], ignore_index=True)
@@ -430,15 +440,60 @@ def manage_processing(prolific_data_path, free_data_path, all_save_path, load=Fa
     for key in prolific_sub_dict.keys():
         total_dict[key] = pd.concat([prolific_sub_dict[key], free_sub_dict[key]], ignore_index=True)
 
-
     """
     Split the data into training and test. 
-    This needs to be balanced, and we chose to balance it by demotraphics. 
+    This needs to be balanced, and we chose to balance it by demographics. 
     """
 
+    # so first of all, we need to define the types of data we care about (want to balance)
+    categorical_columns = [
+        "source",
+        "Current primary employment domain",
+        "What is your education background?",
+        "In what topic?",  # might contain NaNs
+        "In which country do you currently reside?",
+        "How do you describe yourself?",
+        "Do you have a pet?"
+    ]
+    ordinal_columns = [
+        "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in ethics and morality?",
+        "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in the science of consciousness?",
+        "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your level of interaction or experience with animals?",
+        "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in artificial intelligence (AI) systems?"
+    ]
+
+    age_col = "How old are you?"
+    # age is numeric, but what we want to balance is actually age-bins and not actual age-numbers
+    age_bins = [18, 25, 35, 45, 55, 65, 75, 120]
+    age_labels = ["18-25", "26-35", "36-45", "46-55", "56-65", "66-75", "76+"]
+    # now, make a categorical column, and that's what we will balance
+    total_df["age_group"] = pd.cut(total_df[age_col], bins=age_bins, labels=age_labels, include_lowest=True).astype(str)
+    categorical_columns.append("age_group")  # now this is a categorical column we want to balance with the rest
+    total_df.to_csv(os.path.join(all_save_path, "processed_data.csv"), index=False)  # re-save with this column
+
+    # Now, define the exploratory and replicaiton populations based on these columns
     exploratory_df, exploratory_dict, replication_df, replication_dict = define_exploratory_replication_pops(sub_df=total_df,
                                                                                                              sub_dict=total_dict,
+                                                                                                             categorical_cols=categorical_columns,
+                                                                                                             ordinal_cols=ordinal_columns,
                                                                                                              replication_prop=0.7)
+
+    """
+    Calculate the proportions in the relevant columns to make sure we're good
+    """
+    total_proportions = calculate_proportions(total_df, categorical_columns, ordinal_columns)
+    total_proportions.to_csv(os.path.join(all_save_path, f"sample_balance_total.csv"), index=True)
+    exploratory_proportions = calculate_proportions(exploratory_df, categorical_columns, ordinal_columns)
+    exploratory_proportions.to_csv(os.path.join(all_save_path, f"sample_balance_exploratory.csv"), index=True)
+    replication_proportions = calculate_proportions(replication_df, categorical_columns, ordinal_columns)
+    replication_proportions.to_csv(os.path.join(all_save_path, f"sample_balance_replication.csv"), index=True)
+    # compare the proportions directly
+    comparison_df, most_different_cols = compare_proportions(df1=total_proportions, df1_name="total",
+                                        df2=exploratory_proportions, df2_name="exploratory",
+                                        df3=replication_proportions, df3_name="replication")
+    comparison_df.to_csv(os.path.join(all_save_path, f"sample_balance_comparison.csv"), index=True)
+    most_different_cols.to_csv(os.path.join(all_save_path, f"sample_balance_comparison_colDiff.csv"), index=True)
+
 
     """
     Save the exploratory and replication dataframes for further analysis.

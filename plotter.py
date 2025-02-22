@@ -37,11 +37,11 @@ def diverging_palette(color_order, left, right):
 
 
 def plot_raincloud_separate_samples(df, id_col, data_col_names, data_col_colors, save_path, save_name,
-                   x_title, x_name_dict, title,
-                   y_title, ymin, ymax, yskip, y_ticks=None, y_jitter=0,
-                   data_col_violin_left=None, violin_alpha=0.65, violin_width=0.5, group_spacing=0.5,
-                   marker_spread=0.1, marker_size=100, marker_alpha=0.25, fmt="svg",
-                   size_inches_x=15, size_inches_y=12):
+                                    x_title, x_name_dict, title,
+                                    y_title, ymin, ymax, yskip, y_ticks=None, y_jitter=0,
+                                    data_col_violin_left=None, violin_alpha=0.65, violin_width=0.5, group_spacing=0.5,
+                                    marker_spread=0.1, marker_size=100, marker_alpha=0.25, fmt="svg",
+                                    size_inches_x=15, size_inches_y=12):
     # ids
     ids = df[id_col].unique().tolist()
     # X axis params
@@ -91,9 +91,11 @@ def plot_raincloud_separate_samples(df, id_col, data_col_names, data_col_colors,
         # control the length
         m = np.mean(violin['cmeans'].get_paths()[0].vertices[:, 0])
         if left_flag:
-            violin['cmeans'].get_paths()[0].vertices[:, 0] = np.clip(violin['cmeans'].get_paths()[0].vertices[:, 0], -np.inf, m)
+            violin['cmeans'].get_paths()[0].vertices[:, 0] = np.clip(violin['cmeans'].get_paths()[0].vertices[:, 0],
+                                                                     -np.inf, m)
         else:
-            violin['cmeans'].get_paths()[0].vertices[:, 0] = np.clip(violin['cmeans'].get_paths()[0].vertices[:, 0], m, np.inf)
+            violin['cmeans'].get_paths()[0].vertices[:, 0] = np.clip(violin['cmeans'].get_paths()[0].vertices[:, 0], m,
+                                                                     np.inf)
 
         # now, scatter
         for id in ids:
@@ -107,7 +109,8 @@ def plot_raincloud_separate_samples(df, id_col, data_col_names, data_col_colors,
                 id_x_loc = (x_loc - marker_spread / 3.5) - (np.random.rand(1) * marker_spread)[0]
             scatter_x_dict[id][data_type] = id_x_loc
             scatter_y_dict[id][data_type] = id_y_jitter
-            plt.scatter(x=id_x_loc, y=id_y_jitter, marker="o", color=data_color, s=marker_size, alpha=marker_alpha, edgecolor=data_color, zorder=2)
+            plt.scatter(x=id_x_loc, y=id_y_jitter, marker="o", color=data_color, s=marker_size, alpha=marker_alpha,
+                        edgecolor=data_color, zorder=2)
 
     # cosmetics
     plt.ylabel(y_title, fontsize=15, labelpad=8)
@@ -116,13 +119,15 @@ def plot_raincloud_separate_samples(df, id_col, data_col_names, data_col_colors,
     else:
         plt.yticks(ticks=[y for y in np.arange(ymin, ymax, yskip)], labels=[item for item in y_ticks], fontsize=15)
     plt.xlabel(x_title, fontsize=22, labelpad=10)
-    plt.xticks(ticks=[(idx * group_spacing) for idx, item in enumerate(data_col_names)], labels=[x_name_dict[item] for item in data_col_names], fontsize=15)
+    plt.xticks(ticks=[(idx * group_spacing) for idx, item in enumerate(data_col_names)],
+               labels=[x_name_dict[item] for item in data_col_names], fontsize=15)
     plt.title(title, fontsize=25)
 
     # save plot
     figure = plt.gcf()  # get current figure
     figure.set_size_inches(size_inches_x, size_inches_y)
-    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches='tight', pad_inches=0.01)
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches='tight',
+                pad_inches=0.01)
     del figure
     plt.clf()
     plt.close()
@@ -184,9 +189,11 @@ def plot_raincloud(df, id_col, data_col_names, data_col_colors, save_path, save_
         # control the length
         m = np.mean(violin['cmeans'].get_paths()[0].vertices[:, 0])
         if left_flag:
-            violin['cmeans'].get_paths()[0].vertices[:, 0] = np.clip(violin['cmeans'].get_paths()[0].vertices[:, 0], -np.inf, m)
+            violin['cmeans'].get_paths()[0].vertices[:, 0] = np.clip(violin['cmeans'].get_paths()[0].vertices[:, 0],
+                                                                     -np.inf, m)
         else:
-            violin['cmeans'].get_paths()[0].vertices[:, 0] = np.clip(violin['cmeans'].get_paths()[0].vertices[:, 0], m, np.inf)
+            violin['cmeans'].get_paths()[0].vertices[:, 0] = np.clip(violin['cmeans'].get_paths()[0].vertices[:, 0], m,
+                                                                     np.inf)
 
         # now, scatter
         for id in ids:
@@ -200,7 +207,8 @@ def plot_raincloud(df, id_col, data_col_names, data_col_colors, save_path, save_
                 id_x_loc = (x_loc - marker_spread / 3.5) - (np.random.rand(1) * marker_spread)[0]
             scatter_x_dict[id][data_type] = id_x_loc
             scatter_y_dict[id][data_type] = id_y_jitter
-            plt.scatter(x=id_x_loc, y=id_y_jitter, marker="o", color=data_color, s=marker_size, alpha=marker_alpha, edgecolor=data_color, zorder=2)
+            plt.scatter(x=id_x_loc, y=id_y_jitter, marker="o", color=data_color, s=marker_size, alpha=marker_alpha,
+                        edgecolor=data_color, zorder=2)
 
     # If we want to connect scatter dots, we should do it now
     if scatter_lines:
@@ -216,16 +224,19 @@ def plot_raincloud(df, id_col, data_col_names, data_col_colors, save_path, save_
     else:
         plt.yticks(ticks=[y for y in np.arange(ymin, ymax, yskip)], labels=[item for item in y_ticks], fontsize=15)
     plt.xlabel(x_title, fontsize=22, labelpad=10)
-    plt.xticks(ticks=[(idx * group_spacing) for idx, item in enumerate(data_col_names)], labels=[x_name_dict[item] for item in data_col_names], fontsize=15)
+    plt.xticks(ticks=[(idx * group_spacing) for idx, item in enumerate(data_col_names)],
+               labels=[x_name_dict[item] for item in data_col_names], fontsize=15)
     plt.title(title, fontsize=25)
 
     # save plot
     figure = plt.gcf()  # get current figure
     figure.set_size_inches(size_inches_x, size_inches_y)
     if format == "svg":
-        plt.savefig(os.path.join(save_path, f"{save_name}.svg"), format="svg", dpi=1000, bbox_inches='tight', pad_inches=0.01)
+        plt.savefig(os.path.join(save_path, f"{save_name}.svg"), format="svg", dpi=1000, bbox_inches='tight',
+                    pad_inches=0.01)
     if format == "png":
-        plt.savefig(os.path.join(save_path, f"{save_name}.png"), format="png", dpi=1000, bbox_inches='tight', pad_inches=0.01)
+        plt.savefig(os.path.join(save_path, f"{save_name}.png"), format="png", dpi=1000, bbox_inches='tight',
+                    pad_inches=0.01)
     del figure
     plt.clf()
     plt.close()
@@ -309,16 +320,17 @@ def plot_pie(categories_names, categories_counts, title, save_path, save_name,
     # save
     figure = plt.gcf()  # get current figure
     if format == "svg":
-        plt.savefig(os.path.join(save_path, f"{save_name}.svg"), format="svg", dpi=1000, bbox_inches='tight', pad_inches=0.01)
+        plt.savefig(os.path.join(save_path, f"{save_name}.svg"), format="svg", dpi=1000, bbox_inches='tight',
+                    pad_inches=0.01)
     if format == "png":
-        plt.savefig(os.path.join(save_path, f"{save_name}.png"), format="png", dpi=1000, bbox_inches='tight', pad_inches=0.01)
+        plt.savefig(os.path.join(save_path, f"{save_name}.png"), format="png", dpi=1000, bbox_inches='tight',
+                    pad_inches=0.01)
     plt.clf()
     plt.close()
     return
 
 
 def plot_pca_scatter_2d(df, hue, title, save_path, save_name, pal=None, fmt="png", annotate=True, size=150):
-
     if pal is None:
         sns.scatterplot(x="PC1", y="PC2", data=df, hue=hue, s=size,
                         palette=sns.color_palette("hls", len(df[hue].unique().tolist())), legend=False)
@@ -341,7 +353,8 @@ def plot_pca_scatter_2d(df, hue, title, save_path, save_name, pal=None, fmt="png
     # save plot
     figure = plt.gcf()  # get current figure
     figure.set_size_inches(15, 12)
-    plt.savefig(os.path.join(save_path, f"{save_name}_PCA_result.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
+    plt.savefig(os.path.join(save_path, f"{save_name}_PCA_result.{fmt}"), format=f"{fmt}", dpi=1000,
+                bbox_inches='tight',
                 pad_inches=0.01)
     del figure
     plt.clf()
@@ -361,7 +374,7 @@ def get_labels(label_dict, min_val=0, max_val=1):
 
 
 def plot_overlaid_preferences(all_preferences, all_sems, all_colors, labels, label_map, cluster_names,
-                               binary, save_name, save_path, threshold=0, fmt="png"):
+                              binary, save_name, save_path, threshold=0, fmt="png"):
     """
     Creates a single plot overlaying centroids (preferences) and SEMs for all clusters.
     """
@@ -420,7 +433,7 @@ def plot_nonbinary_preferences(means, sems, colors, labels, label_map, title, mi
     # Plot dots with error bars and differential colors
     for i, (avg, sem, color) in enumerate(zip(means, sems, colors)):
         # plot a dashed line
-        ax.hlines(y=y_pos[i], xmin=min-0.05, xmax=max+0.05, color="lightgray", linestyle='--', linewidth=1)
+        ax.hlines(y=y_pos[i], xmin=min - 0.05, xmax=max + 0.05, color="lightgray", linestyle='--', linewidth=1)
         # plot the actual data
         ax.errorbar(avg, y_pos[i], xerr=sem, fmt='o', color=color, markersize=8,
                     ecolor="black", elinewidth=2, capsize=4)
@@ -434,8 +447,8 @@ def plot_nonbinary_preferences(means, sems, colors, labels, label_map, title, mi
     ax.set_xlim([min, max])
     for i, label in enumerate(labels):
         label_0, label_1 = get_labels(label_map[label], min_val=min, max_val=max)
-        ax.text(min-0.05, i, label_0, va='center', ha='right', fontsize=15, color='black')
-        ax.text(max+0.05, i, label_1, va='center', ha='left', fontsize=15, color='black')
+        ax.text(min - 0.05, i, label_0, va='center', ha='right', fontsize=15, color='black')
+        ax.text(max + 0.05, i, label_1, va='center', ha='left', fontsize=15, color='black')
 
     # save plot
     figure = plt.gcf()  # get current figure
@@ -478,7 +491,8 @@ def plot_binary_preferences(means, sems, colors, labels, label_map, title, save_
     # save plot
     figure = plt.gcf()  # get current figure
     figure.set_size_inches(15, 12)
-    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight', pad_inches=0.01)
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
+                pad_inches=0.01)
     del figure
     plt.clf()
     plt.close()
@@ -487,11 +501,9 @@ def plot_binary_preferences(means, sems, colors, labels, label_map, title, save_
 
 def plot_3d_scatter(x_col, y_col, z_col, data, color_map=None, c_values_col=None,
                     save=False, save_name=None, save_path=None, save_format="png"):
-
     x = data[x_col].tolist()
     y = data[y_col].tolist()
     z = data[z_col].tolist()
-
 
     fig = plt.figure(figsize=(10, 7))
     ax = Axes3D(fig, auto_add_to_figure=False)
@@ -503,7 +515,7 @@ def plot_3d_scatter(x_col, y_col, z_col, data, color_map=None, c_values_col=None
                         cmap=color_map)
     else:
         sc = ax.scatter(x, y, z,
-                        s=40,marker='o', c="black")
+                        s=40, marker='o', c="black")
 
     for i in range(0, len(x), 3):  # Step by 3 for triplets
         if i + 2 < len(x):  # Ensure we have a full triplet
@@ -529,7 +541,6 @@ def plot_3d_scatter(x_col, y_col, z_col, data, color_map=None, c_values_col=None
 
 
 def plot_histogram(df, category_col, data_col, save_path, save_name, format="svg"):
-
     sns.set_style("ticks")
     sns.despine(right=True, top=True)
     plt.rcParams['font.family'] = "Calibri"
@@ -567,7 +578,6 @@ def plot_categorical_bars_layered(categories_prop_df, category_col, full_data_co
 
     # Plot the bars
     for category in categories:
-
         row = categories_prop_df[categories_prop_df[category_col] == category].iloc[0]  # category's data
         index = categories_prop_df.index[categories_prop_df[category_col] == category][0]  # category's index in df
 
@@ -644,7 +654,6 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
 
 def plot_categorical_proportion_bar(categories_prop_df, category_col, data_col, categories_order, colors,
                                     save_path, save_name, title, legend=None):
-
     fig, ax = plt.subplots(figsize=(10, 6))
 
     bottom = 0
@@ -690,7 +699,8 @@ def plot_categorical_proportion_bar(categories_prop_df, category_col, data_col, 
     return
 
 
-def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save_path, save_name, title, legend_labels=None,
+def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save_path, save_name, title,
+                                 legend_labels=None,
                                  show_mean=True, sem_line=True, ytick_visible=True, y_title=None,
                                  default_ticks=True,
                                  text_width=max_text_width, fmt="png",
@@ -748,7 +758,8 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
                     ("Yes", proportions[1], colors[1], 1.0)
                 ]
             else:
-                sorted_proportions = [(legend_labels[i], proportions[i+1], colors[i], 1.0) for i in range(num_ratings)]
+                sorted_proportions = [(legend_labels[i], proportions[i + 1], colors[i], 1.0) for i in
+                                      range(num_ratings)]
 
         if relative:
             for j, (label, proportion, color, alpha_value) in enumerate(sorted_proportions):
@@ -783,7 +794,7 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
             else:
                 sem_position = (std_dev / np.sqrt(n)) * 100
             a.errorbar(mean_position, 0, xerr=sem_position, fmt='o', color="#333333",
-                            ecolor="#333333", elinewidth=1, capsize=4, capthick=1, label="")
+                       ecolor="#333333", elinewidth=1, capsize=4, capthick=1, label="")
 
         # customize each subplot
         a.tick_params(axis='x', labelsize=18)
@@ -834,10 +845,156 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
     return
 
 
+def plot_scatter_xy_panel(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_col, y_label, y_min, y_max,
+                          y_ticks, ax, color_col=None, color_col_colors=None, palette_bounds=None, annotate_id=True,
+                          title_text="", size=400, alpha=1, corr_line=False, diag_line=False,
+                          individual_df=None, id_col=None, vertical_jitter=0, horizontal_jitter=0,
+                          title_fontsize=14, axis_fontsize=12, hide_axes_names=False):
+
+    # use the provided axis for plotting
+    plt.sca(ax)
+
+    # dot color
+    scaler = MinMaxScaler()
+    df[["x_norm", "y_norm"]] = scaler.fit_transform(df[[x_col, y_col]])
+    df["combined"] = df["x_norm"] + df["y_norm"]
+    norm = plt.Normalize(vmin=df["combined"].min(), vmax=df["combined"].max())
+
+    if palette_bounds is None:
+        cmap = cm.get_cmap("viridis")
+    else:
+        cmap = LinearSegmentedColormap.from_list("custom", [palette_bounds[0], palette_bounds[1]])
+
+    # individual participant lines
+    if individual_df is not None:
+        for id in individual_df[id_col].unique().tolist():
+            id_df = individual_df.loc[individual_df[id_col] == id]
+            id_df = id_df.sort_values(by=[id_col, x_col])
+            sns.regplot(data=id_df, x=x_col, y=y_col, scatter=False, ci=None, order=1,
+                        line_kws=dict(color="#B4B5BB", lw=0.15, linestyle="-"))
+
+    # regression line
+    if corr_line is True:
+        sns.regplot(data=df, x=x_col, y=y_col, scatter=False, ci=None, order=1,  # linear
+                    line_kws=dict(color="black", lw=1.25, linestyle="--"))
+
+    if diag_line is True:
+        start = math.floor(min(df[x_col].tolist()))
+        end = math.ceil(max(df[x_col].tolist()))
+        plt.plot([start, end], [start, end], color="#1F2041", linestyle="dashed", linewidth=1.25, zorder=2)
+
+    # jitter
+    counts = df.groupby([x_col, y_col]).size().reset_index(name="counts")
+    jitter_mask = counts[counts["counts"] > 1].set_index([x_col, y_col]).index
+    # convert the jitter_mask to a set of tuples for efficient membership checking
+    jitter_mask_set = set(jitter_mask)
+
+    if vertical_jitter > 0 or horizontal_jitter > 0:
+        for i in range(df.shape[0]):
+            # create a tuple for the current point
+            current_point = (df[x_col].iat[i], df[y_col].iat[i])
+            # check if the current point is in the jitter_mask_set
+            if current_point in jitter_mask_set:
+                if vertical_jitter > 0:
+                    # apply vertical jitter
+                    df[y_col].iat[i] += np.random.uniform(-vertical_jitter, vertical_jitter)
+                if horizontal_jitter > 0:
+                    # apply horizontal jitter
+                    df[x_col].iat[i] += np.random.uniform(-horizontal_jitter, horizontal_jitter)
+
+    # scatter
+    if color_col is None:  # cmap
+        sns.scatterplot(data=df, x=x_col, y=y_col, cmap=cmap, norm=norm, c=df["combined"], s=size, alpha=alpha,
+                        zorder=3, ax=ax)
+    else:  # hue is the diff
+        if color_col_colors is None:
+            sns.scatterplot(data=df, x=x_col, y=y_col, cmap=cmap, norm=norm, hue=color_col, s=size, alpha=alpha,
+                            zorder=3, ax=ax)
+        else:
+            sns.scatterplot(data=df, x=x_col, y=y_col, palette=color_col_colors, hue=color_col, s=size, alpha=alpha,
+                            zorder=3, ax=ax)
+
+    # annotate
+    if annotate_id:
+        for i in range(len(df)):
+            ax.text(df[x_col][i], df[y_col][i] + 0.065, df[identity_col][i],
+                    fontsize=10, ha="center")
+
+    # Update limits based on jitter
+    x_min_jittered = df[x_col].min() - horizontal_jitter
+    x_max_jittered = df[x_col].max() + horizontal_jitter
+    y_min_jittered = df[y_col].min() - vertical_jitter
+    y_max_jittered = df[y_col].max() + vertical_jitter
+
+    # adjust the limits based on the jitter
+    ax.set_xlim(x_min_jittered, x_max_jittered)
+    ax.set_ylim(y_min_jittered, y_max_jittered)
+
+    # set titles and labels
+    ax.set_title(title_text.title(), fontsize=title_fontsize)
+
+    # set ticks for Y-axis
+    ax.set_xticks(np.arange(x_min, x_max + x_ticks, x_ticks))
+    ax.set_yticks(np.arange(y_min, y_max + y_ticks, y_ticks))
+    ax.tick_params(axis="both", labelsize=axis_fontsize)
+
+    # hide axis names based on parameter
+    if not hide_axes_names:
+        ax.set_xlabel(x_label.title(), fontsize=axis_fontsize)
+        ax.set_ylabel(y_label.title(), fontsize=axis_fontsize)
+    else:
+        # Only label leftmost Y-axis and bottom X-axis based on index in the main plotting function
+
+        ax.set_ylabel(y_label.title() if ax.get_subplotspec().is_first_col() else "", fontsize=axis_fontsize)
+        ax.set_xlabel(x_label.title() if ax.get_subplotspec().is_last_row() else "", fontsize=axis_fontsize)
+    return
+
+
+def plot_multiple_scatter_xy(data, identity_col, x_col, y_col, x_label, y_label,
+                             x_min, x_max, x_ticks, y_min, y_max, y_ticks, panel_per_col,
+                             save_path, save_name, panel_order=None, color_col=None, color_col_colors=None,
+                             palette_bounds=None, annotate_id=True, title_text="", fmt="png",
+                             size=400, alpha=1, corr_line=False, diag_line=False,
+                             vertical_jitter=0, horizontal_jitter=0,
+                             rows=4, cols=6, title_size=14, axis_size=12, hide_axes_names=False):
+
+    # Create a figure with subplots
+    fig, axs = plt.subplots(rows, cols, figsize=(cols * 4, rows * 4))  # Adjust size as needed
+    axs = axs.flatten()  # Flatten the 2D array of axes to 1D for easy indexing
+
+    # Define colors
+    colors = [color_col_colors[0], color_col_colors[-1]] if color_col_colors else [None, None]
+
+    # Loop through each unique item in custom order if provided
+    if panel_order is None:
+        items_to_plot = data[panel_per_col].unique().tolist()
+    else:
+        items_to_plot = panel_order
+    for idx, item in enumerate(items_to_plot):
+        data_item = data[data[panel_per_col] == item].drop(columns=[panel_per_col], inplace=False)
+        # Call the existing plotting function with the specific axis for the subplot
+        plot_scatter_xy_panel(df=data_item, identity_col=identity_col, x_col=x_col, x_label=x_label, x_min=x_min,
+                              x_max=x_max,
+                              x_ticks=x_ticks, y_col=y_col, y_label=y_label, y_min=y_min, y_max=y_max, y_ticks=y_ticks,
+                              ax=axs[idx],  # Pass the current axis
+                              color_col=color_col, color_col_colors=colors, palette_bounds=palette_bounds,
+                              annotate_id=annotate_id,
+                              title_text=item,  # Use the item name as the title
+                              size=size, alpha=alpha, corr_line=corr_line, diag_line=diag_line,
+                              vertical_jitter=vertical_jitter,
+                              horizontal_jitter=horizontal_jitter,
+                              title_fontsize=title_size, axis_fontsize=axis_size, hide_axes_names=hide_axes_names)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches="tight")
+    plt.close(fig)
+    return
+
+
 def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_col, y_label, y_min, y_max, y_ticks,
                     save_path, save_name, color_col=None, color_col_colors=None, palette_bounds=None, annotate_id=True,
-                    title_text="", fmt="png", size=400, corr_line=False, diag_line=False, individual_df=None, id_col=None):
-
+                    title_text="", fmt="png", size=400, alpha=1, corr_line=False, diag_line=False, individual_df=None,
+                    id_col=None, vertical_jitter=0, horizontal_jitter=0):
     plt.figure(figsize=(8, 6))
     plt.rcParams["font.family"] = "Calibri"
     sns.set_style("ticks")
@@ -872,20 +1029,51 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
         # draw a line from (start, start) to (end, end)
         plt.plot([start, end], [start, end], color="#1F2041", linestyle="dashed", linewidth=1.25, zorder=2)
 
+    """
+    Jitter
+    """
+    # count duplicates for (x, y) pairs - there's no need to jitter if it's the only dot with these (x, y) values
+    counts = df.groupby([x_col, y_col]).size().reset_index(name="counts")
+
+    # create a mask for points that have duplicates
+    jitter_mask = counts[counts["counts"] > 1].set_index([x_col, y_col]).index
+
+    # jitter accordingly
+    if vertical_jitter > 0 or horizontal_jitter > 0:
+        for i in range(len(df)):
+            if (df[x_col][i], df[y_col][i]) in jitter_mask:
+                if vertical_jitter > 0:
+                    df[y_col].iat[i] += np.random.uniform(-vertical_jitter, vertical_jitter)
+                if horizontal_jitter > 0:
+                    df[x_col].iat[i] += np.random.uniform(-horizontal_jitter, horizontal_jitter)
+
     # scatter plot
     if color_col is None:  # cmap
-        sns.scatterplot(data=df, x=x_col, y=y_col, cmap=cmap, norm=norm, c=df["combined"], s=size, zorder=3)
+        sns.scatterplot(data=df, x=x_col, y=y_col, cmap=cmap, norm=norm, c=df["combined"], s=size, alpha=alpha,
+                        zorder=3)
     else:  # hue is the diff
         if color_col_colors is None:
-            sns.scatterplot(data=df, x=x_col, y=y_col, cmap=cmap, norm=norm, hue=color_col, s=size, zorder=3)
+            sns.scatterplot(data=df, x=x_col, y=y_col, cmap=cmap, norm=norm, hue=color_col, s=size, alpha=alpha,
+                            zorder=3)
         else:
-            sns.scatterplot(data=df, x=x_col, y=y_col, palette=color_col_colors, hue=color_col, s=size, zorder=3)
+            sns.scatterplot(data=df, x=x_col, y=y_col, palette=color_col_colors, hue=color_col, s=size, alpha=alpha,
+                            zorder=3)
 
     # annotate
     if annotate_id:
         for i in range(len(df)):
             plt.text(df[x_col][i], df[y_col][i] + 0.065, df[identity_col][i],
                      fontsize=14, ha="center")
+
+    # update limits based on jitter
+    x_min_jittered = df[x_col].min() - horizontal_jitter
+    x_max_jittered = df[x_col].max() + horizontal_jitter
+    y_min_jittered = df[y_col].min() - vertical_jitter
+    y_max_jittered = df[y_col].max() + vertical_jitter
+    # adjust the limits based on the jitter
+    plt.xlim(x_min_jittered, x_max_jittered)
+    plt.ylim(y_min_jittered, y_max_jittered)
+
     # titles etc
     plt.yticks(np.arange(y_min, y_max + (0.05 * y_ticks), y_ticks), fontsize=16)
     plt.xticks(np.arange(x_min, x_max + (0.05 * x_ticks), x_ticks), fontsize=16)
@@ -910,7 +1098,6 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
 
 def plot_scatter(df, data_col, category_col, category_color_dict, category_order, title_text, x_label, y_label,
                  save_path, save_name, y_min, y_max, y_skip, vertical_jitter=0, horizontal_jitter=0.2):
-
     # calculate means and standard deviations for each category
     category_means = df.groupby(category_col)[data_col].mean()
     category_stds = df.groupby(category_col)[data_col].std()
@@ -987,7 +1174,8 @@ def plot_world_map_proportion(country_proportions_df, data_column, save_path):
     world = gpd.read_file(map_shapfile_path)
     world = world[world["CONTINENT"] != "Antarctica"]  # remove Antarctica
     world = world[world["CONTINENT"] != "Seven seas (open ocean"]  # remove the seven seas
-    world.loc[world["NAME"] == "Russia", "CONTINENT"] = "Eastern Europe"  # Russia is otherwise clustered with the whold of Europe
+    world.loc[world[
+                  "NAME"] == "Russia", "CONTINENT"] = "Eastern Europe"  # Russia is otherwise clustered with the whold of Europe
 
     """
     Plot by country
@@ -996,8 +1184,8 @@ def plot_world_map_proportion(country_proportions_df, data_column, save_path):
     df = country_proportions_df.rename(columns={data_column: "NAME"})
     # match the country names to the ones appearing in the world map we loaded
     df["NAME"].replace({"United Kingdom of Great Britain and Northern Ireland": "United Kingdom",
-                             "Viet Nam": "Vietnam",
-                             "Czech Republic": "Czechia"},
+                        "Viet Nam": "Vietnam",
+                        "Czech Republic": "Czechia"},
                        inplace=True)
 
     new_world = world.merge(df, on="NAME", how="left")
@@ -1077,20 +1265,22 @@ def plot_world_map_proportion(country_proportions_df, data_column, save_path):
     return
 
 
-def plot_density(df, x_col, x_col_name, hue_col, hue_col_name, save_name, save_path, format="png", pal="crest", a=0.3, xskip=1):
-
+def plot_density(df, x_col, x_col_name, hue_col, hue_col_name, save_name, save_path, format="png", pal="crest", a=0.3,
+                 xskip=1):
     ax = sns.kdeplot(data=df, x=x_col, hue=hue_col, fill=True, common_norm=False, palette=pal, alpha=a, linewidth=0)
 
     # axes
     plt.ylabel("Density", fontsize=17, labelpad=10)
-    plt.yticks([y for y in np.arange(0, 1 + (0.1/2), 0.1)], fontsize=15)
+    plt.yticks([y for y in np.arange(0, 1 + (0.1 / 2), 0.1)], fontsize=15)
     plt.xlabel(x_col_name.title(), fontsize=17, labelpad=10)
-    plt.xticks([x for x in np.arange(df[x_col].min(), df[x_col].max() + (xskip/2), xskip)], fontsize=15)
+    plt.xticks([x for x in np.arange(df[x_col].min(), df[x_col].max() + (xskip / 2), xskip)], fontsize=15)
 
     # legend
     labels = sorted([int(n) for n in df[hue_col].unique().tolist()])
-    colors = [plt.Line2D([0], [0], color=sns.color_palette(pal, len(labels))[i], lw=10, alpha=a+0.1) for i in range(len(labels))]
-    ax.legend(colors, labels, title=hue_col_name.title(), fontsize=15, title_fontsize=18, ncol=len(labels), frameon=False,
+    colors = [plt.Line2D([0], [0], color=sns.color_palette(pal, len(labels))[i], lw=10, alpha=a + 0.1) for i in
+              range(len(labels))]
+    ax.legend(colors, labels, title=hue_col_name.title(), fontsize=15, title_fontsize=18, ncol=len(labels),
+              frameon=False,
               loc="upper center")
 
     # save
@@ -1105,6 +1295,3 @@ def plot_density(df, x_col, x_col_name, hue_col, hue_col_name, save_name, save_p
     plt.clf()
     plt.close()
     return
-
-
-

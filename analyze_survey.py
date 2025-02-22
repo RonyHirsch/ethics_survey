@@ -94,8 +94,8 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
     posthoc_df = pd.concat(posthoc_list, ignore_index=True)
     posthoc_df.to_csv(os.path.join(result_path, f"permanova_ratings_per_experience_types_posthoc.csv"), index=False)
     descriptives_df = pd.concat(descriptives_list, ignore_index=True)
-    descriptives_df.to_csv(os.path.join(result_path, f"permanova_ratings_per_experience_types_descriptives.csv"), index=False)
-
+    descriptives_df.to_csv(os.path.join(result_path, f"permanova_ratings_per_experience_types_descriptives.csv"),
+                           index=False)
 
     """
     Relationship between C ratings and MS ratings
@@ -117,7 +117,8 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
     long_data_mean_rating_stats.to_csv(os.path.join(result_path, f"c_v_ms_avg_per_item_stats.csv"),
                                        index=True)  # in 'describe' the index is the desc name
 
-    dataframes = [long_data.copy(), animal_experience_df, ai_experience_df, ethics_experience_df, con_experience_df, demos_df]
+    dataframes = [long_data.copy(), animal_experience_df, ai_experience_df, ethics_experience_df, con_experience_df,
+                  demos_df]
     result_df = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID]), dataframes)
     result_df["non_human_animal"] = result_df["Item"].map(survey_mapping.other_creatures_isNonHumanAnimal)
     result_df.to_csv(os.path.join(result_path, "c_v_ms_long.csv"), index=False)
@@ -175,21 +176,66 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
             sorted_plot_data = {key: plot_data[key] for key in sorting_method if key in plot_data}.items()
 
         # plot
-        plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=num_plots, legend=rating_labels,
+        plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=num_plots,
+                                             legend_labels=rating_labels,
                                              colors=rating_color_list, num_ratings=4, title=f"{topic_name.title()}",
                                              bar_relative=False, bar_range_min=1, bar_range_max=4,
                                              save_path=result_path, fmt="svg",
                                              save_name=f"ratings_{topic_name.lower()}{sorted_suffix}")
 
+    """
+    Plot "other creatures" judgments of Consciousness vs. of Moral Status. >> *** PER ITEM ***
+    """
+    colors = [rating_color_list[0], rating_color_list[-1]]
+
+    data = long_data.pivot(index=["response_id", "Item"], columns=["Topic"], values="Rating").reset_index(drop=False, inplace=False)
+
+    # order the items
+    count_df = data.groupby("Item").apply(
+        lambda x: pd.Series({
+            "count_4": ((x["Consciousness"] == 4) & (x["Moral Status"] == 4)).sum(),
+            "count_3": ((x["Consciousness"] == 3) & (x["Moral Status"] == 3)).sum(),
+            "count_2": ((x["Consciousness"] == 2) & (x["Moral Status"] == 2)).sum(),
+            "count_1": ((x["Consciousness"] == 1) & (x["Moral Status"] == 1)).sum()
+        })).reset_index()
+
+    sorted_items = count_df.sort_values(by=["count_4", "count_3", "count_2", "count_1"],
+                                        ascending=[True, True, True, True])["Item"].tolist()
+
+    plotter.plot_multiple_scatter_xy(data=data, identity_col="response_id", x_col="Consciousness",
+                                     y_col="Moral Status", x_label="Consciousness", y_label="Moral Status",
+                                     x_min=1, x_max=4.2, x_ticks=1, y_min=1, y_max=4.2, y_ticks=1,
+                                     save_path=result_path, save_name="correlation_c_ms_panels",
+                                     palette_bounds=colors, annotate_id=False, title_text="",
+                                     fmt="svg", size=50, alpha=0.6, corr_line=False, diag_line=True,
+                                     vertical_jitter=0.25, horizontal_jitter=0.25,
+                                     panel_per_col="Item", panel_order=sorted_items, rows=4, cols=6,
+                                     title_size=20, axis_size=14,hide_axes_names=True)
+
 
     """
-    Plot "other creatures" judgments of Consciousness vs. of Moral Status. >> PER ITEM
+    This is if we want each of them separately
+    """
+    #for item in long_data["Item"].unique().tolist():
+    #    long_data_item = long_data[long_data["Item"] == item].drop(columns=["Item"], inplace=False)
+    #    data_item = long_data_item.pivot(index="response_id", columns="Topic", values="Rating").reset_index(drop=False,
+    #                                                                                                        inplace=False)
+        # plot the relationship between consciousness and moral status ratings FOR THIS ITEM, ACROSS PEOPLE
+    #    plotter.plot_scatter_xy(df=data_item, identity_col="response_id",
+    #                            x_col="Consciousness", x_label="Consciousness", x_min=1, x_max=4.2, x_ticks=1,
+    #                            y_col="Moral Status", y_label="Moral Status", y_min=1, y_max=4.2, y_ticks=1,
+    #                            save_path=result_path, save_name=f"correlation_c_ms_{item}", fmt="svg",
+    #                            annotate_id=False, palette_bounds=colors, corr_line=False, diag_line=True,
+    #                            vertical_jitter=0.15, horizontal_jitter=0.15, size=250, alpha=0.6,
+    #                            individual_df=None, id_col=None)
+
+
+    """
+    Plot "other creatures" judgments of Consciousness vs. of Moral Status. >> *** ACROSS ITEMS ***
     """
     # prepare data for analyses
     df_pivot = long_data.pivot_table(index="Item", columns="Topic", values="Rating", aggfunc="mean").reset_index(
         drop=False, inplace=False)  # I don't want to 'fillna(0).' this
-
-    colors = [rating_color_list[0], rating_color_list[-1]]
 
     # create a plotting version of df-pivot, deleting a prefix of a/an
     df_pivot_plotting = df_pivot.copy()
@@ -200,9 +246,9 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
                             x_col="Consciousness", x_label="Consciousness", x_min=1, x_max=4, x_ticks=1,
                             y_col="Moral Status", y_label="Moral Status", y_min=1, y_max=4, y_ticks=1,
                             save_path=result_path, save_name=f"correlation_c_ms", annotate_id=True,
-                            palette_bounds=colors, corr_line=False, diag_line=True, fmt="svg",
+                            palette_bounds=colors,  # use the same colors as the individual-item correlations
+                            corr_line=False, diag_line=True, fmt="svg",
                             individual_df=None, id_col=None)
-
 
     """
     The scatter plot above (plot_scatter_xy) has a diagonal line. The interesting part is the off-diagonal items; 
@@ -261,7 +307,8 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
     if df_earth_cluster is not None:
         df_clusters = df_earth_cluster[[process_survey.COL_ID, "Cluster"]]
         df_cols = df.columns.tolist()[1:]
-        df_with_cluster = pd.merge(df, df_clusters, how="inner", on=process_survey.COL_ID).reset_index(drop=True, inplace=False)
+        df_with_cluster = pd.merge(df, df_clusters, how="inner", on=process_survey.COL_ID).reset_index(drop=True,
+                                                                                                       inplace=False)
         """
         Check whether moral status ratings are affected by consciousness ratings and by the earth-in-danger clusters. 
         Let's do a mixed-effects model on to model the dependency of moral status ratings on consciousness ratings and 
@@ -271,8 +318,10 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
         ms_cols = df_ms.columns[1:].tolist()
         cluster_col = ["Cluster"]
         indep_cols = c_cols + cluster_col
-        long_df_with_cluster = df_with_cluster.melt(id_vars=[process_survey.COL_ID, "Cluster"], value_vars=ms_cols, var_name="feature", value_name="moral_status_rating")
-        long_df_with_cluster["consciousness_rating"] = df_with_cluster.melt(id_vars=[process_survey.COL_ID, "Cluster"], value_vars=c_cols)["value"]
+        long_df_with_cluster = df_with_cluster.melt(id_vars=[process_survey.COL_ID, "Cluster"], value_vars=ms_cols,
+                                                    var_name="feature", value_name="moral_status_rating")
+        long_df_with_cluster["consciousness_rating"] = \
+        df_with_cluster.melt(id_vars=[process_survey.COL_ID, "Cluster"], value_vars=c_cols)["value"]
         result_df, residuals_df, r2_df, summary_df, descriptive_stats, posthoc_df = helper_funcs.mixed_effects_model(
             long_df=long_df_with_cluster, cols_to_standardize=["consciousness_rating", "moral_status_rating"],
             dep_col="moral_status_rating", ind_col1="consciousness_rating", ind_col2="Cluster",
@@ -286,15 +335,6 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
             summary_df.to_excel(writer, sheet_name="Model_Summary", index=False)
             descriptive_stats.to_excel(writer, sheet_name="Descriptive_Stats", index=False)
             posthoc_df.to_excel(writer, sheet_name="Posthoc_Results", index=False)
-
-        """
-        DEPRECATED
-        Check whether the clusters differ in their rating patterns by representing each subject's overall ratings as 
-        a vector, and comparing the distances between vectors within each cluster vs. between clusters.  
-        """
-        #permanova_result, posthoc, descriptives = helper_funcs.permanova_on_pairwise_distances(data=df_with_cluster, columns=df_cols,group_col="Cluster")
-        #permanova_result.to_csv(os.path.join(result_path, f"permanova_ratings_per_earthInDanger_clusters.csv"),index=False)
-
 
     return
 
@@ -540,7 +580,7 @@ def calculate_ics_proportions(df_ics, save_path, prefix="", suffix=""):
     rating_labels = [survey_mapping.ANS_NO, survey_mapping.ANS_YES]
     rating_color_list = ["#B26972", "#355070"]
     sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"], reverse=True)
-    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=4, legend=rating_labels,
+    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=4, legend_labels=rating_labels,
                                          ytick_visible=True, text_width=39,
                                          title=f"Do you think A creature/system can be",
                                          show_mean=False, sem_line=False,
@@ -589,7 +629,8 @@ def ics(analysis_dict, save_path, df_earth_cluster=None):
         for cluster in clusters:
             subs_cluster = df_earth_cluster[df_earth_cluster["Cluster"] == cluster]
             subs_cluster_list = subs_cluster.loc[:, process_survey.COL_ID].tolist()
-            df_ics_cluster = df_ics[df_ics[process_survey.COL_ID].isin(subs_cluster_list)].reset_index(drop=True, inplace=False)
+            df_ics_cluster = df_ics[df_ics[process_survey.COL_ID].isin(subs_cluster_list)].reset_index(drop=True,
+                                                                                                       inplace=False)
             # plot
             calculate_ics_proportions(df_ics=df_ics_cluster, save_path=result_path, suffix=f"_cluster{cluster}")
 
@@ -650,7 +691,7 @@ def calculate_kill_for_test(df, save_path, prefix="", suffix=""):
     rating_labels = ["No (will not kill to pass the test)", "Yes (will kill to pass the test)"]
     rating_color_list = ["#B26972", "#355070"]
     sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"], reverse=True)
-    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=6, legend=rating_labels,
+    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=6, legend_labels=rating_labels,
                                          ytick_visible=True, text_width=39, title=f"", show_mean=False, sem_line=False,
                                          colors=rating_color_list, num_ratings=2,
                                          save_path=save_path, save_name=f"{prefix}kill_to_pass{suffix}")
@@ -670,7 +711,7 @@ def calculate_kill_for_test(df, save_path, prefix="", suffix=""):
     yes_all_proportion = df_yes_all.sum() / len(df)
     no_all_proportion = df_no_all.sum() / len(df)
     # plot again, discounting the all-yes, and all-no
-    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=6, legend=rating_labels,
+    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=6, legend_labels=rating_labels,
                                          ytick_visible=True, text_width=39, title=f"", show_mean=False, sem_line=False,
                                          colors=rating_color_list, num_ratings=2, save_path=save_path,
                                          save_name=f"{prefix}kill_to_pass_allYesNoDiscount{suffix}", split=True,
@@ -772,7 +813,8 @@ def kill_for_test(analysis_dict, save_path, df_earth_cluster):
         questions = [c for c in df_test_orig.columns if c.startswith("A creature/system that")]
         df_clusters = df_earth_cluster[[process_survey.COL_ID, "Cluster"]]
         clusters = df_clusters["Cluster"].unique().tolist()
-        df_with_cluster = pd.merge(df_test_orig, df_clusters, how="inner", on=process_survey.COL_ID).reset_index(drop=True, inplace=False)
+        df_with_cluster = pd.merge(df_test_orig, df_clusters, how="inner", on=process_survey.COL_ID).reset_index(
+            drop=True, inplace=False)
         # descriptives and figure
         for cluster in clusters:
             df_cluster = df_with_cluster[df_with_cluster["Cluster"] == cluster]
@@ -781,7 +823,8 @@ def kill_for_test(analysis_dict, save_path, df_earth_cluster):
         stats_list = list()
         for q in questions:
             df_kill_relevant = df_test_orig.loc[:, [process_survey.COL_ID, q]]
-            df_kill_relevant_with_cluster = pd.merge(df_kill_relevant, df_clusters, how="inner", on=process_survey.COL_ID).reset_index(drop=True,inplace=False)
+            df_kill_relevant_with_cluster = pd.merge(df_kill_relevant, df_clusters, how="inner",
+                                                     on=process_survey.COL_ID).reset_index(drop=True, inplace=False)
             """
             create a contingency table for a chi-squared test to check whether the clusters significantly differ in  
             their proportion of people who said "Yes"
@@ -796,7 +839,6 @@ def kill_for_test(analysis_dict, save_path, df_earth_cluster):
 
     c = 3  # TODO: DELETE THIS
 
-
     """
     Follow up: Separate the killing choices based on people who even think it's possible to have one feature without
     the others ('Yes' in the ics cluster of questions), and those who do not ('No') and see if they differ.
@@ -804,15 +846,19 @@ def kill_for_test(analysis_dict, save_path, df_earth_cluster):
     df_ics = analysis_dict["ics"].copy()
     # key = ics question (is it possible); value = kill question (would you kill it)
     ics_v_kill = {"Do you think a creature/system can have intentions/goals without being conscious?":
-                      ["A creature/system that only has plans/goals and intentions (can plan to perform certain actions in the future), but is not conscious (not experiencing) and cannot feel positive/negative sensations (pleasure/pain)",
-                       "A creature/system that can feel positive/negative sensations (pleasure/pain) and also has plans/goals and intentions (can plan to perform certain actions in the future), but is not conscious (not experiencing)"],
+                      [
+                          "A creature/system that only has plans/goals and intentions (can plan to perform certain actions in the future), but is not conscious (not experiencing) and cannot feel positive/negative sensations (pleasure/pain)",
+                          "A creature/system that can feel positive/negative sensations (pleasure/pain) and also has plans/goals and intentions (can plan to perform certain actions in the future), but is not conscious (not experiencing)"],
                   "Do you think a creature/system can be conscious without having intentions/goals?":
-                      ["A creature/system that does not have plans/goals or intentions, and cannot feel positive/negative sensations (pleasure/pain), but is conscious (for example, sees colors, but does not feel anything negative or positive, and cannot plan)",
-                       "A creature/system that is both conscious (has experiences) and can feel positive/negative sensations (pleasure/pain), but does not have plans/goals or intentions (for example, can't plan to avoid something that causes pain)"],
+                      [
+                          "A creature/system that does not have plans/goals or intentions, and cannot feel positive/negative sensations (pleasure/pain), but is conscious (for example, sees colors, but does not feel anything negative or positive, and cannot plan)",
+                          "A creature/system that is both conscious (has experiences) and can feel positive/negative sensations (pleasure/pain), but does not have plans/goals or intentions (for example, can't plan to avoid something that causes pain)"],
                   "Do you think a creature/system can have positive or negative sensations (pleasure/pain) without being conscious?":
-                      ["A creature/system that can only feel positive/negative sensations (pleasure/pain), but is not conscious (not experiencing) and does not have plans/goals or intentions (for example, can't plan to avoid something that causes pain)"],
+                      [
+                          "A creature/system that can only feel positive/negative sensations (pleasure/pain), but is not conscious (not experiencing) and does not have plans/goals or intentions (for example, can't plan to avoid something that causes pain)"],
                   "Do you think a creature/system can be conscious without having positive or negative sensations (pleasure/pain)?":
-                      ["A creature/system that is both conscious (has experiences) and has plans/goals and intentions (can plan to perform certain actions in the future), but cannot feel positive/negative sensations (pleasure/pain)"]}
+                      [
+                          "A creature/system that is both conscious (has experiences) and has plans/goals and intentions (can plan to perform certain actions in the future), but cannot feel positive/negative sensations (pleasure/pain)"]}
 
     return
 
@@ -844,7 +890,7 @@ def zombie_pill(analysis_dict, save_path, feature_order_df=None, feature_color_m
     }}
     rating_color_list = ["#B26972", "#355070"]
     sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"], reverse=True)
-    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=1, legend=rating_labels,
+    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=1, legend_labels=rating_labels,
                                          ytick_visible=True, text_width=39, title=f"", show_mean=False, sem_line=False,
                                          colors=rating_color_list, num_ratings=2, inches_w=18, inches_h=8,
                                          save_path=result_path, save_name=f"take_the_pill")
@@ -920,8 +966,8 @@ def calculate_moral_consideration_features(ms_features_df, result_path, save_pre
     """
     # proportions_one  = how many of all people selected this feature as the most important one
     proportions_one = (
-                most_important["Which do you think is the most important for moral considerations?"].value_counts(
-                    normalize=True) * 100).to_frame(name="Proportion_one").reset_index(drop=False, inplace=False)
+            most_important["Which do you think is the most important for moral considerations?"].value_counts(
+                normalize=True) * 100).to_frame(name="Proportion_one").reset_index(drop=False, inplace=False)
     proportions_one.rename(columns={"Which do you think is the most important for moral considerations?": "index"},
                            inplace=True)
     proportions_one["index"] = pd.Categorical(proportions_one["index"], categories=category_order,
@@ -1093,7 +1139,8 @@ def moral_consideration_features(analysis_dict, save_path, df_earth_cluster=None
                                                                       df1=cons_experts_academics_expAcademia_props,
                                                                       group2="experts-nonAcademia",
                                                                       df2=cons_experts_expNonAcademia_props)
-    expsAcedemic_v_expNonAcademic.to_csv(os.path.join(result_path, f"z_test_expsAcademic_expNonAcademia.csv"), index=False)
+    expsAcedemic_v_expNonAcademic.to_csv(os.path.join(result_path, f"z_test_expsAcademic_expNonAcademia.csv"),
+                                         index=False)
 
     """
     Relationship between Earth-in-danger clusters and moral consideration features
@@ -1104,24 +1151,27 @@ def moral_consideration_features(analysis_dict, save_path, df_earth_cluster=None
         for cluster in clusters:
             df_cluster = df_earth_cluster[df_earth_cluster["Cluster"] == cluster]  # subset
             cluster_subs = df_cluster[process_survey.COL_ID].tolist()
-            ms_features_cluster = ms_features[ms_features[process_survey.COL_ID].isin(cluster_subs)].reset_index(drop=True, inplace=False)
-            cluster_order_df, cluster_colors = calculate_moral_consideration_features(ms_features_df=ms_features_cluster,
-                                                                                      result_path=result_path,
-                                                                                      save_prefix=f"earthInDanger_cluster{cluster}_",
-                                                                                      feature_order_df=ms_features_order_df,
-                                                                                      feature_color_dict=feature_colors)
+            ms_features_cluster = ms_features[ms_features[process_survey.COL_ID].isin(cluster_subs)].reset_index(
+                drop=True, inplace=False)
+            cluster_order_df, cluster_colors = calculate_moral_consideration_features(
+                ms_features_df=ms_features_cluster,
+                result_path=result_path,
+                save_prefix=f"earthInDanger_cluster{cluster}_",
+                feature_order_df=ms_features_order_df,
+                feature_color_dict=feature_colors)
             cluster_props[cluster] = cluster_order_df
 
         # test statistical difference between pairs of clusters
         for cluster_pair in combinations(clusters, 2):  # for each pair of clusters
             cluster_comp = helper_funcs.two_proportion_ztest(col_items="index", col_prop="Proportion_all",
-                                                                      col_n="N",
-                                                                      group1=f"cluster-{cluster_pair[0]}",
-                                                                      df1=cluster_props[cluster_pair[0]],
-                                                                      group2=f"cluster-{cluster_pair[1]}",
-                                                                      df2=cluster_props[cluster_pair[1]])
-            cluster_comp.to_csv(os.path.join(result_path, f"z_test_earthInDanger_cluster{cluster_pair[0]}_cluster{cluster_pair[1]}.csv"), index=False)
-
+                                                             col_n="N",
+                                                             group1=f"cluster-{cluster_pair[0]}",
+                                                             df1=cluster_props[cluster_pair[0]],
+                                                             group2=f"cluster-{cluster_pair[1]}",
+                                                             df2=cluster_props[cluster_pair[1]])
+            cluster_comp.to_csv(os.path.join(result_path,
+                                             f"z_test_earthInDanger_cluster{cluster_pair[0]}_cluster{cluster_pair[1]}.csv"),
+                                index=False)
 
         """
         Relationship with consciousness/sensations/intentions: 
@@ -1195,7 +1245,8 @@ def moral_considreation_prios(analysis_dict, save_path, df_earth_cluster=None):
     for q in questions:
         df_q = ms_prios.loc[:, [process_survey.COL_ID, q]]
         category_counts = df_q[q].value_counts().reset_index(inplace=False, drop=False)
-        plotter.plot_pie(categories_names=category_counts.loc[:, q].tolist(), categories_counts=category_counts.loc[:, "count"].tolist(),
+        plotter.plot_pie(categories_names=category_counts.loc[:, q].tolist(),
+                         categories_counts=category_counts.loc[:, "count"].tolist(),
                          categories_colors=CAT_COLOR_DICT, title=f"{q}",
                          save_path=result_path, save_name=f"{q.replace('?', '').replace('/', '-')}", format="png")
         category_counts.to_csv(os.path.join(result_path, f"{q.replace('?', '').replace('/', '-')}.csv"), index=False)
@@ -1254,7 +1305,6 @@ def moral_considreation_prios(analysis_dict, save_path, df_earth_cluster=None):
         df = human_prios[human_prio]
         plot_graded_consciousness_given_df(df=df, save_path=result_path, prefix="", suffix=f"_{human_prio}")
 
-
     """
     If df_earth_cluster is not None, take the clustering from the Earth-in-danger scenarios, and see if they apply 
     here as well. 
@@ -1268,12 +1318,14 @@ def moral_considreation_prios(analysis_dict, save_path, df_earth_cluster=None):
         for q in q_map:
             ms_prios_relevant = ms_prios.loc[:, [process_survey.COL_ID, q]]
             df_clusters = df_earth_cluster[[process_survey.COL_ID, "Cluster"]]
-            ms_prios_relevant_with_cluster = pd.merge(ms_prios_relevant, df_clusters, how="inner", on=process_survey.COL_ID).reset_index(drop=True,inplace=False)
+            ms_prios_relevant_with_cluster = pd.merge(ms_prios_relevant, df_clusters, how="inner",
+                                                      on=process_survey.COL_ID).reset_index(drop=True, inplace=False)
             """
             create a contingency table for a chi-squared test to check whether the clusters significantly differ in  
             their proportion of people who said "Yes"
             """
-            contingency_table = pd.crosstab(ms_prios_relevant_with_cluster["Cluster"], ms_prios_relevant_with_cluster[q])
+            contingency_table = pd.crosstab(ms_prios_relevant_with_cluster["Cluster"],
+                                            ms_prios_relevant_with_cluster[q])
             chisquare_result = helper_funcs.chi_squared_test(contingency_table=contingency_table)
             chisquare_result[f"Question"] = [q]
             chisquare_result[f"per"] = ["Earth-in-danger cluster"]
@@ -1306,7 +1358,7 @@ def plot_graded_consciousness_given_df(df, save_path, prefix="", suffix=""):
         }
     # Sort the data by the MEAN rating (Python 3.7+ dictionaries maintain the insertion order of keys)
     sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"], reverse=True)
-    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=3, legend=rating_labels,
+    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=3, legend_labels=rating_labels,
                                          colors=rating_color_list, num_ratings=4, title=f"How Much do you Agree?",
                                          save_path=save_path,
                                          save_name=f"{prefix}consciousness_graded_ratings{suffix}",
@@ -1332,7 +1384,8 @@ def graded_consciousness(analysis_dict, save_path):
     plot_graded_consciousness_given_df(df=c_graded, save_path=result_path)
 
     # contradicting themselves
-    c_graded_contradiction = c_graded[(c_graded[survey_mapping.Q_GRADED_EQUAL] >= 3) & (c_graded[survey_mapping.Q_GRADED_UNEQUAL] >= 3)]
+    c_graded_contradiction = c_graded[
+        (c_graded[survey_mapping.Q_GRADED_EQUAL] >= 3) & (c_graded[survey_mapping.Q_GRADED_UNEQUAL] >= 3)]
 
     # now, other things
 
@@ -1385,9 +1438,9 @@ def graded_consciousness(analysis_dict, save_path):
     Relations to variability in Consciousness Ratings
     """
     other_creatures_c = analysis_dict["other_creatures_cons"]
-    #other_creatures_c["c_ratings variability"] = other_creatures_c.iloc[:, 1:].std(axis=1)
-    #std_df = other_creatures_c[[process_survey.COL_ID, "c_ratings variability"]]
-    #merged_df = pd.merge(c_graded, std_df, on=process_survey.COL_ID)
+    # other_creatures_c["c_ratings variability"] = other_creatures_c.iloc[:, 1:].std(axis=1)
+    # std_df = other_creatures_c[[process_survey.COL_ID, "c_ratings variability"]]
+    # merged_df = pd.merge(c_graded, std_df, on=process_survey.COL_ID)
     # TODO: STOPPED HERE
 
     return
@@ -1715,7 +1768,7 @@ def demographics(analysis_dict, save_path):
 
     plotter.plot_pie(categories_names=employment_order,
                      categories_counts=category_counts,
-                     #[employment_counts[employment] for employment in employment_order]
+                     # [employment_counts[employment] for employment in employment_order]
                      categories_colors=employment_colors, title=f"{employment}", edge_color="none",
                      pie_direction=180, annot_groups=True, annot_group_selection=substantial_list, annot_props=False,
                      save_path=result_path, save_name=f"employment", format="png")
@@ -1813,7 +1866,7 @@ def experience(analysis_dict, save_path):
     rating_labels = ["1 (None)", "2", "3", "4", "5 (Extremely)"]
     rating_color_list = ["#E7E7E7", "#B7CED0", "#87B4B9", "#569BA2", "#26818B"]
     topic_name = "experience with animals"
-    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=1, legend=rating_labels,
+    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=1, legend_labels=rating_labels,
                                          ytick_visible=False, title=f"{topic_name.title()}",
                                          colors=rating_color_list, num_ratings=5,
                                          save_path=result_path, save_name=f"{topic_name.lower()}_ratings")
@@ -1853,11 +1906,10 @@ def experience(analysis_dict, save_path):
     category_counts = [animal_counts[animal] if animal in animal_counts else 0 for animal in animal_order]
 
     plotter.plot_pie(categories_names=animal_order,
-                     categories_counts=category_counts,  #[animal_counts[animal] for animal in animal_order]
+                     categories_counts=category_counts,  # [animal_counts[animal] for animal in animal_order]
                      categories_colors=animal_colors, title=f"Animal Experience (3+)", edge_color="none",
                      pie_direction=180, annot_groups=True, annot_group_selection=substantial_list, annot_props=False,
                      save_path=result_path, save_name="exp_animal_types", format="png")
-
 
     """
     Consciousness / Moral Status in Other Creatures, by experience
@@ -1963,7 +2015,7 @@ def experience(analysis_dict, save_path):
     return
 
 
-def analyze_survey(sub_df, analysis_dict, save_path, load=False):
+def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     The method which manages all the processing of specific survey data for analyses.
     :param sub_df: the dataframe of all participants' responses
@@ -1979,12 +2031,12 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=False):
     else:
         df_earth_cluster = earth_in_danger(analysis_dict, save_path)
 
+    other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False,
+                    df_earth_cluster=None)
+
     kill_for_test(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
     graded_consciousness(analysis_dict, save_path)
-
-    other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False,
-                    df_earth_cluster=None)
 
     demographics(analysis_dict, save_path)
 
