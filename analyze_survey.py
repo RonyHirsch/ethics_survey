@@ -18,8 +18,8 @@ CAT_COLOR_DICT = {"Person": "#AF7A6D",  # FAE8EB
                   "Fruit fly (a conscious one, for sure)": "#CACFD6",
                   "AI (that tells you that it's conscious)": "#074F57",
                   ###
-                  "Yes": "#355070",
-                  "No": "#B26972",  # #590004, #461D02
+                  survey_mapping.ANS_YES: "#3C5968",  # "#355070"
+                  survey_mapping.ANS_NO: "#B53B03",  # "#B26972" #590004, #461D02
                   }
 
 CAT_LABEL_DICT = {"Person": "Person",
@@ -199,18 +199,53 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
             "count_1": ((x["Consciousness"] == 1) & (x["Moral Status"] == 1)).sum()
         })).reset_index()
 
-    sorted_items = count_df.sort_values(by=["count_4", "count_3", "count_2", "count_1"],
-                                        ascending=[True, True, True, True])["Item"].tolist()
+    sorted_items_1234 = count_df.sort_values(by=["count_1", "count_2", "count_3", "count_4"],
+                                             ascending=[True, True, True, True])["Item"].tolist()
 
     plotter.plot_multiple_scatter_xy(data=data, identity_col="response_id", x_col="Consciousness",
                                      y_col="Moral Status", x_label="Consciousness", y_label="Moral Status",
                                      x_min=1, x_max=4.2, x_ticks=1, y_min=1, y_max=4.2, y_ticks=1,
-                                     save_path=result_path, save_name="correlation_c_ms_panels",
+                                     save_path=result_path, save_name="correlation_c_ms_panels_sorted1234",
                                      palette_bounds=colors, annotate_id=False,
                                      fmt="svg", size=50, alpha=0.6, corr_line=True, diag_line=True,
                                      vertical_jitter=0.25, horizontal_jitter=0.25,
-                                     panel_per_col="Item", panel_order=sorted_items, rows=4, cols=6,
-                                     title_size=20, axis_size=14,hide_axes_names=True)
+                                     panel_per_col="Item", panel_order=sorted_items_1234, rows=4, cols=6,
+                                     title_size=20, axis_size=14, hide_axes_names=True,
+                                     violins=True, violin_alpha=0.75, violin_color="#BAB9CB")
+
+    correlation_per_item = (
+        data.groupby("Item")[["Consciousness", "Moral Status"]]
+        .corr()
+        .unstack()
+        .iloc[:, 1]
+    )
+    sorted_items_corr = correlation_per_item.sort_values(ascending=True).index.tolist()
+
+    plotter.plot_multiple_scatter_xy(data=data, identity_col="response_id", x_col="Consciousness",
+                                     y_col="Moral Status", x_label="Consciousness", y_label="Moral Status",
+                                     x_min=1, x_max=4.2, x_ticks=1, y_min=1, y_max=4.2, y_ticks=1,
+                                     save_path=result_path, save_name="correlation_c_ms_panels_sortedCorr",
+                                     palette_bounds=colors, annotate_id=False,
+                                     fmt="svg", size=50, alpha=0.6, corr_line=True, diag_line=True,
+                                     vertical_jitter=0.25, horizontal_jitter=0.25,
+                                     panel_per_col="Item", panel_order=sorted_items_corr, rows=4, cols=6,
+                                     title_size=20, axis_size=14, hide_axes_names=True)
+
+    std_per_item = (
+        data.groupby("Item")[["Consciousness", "Moral Status"]]
+        .std()
+        .mean(axis=1)  # Average variability across both ratings
+    )
+    sorted_items_std = std_per_item.sort_values(ascending=True).index.tolist()
+    plotter.plot_multiple_scatter_xy(data=data, identity_col="response_id", x_col="Consciousness",
+                                     y_col="Moral Status", x_label="Consciousness", y_label="Moral Status",
+                                     x_min=1, x_max=4.2, x_ticks=1, y_min=1, y_max=4.2, y_ticks=1,
+                                     save_path=result_path, save_name="correlation_c_ms_panels_sortedSTD",
+                                     palette_bounds=colors, annotate_id=False,
+                                     fmt="svg", size=50, alpha=0.6, corr_line=True, diag_line=True,
+                                     vertical_jitter=0.25, horizontal_jitter=0.25,
+                                     panel_per_col="Item", panel_order=sorted_items_std, rows=4, cols=6,
+                                     title_size=20, axis_size=14, hide_axes_names=True)
 
 
     """
@@ -359,7 +394,7 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
         plotter.plot_pie(categories_names=counts.index.tolist(), categories_counts=counts.tolist(),
                          categories_labels=CAT_LABEL_DICT,
                          categories_colors=CAT_COLOR_DICT, title=f"{q}",
-                         save_path=result_path, save_name=f"{'_'.join(counts.index.tolist())}", format="png")
+                         save_path=result_path, save_name=f"{'_'.join(counts.index.tolist())}", fmt="png")
 
     """
     Real stuff: Kmeans clustering, crossing with demographics
@@ -554,7 +589,7 @@ def earth_in_danger(analysis_dict, save_path, cluster_num=2):
 
 def calculate_ics_proportions(df_ics, save_path, prefix="", suffix=""):
     questions = [c for c in df_ics.columns if c.startswith("Do you think a creature/system")]
-    ans_map = {"No": 0, "Yes": 1}
+    ans_map = {survey_mapping.ANS_NO: 0, survey_mapping.ANS_YES: 1}
     # plot a collapsed figure where each creature is a bar, with the proportion of how many would kill it
     stats = dict()
     labels = list()
@@ -578,14 +613,14 @@ def calculate_ics_proportions(df_ics, save_path, prefix="", suffix=""):
             "N": n
         }
     rating_labels = [survey_mapping.ANS_NO, survey_mapping.ANS_YES]
-    rating_color_list = ["#B26972", "#355070"]
+    rating_colors = [CAT_COLOR_DICT[survey_mapping.ANS_NO], CAT_COLOR_DICT[survey_mapping.ANS_YES]]
     sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"], reverse=True)
     plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=4, legend_labels=rating_labels,
                                          ytick_visible=True, text_width=39,
-                                         title=f"Do you think A creature/system can be",
+                                         title=f"Do you think a creature/system can be",
                                          show_mean=False, sem_line=False,
-                                         colors=rating_color_list, num_ratings=2,
-                                         save_path=save_path, save_name=f"{prefix}ics{suffix}")
+                                         colors=rating_colors, num_ratings=2,
+                                         save_path=save_path, save_name=f"{prefix}ics{suffix}", fmt="svg")
     # save data
     plot_df = pd.DataFrame(plot_data)
     plot_df.to_csv(os.path.join(save_path, f"{prefix}ics{suffix}.csv"), index=True)
@@ -605,7 +640,8 @@ def ics(analysis_dict, save_path, df_earth_cluster=None):
     df_ics = analysis_dict["ics"].copy()
     df_ics.to_csv(os.path.join(result_path, "i_c_s.csv"), index=False)
 
-    plot_df = calculate_ics_proportions(df_ics=df_ics, save_path=result_path, suffix="_all")
+    # calculate the proportions of "yes"/"no" answers to the questions
+    calculate_ics_proportions(df_ics=df_ics, save_path=result_path, suffix=f"_all")
 
     """
     Follow up questions: examples for cases of X w/o Y
@@ -620,6 +656,12 @@ def ics(analysis_dict, save_path, df_earth_cluster=None):
         ics_q = ics_q[~ics_q[col].str.strip().str.fullmatch(r"No[.,!?]*",
                                                             flags=re.IGNORECASE)]  # and that something isn't a variation of JUST  a *"no"* (some "no, but..blabla" will appear)
         ics_q.to_csv(os.path.join(result_path, f"{col_savename}.csv"), index=False)  # save answers for examination
+        """
+        Topic modelling of free text
+        """
+        helper_funcs.topic_modelling(df=ics_q, text_column=col, save_path=result_path, save_name=col_savename,
+                                     num_topics=None)
+        c = 3
 
     """
     Follow up: do the two Earth-in-danger clusters differ in what they think?
@@ -689,12 +731,12 @@ def calculate_kill_for_test(df, save_path, prefix="", suffix=""):
             "N": n
         }
     rating_labels = ["No (will not kill to pass the test)", "Yes (will kill to pass the test)"]
-    rating_color_list = ["#B26972", "#355070"]
+    rating_color_list = ["#B53B03", "#3C5968"]
     sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"], reverse=True)
     plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=6, legend_labels=rating_labels,
                                          ytick_visible=True, text_width=39, title=f"", show_mean=False, sem_line=False,
                                          colors=rating_color_list, num_ratings=2,
-                                         save_path=save_path, save_name=f"{prefix}kill_to_pass{suffix}")
+                                         save_path=save_path, save_name=f"{prefix}kill_to_pass{suffix}", fmt="svg")
     # save data
     plot_df = pd.DataFrame(plot_data)
     plot_df.to_csv(os.path.join(save_path, f"{prefix}kill_to_pass_stats{suffix}.csv"), index=True)
@@ -713,7 +755,7 @@ def calculate_kill_for_test(df, save_path, prefix="", suffix=""):
     # plot again, discounting the all-yes, and all-no
     plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=6, legend_labels=rating_labels,
                                          ytick_visible=True, text_width=39, title=f"", show_mean=False, sem_line=False,
-                                         colors=rating_color_list, num_ratings=2, save_path=save_path,
+                                         colors=rating_color_list, num_ratings=2, save_path=save_path, fmt="svg",
                                          save_name=f"{prefix}kill_to_pass_allYesNoDiscount{suffix}", split=True,
                                          yes_all_proportion=yes_all_proportion, no_all_proportion=no_all_proportion)
     return
@@ -782,7 +824,7 @@ def kill_for_test(analysis_dict, save_path, df_earth_cluster):
     cat_colors = {"Won't kill any": "#033860", "Kill at least one": "#C2948A", "Kill all entities": "#723D46"}
     plotter.plot_pie(categories_names=cat_names, categories_counts=cat_counts,
                      categories_colors=cat_colors, title=f"Would kill in any of the scenarios",
-                     save_path=result_path, save_name="all_yes_no", format="png")
+                     save_path=result_path, save_name="all_yes_no", fmt="png")
 
     # why?
     colors = {survey_mapping.ANS_ALLNOS_IMMORAL: "#E7A391",
@@ -803,7 +845,7 @@ def kill_for_test(analysis_dict, save_path, df_earth_cluster):
     category_counts = all_selections.value_counts()
     plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
                      categories_colors=colors, title=f"You wouldn't eliminate any of the creatures; why?",
-                     save_path=result_path, save_name="all_nos_reason", format="png")
+                     save_path=result_path, save_name="all_nos_reason", fmt="png")
 
     """
     If df_earth_cluster is not None, take the clustering from the Earth-in-danger scenarios, and see if they apply 
@@ -875,7 +917,12 @@ def zombie_pill(analysis_dict, save_path, feature_order_df=None, feature_color_m
     # load relevant data
     df_zombie = analysis_dict["zombification_pill"].copy()
 
-    # plot
+    category_counts = df_zombie["Would you take the pill?"].value_counts()
+    plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
+                     categories_colors=CAT_COLOR_DICT, title="Would you take the pill?",
+                     save_path=result_path, save_name="take_the_pill_pie", fmt="png")
+
+
     ans_map = {"No": 0, "Yes": 1}
     rating_labels = [survey_mapping.ANS_NO, survey_mapping.ANS_YES]
     df_q_map = df_zombie.replace({"Would you take the pill?": ans_map})
@@ -888,12 +935,6 @@ def zombie_pill(analysis_dict, save_path, feature_order_df=None, feature_color_m
         "Std Dev": stats[2],
         "N": stats[3]
     }}
-    rating_color_list = ["#B26972", "#355070"]
-    sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"], reverse=True)
-    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, num_plots=1, legend_labels=rating_labels,
-                                         ytick_visible=True, text_width=39, title=f"", show_mean=False, sem_line=False,
-                                         colors=rating_color_list, num_ratings=2, inches_w=18, inches_h=8,
-                                         save_path=result_path, save_name=f"take_the_pill")
     zombie_data = pd.DataFrame(plot_data)
     zombie_data.to_csv(os.path.join(result_path, f"take_the_pill.csv"), index=True)  # index is descriptives' names
 
@@ -1248,7 +1289,7 @@ def moral_considreation_prios(analysis_dict, save_path, df_earth_cluster=None):
         plotter.plot_pie(categories_names=category_counts.loc[:, q].tolist(),
                          categories_counts=category_counts.loc[:, "count"].tolist(),
                          categories_colors=CAT_COLOR_DICT, title=f"{q}",
-                         save_path=result_path, save_name=f"{q.replace('?', '').replace('/', '-')}", format="png")
+                         save_path=result_path, save_name=f"{q.replace('?', '').replace('/', '-')}", fmt="png")
         category_counts.to_csv(os.path.join(result_path, f"{q.replace('?', '').replace('/', '-')}.csv"), index=False)
 
     reasons = [c for c in ms_prios.columns if c not in questions]
@@ -1256,6 +1297,32 @@ def moral_considreation_prios(analysis_dict, save_path, df_earth_cluster=None):
         df_r = ms_prios.loc[:, [process_survey.COL_ID, r]]
         df_r = df_r[df_r[r].notnull()]
         df_r.to_csv(os.path.join(result_path, f"{r.replace('?', '').replace('/', '-')}.csv"), index=False)
+
+    """
+    Relation to moral status features: prepare data for analysis:
+    Do you think non-conscious creatures/systems should be taken into account in moral decisions by top feature 
+    CHI SQUARED TEST
+    """
+    ms_features = analysis_dict["moral_considerations_features"].copy()
+    important_features_q = "What do you think is important for moral considerations?"
+    most_important_q = "Which do you think is the most important for moral considerations?"
+    # make sure the 'most important' one is filled, as when they only chose one feature we didn't ask them that
+    ms_features[most_important_q].fillna(ms_features[important_features_q], inplace=True)
+    combined = pd.merge(ms_prios, ms_features, on=process_survey.COL_ID)
+    non_conscious_ms = "Do you think non-conscious creatures/systems should be taken into account in moral decisions?"
+    combined.rename(columns={most_important_q: "most_important_feature", non_conscious_ms: "non_conscious_ms"}, inplace=True)
+    combined.to_csv(os.path.join(result_path, "moral_prios_and_features.csv"), index=False)
+    """
+    create a contingency table for a chi-squared test to check whether the clusters significantly differ in  
+    their proportion of people who said "Yes"
+    """
+    contingency_table = pd.crosstab(combined["most_important_feature"],
+                                    combined["non_conscious_ms"])
+    chisquare_result = helper_funcs.chi_squared_test(contingency_table=contingency_table)
+    chisquare_result.to_csv(os.path.join(result_path, "moral_features_non-conscious_ms_chisquared.csv"), index=False)
+    contingency_table.to_csv(os.path.join(result_path, "moral_features_non-conscious_ms_contingency_table.csv"),
+                             index=True)
+
 
     """
     Relations to graded consciousness: How many people who think some people should have higher MS than others think
@@ -1460,21 +1527,21 @@ def consciousness_intelligence(analysis_dict, save_path):
     category_counts = con_intellect[question].value_counts()
     plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
                      categories_colors=CAT_COLOR_DICT, title=f"{question}",
-                     save_path=result_path, save_name=f"{question.replace('?', '').replace('/', '-')}", format="png")
+                     save_path=result_path, save_name=f"{question.replace('?', '').replace('/', '-')}", fmt="svg")
     category_counts.to_csv(os.path.join(result_path, f"{question.replace('?', '').replace('/', '-')}.csv"))
 
     follow_up = "How?"
     con_intellect_how = con_intellect[con_intellect[follow_up].notnull()]
-    category_counts = con_intellect_how[follow_up].value_counts()
-    category_colors = {survey_mapping.ANS_C_NECESSARY: "#F7F0F5",
-                       survey_mapping.ANS_I_NECESSARY: "#DECBB7",
-                       survey_mapping.ANS_SAME: "#8F857D",
-                       survey_mapping.ANS_THIRD: "#5C5552",
-                       }
-    plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
-                     categories_colors=category_colors, title=f"{follow_up}",
-                     save_path=result_path, save_name=f"{follow_up.replace('?', '').replace('/', '-')}", format="png")
-    category_counts.to_csv(os.path.join(result_path, f"{follow_up.replace('?', '').replace('/', '-')}.csv"))
+    category_props = con_intellect_how[follow_up].value_counts(normalize=True)
+    category_props = category_props.reset_index(drop=False, inplace=False)
+    category_props["proportion"] = 100 * category_props["proportion"]
+    color_list = ["#34344A", "#CC5A71", "#80475E", "#C89B7B"]
+    plotter.plot_categorical_bars(categories_prop_df=category_props,
+                                  category_col=follow_up, y_min=0, y_max=105, y_skip=10,
+                                  data_col="proportion", delete_y=False, add_pcnt=False,
+                                  categories_colors=color_list,
+                                  save_path=result_path, save_name=f"{follow_up[:-1]}", fmt="svg")
+
 
     common_denominator = "What is the common denominator?"
     con_intellect_d = con_intellect[con_intellect[common_denominator].notnull()]
@@ -1545,7 +1612,7 @@ def demographics(analysis_dict, save_path):
 
     age_counts = con_demo[age].value_counts()
     age_counts_df = age_counts.reset_index(drop=False, inplace=False)
-    age_counts_df_sorted = age_counts_df.sort_values(age, ascending=True)
+    age_counts_df_sorted = age_counts_df.sort_values(age, ascending=True).reset_index(drop=True, inplace=False)
     plotter.plot_histogram(df=age_counts_df_sorted, category_col=age, data_col="count",
                            save_path=result_path, save_name=f"age", format="svg")
 
@@ -1594,7 +1661,7 @@ def demographics(analysis_dict, save_path):
                                   category_col=gender, y_min=0, y_max=60, y_skip=10,
                                   data_col="proportion",
                                   categories_colors=color_list,
-                                  save_path=result_path, save_name=f"gender", format="svg")
+                                  save_path=result_path, save_name=f"gender", fmt="svg")
 
     category_counts_df = category_counts.reset_index(drop=False, inplace=False)
     merged_df = pd.merge(category_counts_df, category_props_df_ordered, on=gender)
@@ -1611,16 +1678,28 @@ def demographics(analysis_dict, save_path):
     education_labels = {edu: re.sub(r'\(.*?\)', '', education_labels[edu]) for edu in
                         education_labels.keys()}  # remove parantheses
 
-    education_color_dict = {survey_mapping.EDU_NONE: "#AAD2BA",
-                            survey_mapping.EDU_PRIM: "#7BA084",
-                            survey_mapping.EDU_SECD: "#6B8F71",
-                            survey_mapping.EDU_POSTSEC: "#58735B",
-                            survey_mapping.EDU_GRAD: "#445745"}
+    education_color_dict = {survey_mapping.EDU_NONE: "#DCEDFF",
+                            survey_mapping.EDU_PRIM: "#90C3C8",
+                            survey_mapping.EDU_SECD: "#759FBC",
+                            survey_mapping.EDU_POSTSEC: "#1F5673",
+                            survey_mapping.EDU_GRAD: "#463730"}
 
     education_counts = con_demo[education].value_counts().reset_index(drop=False, inplace=False)
     education_props = con_demo[education].value_counts(normalize=True)
     education_props_df = education_props.reset_index(drop=False, inplace=False)
     education_props_df["proportion"] = 100 * education_props_df["proportion"]
+
+    education_counts_dict = dict(zip(education_counts[education], education_counts["count"])) # a dictionary for faster lookups
+    education_counts_pie = [education_counts_dict.get(edu, 0) for edu in education_order]
+    education_colors = [education_color_dict[edu] for edu in education_order]
+
+    plotter.plot_pie(categories_names=education_order,
+                     categories_counts=education_counts_pie,
+                     categories_colors=education_color_dict,
+                     title=f"{education}", legend=True, legend_vertical=True,
+                     edge_color="none", pie_direction=180,
+                     annot_groups=False, annot_props=True,
+                     save_path=result_path, save_name=f"education", fmt="svg")
 
     order_dict = {survey_mapping.EDU_NONE: 4,
                   survey_mapping.EDU_PRIM: 3,
@@ -1632,12 +1711,6 @@ def demographics(analysis_dict, save_path):
     education_props_df_ordered[f"{education}_label"] = education_props_df_ordered[education].replace(education_labels,
                                                                                                      inplace=False)
     education_props_df_ordered.reset_index(drop=True, inplace=True)
-    plotter.plot_categorical_bars(categories_prop_df=education_props_df_ordered,
-                                  category_col=f"{education}_label", y_min=0, y_max=50, y_skip=10,
-                                  data_col="proportion",
-                                  categories_colors=color_list,
-                                  save_path=result_path, save_name=f"education", format="svg")
-
     merged_df = pd.merge(education_counts, education_props_df_ordered, on=education)
     merged_df.to_csv(os.path.join(result_path, "education.csv"), index=False)
 
@@ -1714,11 +1787,14 @@ def demographics(analysis_dict, save_path):
 
     category_counts = [category_counts[topic] if topic in category_counts else 0 for topic in topic_order]
 
-    plotter.plot_pie(categories_names=topic_order, categories_counts=category_counts,
-                     categories_colors=topic_color_dict, title=f"{field}",
-                     pie_direction=180, annot_groups=True, annot_group_selection=substantial_list,
+    plotter.plot_pie(categories_names=topic_order,
+                     categories_counts=category_counts,
+                     categories_colors=topic_color_dict,
+                     title=f"{field}",
+                     pie_direction=180,
+                     annot_groups=True, annot_group_selection=substantial_list,
                      annot_props=False, edge_color="none",
-                     save_path=result_path, save_name=f"field", format="png")
+                     save_path=result_path, save_name=f"field", fmt="png")
 
     """
     Employment
@@ -1771,7 +1847,7 @@ def demographics(analysis_dict, save_path):
                      # [employment_counts[employment] for employment in employment_order]
                      categories_colors=employment_colors, title=f"{employment}", edge_color="none",
                      pie_direction=180, annot_groups=True, annot_group_selection=substantial_list, annot_props=False,
-                     save_path=result_path, save_name=f"employment", format="png")
+                     save_path=result_path, save_name=f"employment", fmt="png")
 
     return
 
@@ -1909,7 +1985,7 @@ def experience(analysis_dict, save_path):
                      categories_counts=category_counts,  # [animal_counts[animal] for animal in animal_order]
                      categories_colors=animal_colors, title=f"Animal Experience (3+)", edge_color="none",
                      pie_direction=180, annot_groups=True, annot_group_selection=substantial_list, annot_props=False,
-                     save_path=result_path, save_name="exp_animal_types", format="png")
+                     save_path=result_path, save_name="exp_animal_types", fmt="png")
 
     """
     Consciousness / Moral Status in Other Creatures, by experience
@@ -2031,28 +2107,34 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     else:
         df_earth_cluster = earth_in_danger(analysis_dict, save_path)
 
-    other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False,
-                    df_earth_cluster=None)
+
+    other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False, df_earth_cluster=None)
+    exit()
+
+    ics(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
     kill_for_test(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
-    graded_consciousness(analysis_dict, save_path)
 
-    demographics(analysis_dict, save_path)
 
-    experience(analysis_dict, save_path)
+
+    consciousness_intelligence(analysis_dict, save_path)
+
 
     moral_considreation_prios(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
-    ics(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
+    demographics(analysis_dict, save_path)
+
+    #zombie_pill(analysis_dict, save_path, feature_order_df=ms_features_order_df, feature_color_map=feature_colors)
+    zombie_pill(analysis_dict, save_path, feature_order_df=None, feature_color_map=None)
+
+    graded_consciousness(analysis_dict, save_path)
+
+    experience(analysis_dict, save_path)
 
     ms_features_order_df, feature_colors = moral_consideration_features(analysis_dict=analysis_dict,
                                                                         save_path=save_path,
                                                                         df_earth_cluster=df_earth_cluster)
-
-    zombie_pill(analysis_dict, save_path, feature_order_df=ms_features_order_df, feature_color_map=feature_colors)
-
-    consciousness_intelligence(analysis_dict, save_path)
 
     gender_cross(analysis_dict, save_path)  # move to after the individuals
 

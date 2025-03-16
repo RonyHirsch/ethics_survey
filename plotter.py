@@ -244,7 +244,7 @@ def plot_raincloud(df, id_col, data_col_names, data_col_colors, save_path, save_
 
 
 def plot_pie(categories_names, categories_counts, title, save_path, save_name,
-             format="svg", pie_direction=180, categories_colors=None, categories_labels=None,
+             fmt="svg", pie_direction=180, categories_colors=None, categories_labels=None,
              annot_groups=True, annot_group_selection=None, annot_props=True,
              legend=False, legend_order=None, legend_vertical=True,
              edge_color="white"):
@@ -252,7 +252,7 @@ def plot_pie(categories_names, categories_counts, title, save_path, save_name,
         try:
             categories_colors_list = [categories_colors[cat] for cat in categories_names]
         except Exception:
-            c = 3
+            print("Check manually")
     else:
         categories_colors_list = sns.color_palette("colorblind", len(categories_names))
 
@@ -319,10 +319,10 @@ def plot_pie(categories_names, categories_counts, title, save_path, save_name,
 
     # save
     figure = plt.gcf()  # get current figure
-    if format == "svg":
+    if fmt == "svg":
         plt.savefig(os.path.join(save_path, f"{save_name}.svg"), format="svg", dpi=1000, bbox_inches='tight',
                     pad_inches=0.01)
-    if format == "png":
+    if fmt == "png":
         plt.savefig(os.path.join(save_path, f"{save_name}.png"), format="png", dpi=1000, bbox_inches='tight',
                     pad_inches=0.01)
     plt.clf()
@@ -545,7 +545,14 @@ def plot_histogram(df, category_col, data_col, save_path, save_name, format="svg
     sns.despine(right=True, top=True)
     plt.rcParams['font.family'] = "Calibri"
 
-    hist_plot = sns.barplot(data=df, x=category_col, y=data_col)
+    plt.figure(figsize=(10, 6))
+    sns.barplot(data=df, x=category_col, y=data_col, palette='viridis')
+
+    # Customize x-ticks to avoid crowding
+    plt.xticks(rotation=45)
+    plt.xlabel('Age')
+    plt.ylabel('Count')
+    plt.tight_layout()  # Adjust layout to fit labels
 
     plt.xticks(fontsize=18)
     plt.yticks(fontsize=22)
@@ -607,11 +614,18 @@ def plot_categorical_bars_layered(categories_prop_df, category_col, full_data_co
 
 
 def plot_categorical_bars(categories_prop_df, category_col, data_col, categories_colors,
-                          save_path, save_name, format="svg", y_min=0, y_max=100, y_skip=10, delete_y=True,
-                          inch_w=15, inch_h=12, add_pcnt=True):
+                          save_path, save_name, fmt="svg", y_min=0, y_max=100, y_skip=10, delete_y=True,
+                          inch_w=15, inch_h=12, add_pcnt=True, order=None):
     plt.figure(figsize=(8, 6))
     sns.set_style("ticks")
     plt.rcParams['font.family'] = "Calibri"
+
+    # Determine the order of categories
+    if order is None:
+        categories = categories_prop_df[category_col].unique().tolist()
+    else:
+        categories = order
+
     if categories_colors is None:
         barplot = sns.barplot(x=category_col, y=data_col, data=categories_prop_df)
     else:
@@ -636,14 +650,17 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
         plt.yticks([])
     else:
         plt.yticks([y for y in np.arange(y_min, y_max, y_skip)], fontsize=16)
+        plt.ylabel("Proportion", fontsize=20)
 
-    plt.xticks(fontsize=16)
+    # X axis and label
+    wrapped_labels = [textwrap.fill(label, width=13) for label in categories]
+    plt.xticks(ticks=np.arange(len(wrapped_labels)), labels=wrapped_labels, fontsize=16)
     plt.xlabel(category_col.title(), fontsize=20)
 
     # save plot
     figure = plt.gcf()  # get current figure
     figure.set_size_inches(inch_w, inch_h)
-    plt.savefig(os.path.join(save_path, f"{save_name}.{format}"), format=f"{format}", dpi=1000, bbox_inches='tight',
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
     plt.clf()
@@ -849,7 +866,8 @@ def plot_scatter_xy_panel(df, identity_col, x_col, x_label, x_min, x_max, x_tick
                           y_ticks, ax, color_col=None, color_col_colors=None, palette_bounds=None, annotate_id=True,
                           title_text="", size=400, alpha=1, corr_line=False, diag_line=False,
                           individual_df=None, id_col=None, vertical_jitter=0, horizontal_jitter=0,
-                          title_fontsize=14, axis_fontsize=12, hide_axes_names=False):
+                          title_fontsize=14, axis_fontsize=12, hide_axes_names=False,
+                          violins=False, violin_alpha=0.5, violin_color="gray"):
 
     # use the provided axis for plotting
     plt.sca(ax)
@@ -890,6 +908,7 @@ def plot_scatter_xy_panel(df, identity_col, x_col, x_label, x_min, x_max, x_tick
     jitter_mask_set = set(jitter_mask)
 
     if vertical_jitter > 0 or horizontal_jitter > 0:
+        df_copy = df.copy()  # untouched x_col, y_col
         for i in range(df.shape[0]):
             # create a tuple for the current point
             current_point = (df[x_col].iat[i], df[y_col].iat[i])
@@ -901,6 +920,8 @@ def plot_scatter_xy_panel(df, identity_col, x_col, x_label, x_min, x_max, x_tick
                 if horizontal_jitter > 0:
                     # apply horizontal jitter
                     df[x_col].iat[i] += np.random.uniform(-horizontal_jitter, horizontal_jitter)
+    else:
+        df_copy = df  # no need to create copies
 
     # scatter
     if color_col is None:  # cmap
@@ -913,6 +934,37 @@ def plot_scatter_xy_panel(df, identity_col, x_col, x_label, x_min, x_max, x_tick
         else:
             sns.scatterplot(data=df, x=x_col, y=y_col, palette=color_col_colors, hue=color_col, s=size, alpha=alpha,
                             zorder=3, ax=ax)
+
+    # distributions: we use data=df_copy --> to not jitter
+    if violins:
+        # X axis violin
+        x_vals = df_copy[x_col].tolist()
+
+        violin = plt.violinplot(x_vals, positions=[df[y_col].min()], vert=False,  # horizontal violin
+                                showmeans=True, showextrema=False, showmedians=False)
+        for b in violin['bodies']:
+            b.set_alpha(violin_alpha)
+            b.set_color(violin_color)
+            # get the center
+            m = np.mean(b.get_paths()[0].vertices[:, 1])  # 1 = get the center of the Y axis
+            # modify the paths to not go further DOWN than the center
+            b.get_paths()[0].vertices[:, 1] = np.clip(b.get_paths()[0].vertices[:, 1], m, np.inf)
+        # change color of mean line
+        violin['cmeans'].set_color(violin_color)
+
+        # Y axis violin
+        y_vals = df_copy[y_col].tolist()
+        violin = plt.violinplot(y_vals, positions=[df[x_col].min()], vert=True,  # vertical violin
+                                showmeans=True, showextrema=False, showmedians=False)
+        for b in violin['bodies']:
+            b.set_alpha(violin_alpha)
+            b.set_color(violin_color)
+            # get the center
+            m = np.mean(b.get_paths()[0].vertices[:, 0])  # 0 = get the center of the X axis
+            # modify the paths to not go further RIGHT than the center
+            b.get_paths()[0].vertices[:, 0] = np.clip(b.get_paths()[0].vertices[:, 0], -np.inf, m)
+        # change color of mean line
+        violin['cmeans'].set_color(violin_color)
 
     # annotate
     if annotate_id:
@@ -934,8 +986,8 @@ def plot_scatter_xy_panel(df, identity_col, x_col, x_label, x_min, x_max, x_tick
     ax.set_title(title_text.title(), fontsize=title_fontsize)
 
     # set ticks for Y-axis
-    ax.set_xticks(np.arange(x_min, x_max + x_ticks, x_ticks))
-    ax.set_yticks(np.arange(y_min, y_max + y_ticks, y_ticks))
+    ax.set_xticks(np.arange(x_min, x_max, x_ticks))
+    ax.set_yticks(np.arange(y_min, y_max, y_ticks))
     ax.tick_params(axis="both", labelsize=axis_fontsize)
 
     # hide axis names based on parameter
@@ -944,9 +996,8 @@ def plot_scatter_xy_panel(df, identity_col, x_col, x_label, x_min, x_max, x_tick
         ax.set_ylabel(y_label.title(), fontsize=axis_fontsize)
     else:
         # Only label leftmost Y-axis and bottom X-axis based on index in the main plotting function
-
-        ax.set_ylabel(y_label.title() if ax.get_subplotspec().is_first_col() else "", fontsize=axis_fontsize)
-        ax.set_xlabel(x_label.title() if ax.get_subplotspec().is_last_row() else "", fontsize=axis_fontsize)
+        ax.set_ylabel(y_label.title() if ax.get_subplotspec().is_first_col() else "", fontsize=axis_fontsize + 5)
+        ax.set_xlabel(x_label.title() if ax.get_subplotspec().is_last_row() else "", fontsize=axis_fontsize + 5)
     return
 
 
@@ -956,7 +1007,11 @@ def plot_multiple_scatter_xy(data, identity_col, x_col, y_col, x_label, y_label,
                              palette_bounds=None, annotate_id=True, fmt="png",
                              size=400, alpha=1, corr_line=False, diag_line=False,
                              vertical_jitter=0, horizontal_jitter=0,
-                             rows=4, cols=6, title_size=14, axis_size=12, hide_axes_names=False):
+                             rows=4, cols=6, title_size=14, axis_size=12, hide_axes_names=False,
+                             violins=False, violin_alpha=0.5, violin_color="gray"):
+
+    # save name
+    save_name = save_name if not violins else f"{save_name}_withViolins"
 
     # Create a figure with subplots
     fig, axs = plt.subplots(rows, cols, figsize=(cols * 4, rows * 4))  # Adjust size as needed
@@ -983,7 +1038,8 @@ def plot_multiple_scatter_xy(data, identity_col, x_col, y_col, x_label, y_label,
                               size=size, alpha=alpha, corr_line=corr_line, diag_line=diag_line,
                               vertical_jitter=vertical_jitter,
                               horizontal_jitter=horizontal_jitter,
-                              title_fontsize=title_size, axis_fontsize=axis_size, hide_axes_names=hide_axes_names)
+                              title_fontsize=title_size, axis_fontsize=axis_size, hide_axes_names=hide_axes_names,
+                              violins=violins, violin_alpha=violin_alpha, violin_color=violin_color)
 
     plt.tight_layout()
     plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches="tight")

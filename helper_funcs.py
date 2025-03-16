@@ -1,12 +1,22 @@
 import os
+import re
+import logging
 import pandas as pd
 import numpy as np
+import string
+from collections import Counter
 from itertools import combinations
 from sklearn.decomposition import PCA
 from sklearn.mixture import GaussianMixture
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score, pairwise_distances
 from sklearn.preprocessing import StandardScaler
+import transformers
+import spacy
+from bertopic import BERTopic
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sentence_transformers import SentenceTransformer
 from skbio.stats.distance import permanova
 from skbio.stats.distance import DistanceMatrix
 from skbio.stats.ordination import pcoa
@@ -20,7 +30,22 @@ from statsmodels.stats.multitest import multipletests
 import statsmodels.formula.api as smf
 from statsmodels.stats.anova import anova_lm
 from statsmodels.multivariate.manova import MANOVA
+from gensim.models import LdaModel
+from gensim.corpora import Dictionary
+from gensim.models.coherencemodel import CoherenceModel
 import plotter
+
+"""
+For free-text response analysis
+Sample stopwords (to avoid requiring NLTK)
+"""
+STOPWORDS = {"the", "and", "to", "of", "a", "is", "in", "that", "it", "as", "for", "on", "with", "this", "be", "or",
+             "are", "an", "by", "can", "at", "which", "from", "but", "has", "have", "was", "were", "not", "so",
+             "if", "about", "more", "do", "does", "i", "you", "we", "they", "he", "she", "them", "their", "its",
+             "being", "will", "would", "should", "there", "some", "what", "when", "how", "why", "just"}
+
+# Set up logging for debugging
+logging.basicConfig(level=logging.INFO)
 
 
 def mixed_effects_model(long_df, dep_col, ind_col1, ind_col2, id_col, cols_to_standardize=list()):
@@ -680,6 +705,257 @@ def two_proportion_ztest(group1, df1, group2, df2, col_items, col_prop, col_n):
 
     # Return the results as a DataFrame
     return pd.DataFrame(result)
+
+
+def preprocess_text(text):
+    """
+    Preprocess text for analysis: lowercase, remove punctuation, remove stopwords
+    """
+    text = text.lower()
+    text = text.translate(str.maketrans("", "", string.punctuation))  # remove punctuation
+    words = text.split()  # tokenization (split by spaces)
+    words = [word for word in words if word not in STOPWORDS]  # remove stopwords
+    return " ".join(words)  # cleaned text
+
+
+def preprocess_text_basic(text):
+    """
+    Does NOT remove stop words etc; just lowercase and remove extra spaces
+    :param text:
+    :return:
+    """
+    return str(text).strip().lower()
+
+
+def find_optimal_topics(df, text_column, topic_range=range(2, 10)):
+    """
+    ***
+    WHY I ENDED UP NOT USING IT:
+    Despite its great results on medium or large sized texts (>50 words), typically mails and news articles are about
+    this size range, LDA poorly performs on short texts like Tweets, Reddit posts or StackOverflow titles’ questions.
+    ***
+    The most popular Topic Modeling algorithm is LDA, Latent Dirichlet Allocation (LDA).
+    - Latent because the topics are “hidden”. We have a bunch of texts and we want the algorithm to put them into
+    clusters that will make sense to us.
+    - Dirichlet stands for the Dirichlet distribution the model uses as a prior to generate document-topic and
+    word-topic distributions.
+    - Allocation because we want to allocate topics to our texts.
+    We will choose the optimal number of topics for LDA analysis based on the coherence score.
+    Coherence Score measures how "interpretable" topics are by checking word co-occurrence
+    (Higher coherence = better topic separation).
+    We will use Gensim to calculate coherence.
+    """
+
+    tokenized_text = df[text_column].dropna().astype(str).tolist()
+    tokenized_text = [text.split() for text in tokenized_text]
+
+    dictionary = Dictionary(tokenized_text)
+    corpus = [dictionary.doc2bow(text) for text in tokenized_text]
+
+    coherence_scores = []
+
+    for num in topic_range:
+        lda_model = LdaModel(corpus=corpus, id2word=dictionary, num_topics=num, passes=10, random_state=42)
+        """
+        Coherence Score measures how well words in a topic make sense together. 
+        It evaluates if words frequently appear together in actual responses.
+        For dyads of words in a given topic, it calculates the Pointwise Mutual Information (how often the words
+        actually co-occurred in responses). 
+        """
+        coherence_model = CoherenceModel(model=lda_model, texts=tokenized_text, dictionary=dictionary, coherence='c_v')
+        coherence_scores.append(coherence_model.get_coherence())
+
+    # If we want, we can plot the coherence scores (THE HIGHER THE BETTER)
+    #import matplotlib.pyplot as plt
+    #plt.plot(topic_range, coherence_scores, marker='o')
+    #plt.xlabel("Number of Topics")
+    #plt.ylabel("Coherence Score")
+    #plt.title("Optimal Number of Topics")
+    #plt.show()
+
+    # best number of topics based on coherence score
+    best_num_topics = topic_range[coherence_scores.index(max(coherence_scores))]
+    print(f"\nOptimal number of topics: {best_num_topics}, coherence_score = {max(coherence_scores)}")
+    return best_num_topics
+
+
+def topic_modelling_LDA(df, text_column, save_path, save_name, num_topics=None):
+    """
+    I assume df contains a row per repsonse (participant), with an ID column, and some column where all the free
+    text is
+    ***
+    WHY I ENDED UP NOT USING IT:
+    Despite its great results on medium or large sized texts (>50 words), typically mails and news articles are about
+    this size range, LDA poorly performs on short texts like Tweets, Reddit posts or StackOverflow titles’ questions.
+    ***
+    The most popular Topic Modeling algorithm is LDA, Latent Dirichlet Allocation (LDA).
+    - Latent because the topics are “hidden”. We have a bunch of texts and we want the algorithm to put them into
+    clusters that will make sense to us.
+    - Dirichlet stands for the Dirichlet distribution the model uses as a prior to generate document-topic and
+    word-topic distributions.
+    - Allocation because we want to allocate topics to our texts.
+    """
+    # preprocess
+    df["processed_text"] = df[text_column].astype(str).apply(preprocess_text)
+    logging.info("Preprocessing done")
+
+    """
+    Word Frequency Analysis
+    """
+    all_words = " ".join(df["processed_text"]).split()
+    word_freq = Counter(all_words)
+    total_words = sum(word_freq.values())
+    word_freq_df = pd.DataFrame(word_freq.items(), columns=["Word", "Frequency"])
+    word_freq_df["Proportion (%)"] = (word_freq_df["Frequency"] / total_words) * 100
+    word_freq_df.sort_values(by="Frequency", ascending=False, inplace=True)
+    word_freq_csv_path = os.path.join(save_path, f"{save_name}_word_freqs.csv")
+    word_freq_df.to_csv(word_freq_csv_path, index=False)
+    logging.info("Word Frequency Analysis done")
+    """
+    Topic modeling with LDA
+    """
+    if num_topics is None:
+        num_topics = find_optimal_topics(df=df, text_column="processed_text")
+    logging.info("Found optimal number of topics")
+
+    tokenized_text = df["processed_text"].dropna().astype(str).tolist()  # avoids issues with NaN values or non-string inputs
+    tokenized_text = [text.split() for text in tokenized_text]
+    dictionary = Dictionary(tokenized_text)
+    corpus = [dictionary.doc2bow(text) for text in tokenized_text]
+    logging.info("Created the corpus")
+
+    """
+    LDA is a probabilistic generative model for discovering hidden topics.
+    Each response is considered a mixture of topics. Each topic is a mixture of words, with some words more important 
+    than others.
+    LDA assigns probabilities of topics to responses and words to topics, and tries to learn these distributions to find 
+    coherent themes in the data.
+    """
+    lda = LdaModel(corpus=corpus, id2word=dictionary, num_topics=num_topics, passes=10, random_state=42)
+    logging.info("LDA model trained")
+
+    # extract the topics
+    topics_data = []
+    for topic_idx, topic in enumerate(lda.show_topics(num_topics=num_topics, formatted=False)):
+        logging.info(f"Extracting topics: {topic_idx}")
+        top_words = [word for word, _ in topic[1]]
+        topics_data.append({"Topic": topic_idx + 1, "Top Words": ", ".join(top_words)})
+    topics_df = pd.DataFrame(topics_data)
+    logging.info("Done; created topic df")
+    topics_csv_path = os.path.join(save_path, f"{save_name}_topics.csv")
+    topics_df.to_csv(topics_csv_path, index=False)
+
+    return
+
+
+def topic_modelling_bertopic(df, text_column, save_path, save_name, use_tfidf=True):
+    """
+    Perform topic modeling using BERTopic.
+
+    - `use_tfidf`: If True, uses TF-IDF representation. If False, uses CountVectorizer.
+    """
+
+    # BASIC - just lowercase and removing extra spaces
+    df["processed_text"] = df[text_column].astype(str).apply(preprocess_text_basic)
+    texts = df["processed_text"].tolist()
+    logging.info("Preprocessing completed")
+
+    """
+    Create word embeddings:
+    SentenceTransformer = a wrapper around pretrained BERT-like models that generate sentence embeddings.
+    Normally, BERT models process individual words and do not generate a fixed-size embedding for an entire sentence.
+    SentenceTransformer solves this by using models fine-tuned for sentence similarity tasks (like SBERT).
+    Instead of getting embeddings per word, we get a single vector per sentence (=response). 
+    """
+    # this is a compressed and faster version of BERT (fewer params and runs w/o GPU)
+    embedding_model = SentenceTransformer("all-MiniLM-L6-v2")  # outputs a 384-dim vector for each response, was trained to capture semantic similarities
+    logging.info("Sentence Transformer loaded.")
+
+    """
+    Text Vectorization:
+    
+    - CountVectorizer(): Converts text into a bag-of-words representation. It creates a response-term matrix where each 
+    row is a sentence, and each column is a word: each cell counts how many times a word appears in a response.
+    It works well for keyword frequency analysis but is highly affected by common words and doesn't handle word importance
+    
+    - TfidfVectorizer(): applies TF-IDF weighting, so instead of raw word counts it assigns importance scores to words:
+    TF−IDF= TF×log(N/DF). Such that:
+        TF (Term Frequency): How often a word appears in a document.
+        DF (Document Frequency): How many documents contain the word. (responses)
+        N: Total number of documents. (responses)
+    
+    """
+    vectorizer = TfidfVectorizer() if use_tfidf else CountVectorizer()
+    method = "TF-IDF" if use_tfidf else "CountVectorizer"
+    logging.info(f"Vectorization method selected: {method}")
+
+    """
+    Fit BERTopic model to the data: it will use Uses HDBSCAN (Hierarchical Density-Based Clustering) to cluster 
+    similar embeddings. BERTopic Assigns each sentence to a topic based on closeness in embedding space.
+    """
+    topic_model = BERTopic(
+        embedding_model=embedding_model,  # BERT embeddings: sentences are turned to vectors
+        vectorizer_model=vectorizer,  # TF-IDF or CountVectorizer
+        min_topic_size=5,  # Minimum cluster size
+        verbose=True
+    )
+    topics, probs = topic_model.fit_transform(texts)  # fits the model to the dataset and returns topic labels.
+    logging.info("BERTopic model trained.")
+
+    # save topic information
+    topics_df = topic_model.get_topic_info()
+    topics_df.to_csv(os.path.join(save_path, f"{save_name}_topics.csv"), index=False)
+
+    # save topics for each response
+    doc_topics = pd.DataFrame({"Text": texts, "Topic": topics})
+    doc_topics.to_csv(os.path.join(save_path, f"{save_name}_document_topics.csv"), index=False)
+
+    logging.info("Topics saved")
+
+    # Show top words per topic
+    print("\nTop words per topic:")
+    print(topic_model.get_topic_info())
+
+    # Save visualization
+    topic_model.visualize_barchart().write_html(os.path.join(save_path, f"{save_name}_topic_chart.html"))
+    logging.info("Visualization saved")
+
+    return topic_model
+
+
+def preprocess_text_gsdmm(text):
+    """
+    - Tokenization using spaCy tokenizer.
+    - Removing stop words and 1 character words.
+    - Stemming using the nltk library’s stemmer.
+    - Removing empty responses and responses with more than 30 tokens.
+    - Removing unique token (with a term frequency = 1).
+    """
+    text = text.lower()  # lowercase
+    text = re.sub(r'\d +', "", text)  # remove numbers
+    text = text.translate(str.maketrans("", "", string.punctuation))  # remove punctuation
+    text = text.strip()  # remove whitespace
+    # tokenization
+    nlp = English()
+    tokens = nlp(text)
+    words = text.split()  # tokenization (split by spaces)
+    words = [word for word in words if word not in STOPWORDS]  # remove stopwords
+    return
+
+
+def topic_modelling_GSDMM(df, text_column, save_path, save_name):
+    """
+    The Gibbs Sampling Dirichlet Mixture Model (GSDMM) is an “altered” LDA algorithm, showing great results on short
+    texts, that makes the initial assumption: 1 topic corresponds to 1 document.
+    The words within a document are generated using the same unique topic, and not from a mixture of topics as it was
+    in the original LDA.
+    :return:
+    """
+
+    # preprocess
+    df["processed_text"] = df[text_column].astype(str).apply(preprocess_text_gsdmm)
+
+    return
 
 
 
