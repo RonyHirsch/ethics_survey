@@ -280,10 +280,10 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
     plotter.plot_scatter_xy(df=df_pivot_plotting, identity_col="Item",
                             x_col="Consciousness", x_label="Consciousness", x_min=1, x_max=4, x_ticks=1,
                             y_col="Moral Status", y_label="Moral Status", y_min=1, y_max=4, y_ticks=1,
-                            save_path=result_path, save_name=f"correlation_c_ms", annotate_id=True,
-                            palette_bounds=colors,  # use the same colors as the individual-item correlations
+                            save_path=result_path, save_name=f"correlation_c_ms_AllBLUE", annotate_id=True,
+                            palette_bounds=None,  # use the same colors as the individual-item correlations
                             corr_line=False, diag_line=True, fmt="svg",
-                            individual_df=None, id_col=None)
+                            individual_df=None, id_col=None, color_col_colors=None)
 
     """
     The scatter plot above (plot_scatter_xy) has a diagonal line. The interesting part is the off-diagonal items; 
@@ -920,7 +920,7 @@ def zombie_pill(analysis_dict, save_path, feature_order_df=None, feature_color_m
     category_counts = df_zombie["Would you take the pill?"].value_counts()
     plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
                      categories_colors=CAT_COLOR_DICT, title="Would you take the pill?",
-                     save_path=result_path, save_name="take_the_pill_pie", fmt="png")
+                     save_path=result_path, save_name="take_the_pill_pie", fmt="svg")
 
 
     ans_map = {"No": 0, "Yes": 1}
@@ -2107,11 +2107,15 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     else:
         df_earth_cluster = earth_in_danger(analysis_dict, save_path)
 
-
-    other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False, df_earth_cluster=None)
+    ics(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
     exit()
 
-    ics(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
+    other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False, df_earth_cluster=None)
+
+    zombie_pill(analysis_dict, save_path, feature_order_df=None, feature_color_map=None)
+
+
+
 
     kill_for_test(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
@@ -2126,7 +2130,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     demographics(analysis_dict, save_path)
 
     #zombie_pill(analysis_dict, save_path, feature_order_df=ms_features_order_df, feature_color_map=feature_colors)
-    zombie_pill(analysis_dict, save_path, feature_order_df=None, feature_color_map=None)
+
 
     graded_consciousness(analysis_dict, save_path)
 

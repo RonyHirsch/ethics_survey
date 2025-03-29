@@ -787,6 +787,7 @@ def topic_modelling_LDA(df, text_column, save_path, save_name, num_topics=None):
     WHY I ENDED UP NOT USING IT:
     Despite its great results on medium or large sized texts (>50 words), typically mails and news articles are about
     this size range, LDA poorly performs on short texts like Tweets, Reddit posts or StackOverflow titles’ questions.
+    It doesn't have context-awareness (the ability to detect that a meaning of a word can change based on context)
     ***
     The most popular Topic Modeling algorithm is LDA, Latent Dirichlet Allocation (LDA).
     - Latent because the topics are “hidden”. We have a bunch of texts and we want the algorithm to put them into
@@ -850,7 +851,9 @@ def topic_modelling_LDA(df, text_column, save_path, save_name, num_topics=None):
 
 def topic_modelling_bertopic(df, text_column, save_path, save_name, use_tfidf=True):
     """
-    Perform topic modeling using BERTopic.
+    Perform topic modeling using BERTopic (transformer-based architecture, enabling context-aware analysis of text)
+    https://arxiv.org/abs/2203.05794
+     M. Grootendorst, “BERTopic: Neural topic modeling with a class-based TF-IDF procedure,” CoRR, vol. /2203.05794, 2022
 
     - `use_tfidf`: If True, uses TF-IDF representation. If False, uses CountVectorizer.
     """

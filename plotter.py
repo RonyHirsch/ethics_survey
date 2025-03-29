@@ -1061,10 +1061,10 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
     df["combined"] = df["x_norm"] + df["y_norm"]
     norm = plt.Normalize(vmin=df["combined"].min(), vmax=df["combined"].max())
 
-    if palette_bounds is None:
-        cmap = cm.get_cmap("viridis")
-    else:
-        cmap = LinearSegmentedColormap.from_list("custom", [palette_bounds[0], palette_bounds[1]])
+    #if palette_bounds is None:
+    #    cmap = cm.get_cmap("viridis")
+    #else:
+    #    cmap = LinearSegmentedColormap.from_list("custom", [palette_bounds[0], palette_bounds[1]])
 
     # individual participant lines
     if individual_df is not None:
@@ -1105,21 +1105,21 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
 
     # scatter plot
     if color_col is None:  # cmap
-        sns.scatterplot(data=df, x=x_col, y=y_col, cmap=cmap, norm=norm, c=df["combined"], s=size, alpha=alpha,
+        sns.scatterplot(data=df, x=x_col, y=y_col, c="#003554", s=size, alpha=alpha,
                         zorder=3)
     else:  # hue is the diff
         if color_col_colors is None:
-            sns.scatterplot(data=df, x=x_col, y=y_col, cmap=cmap, norm=norm, hue=color_col, s=size, alpha=alpha,
+            sns.scatterplot(data=df, x=x_col, y=y_col, c="#003554", s=size, alpha=alpha,
                             zorder=3)
         else:
-            sns.scatterplot(data=df, x=x_col, y=y_col, palette=color_col_colors, hue=color_col, s=size, alpha=alpha,
+            sns.scatterplot(data=df, x=x_col, y=y_col, c="#003554", s=size, alpha=alpha,
                             zorder=3)
 
     # annotate
     if annotate_id:
         for i in range(len(df)):
             plt.text(df[x_col][i], df[y_col][i] + 0.065, df[identity_col][i],
-                     fontsize=14, ha="center")
+                     fontsize=20, ha="center")
 
     # update limits based on jitter
     x_min_jittered = df[x_col].min() - horizontal_jitter
@@ -1131,8 +1131,8 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
     plt.ylim(y_min_jittered, y_max_jittered)
 
     # titles etc
-    plt.yticks(np.arange(y_min, y_max + (0.05 * y_ticks), y_ticks), fontsize=16)
-    plt.xticks(np.arange(x_min, x_max + (0.05 * x_ticks), x_ticks), fontsize=16)
+    plt.yticks(np.arange(y_min, y_max + (0.05 * y_ticks), y_ticks), fontsize=18)
+    plt.xticks(np.arange(x_min, x_max + (0.05 * x_ticks), x_ticks), fontsize=18)
     plt.xlim([x_min, x_max + (0.05 * y_ticks)])
     plt.ylim([y_min, y_max + (0.05 * y_ticks)])
     plt.xlabel(x_label.title(), fontsize=18)
