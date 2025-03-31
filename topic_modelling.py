@@ -1,5 +1,6 @@
 import os
 import sys
+import random
 import pickle
 import pandas as pd
 import nltk
@@ -11,6 +12,7 @@ from sklearn.metrics import silhouette_score
 from bertopic import BERTopic
 from umap import UMAP
 import hdbscan
+import datamapplot
 from sentence_transformers import SentenceTransformer
 from bertopic.vectorizers import ClassTfidfTransformer
 from gensim.models.coherencemodel import CoherenceModel
@@ -20,6 +22,11 @@ import numpy as np
 import re
 import string
 import warnings
+
+import plotter
+
+SEED = 42
+random.seed(SEED)
 
 warnings.filterwarnings("ignore")
 
@@ -35,6 +42,12 @@ def preprocess_text(text, custom_stopwords=None):
     if custom_stopwords is None:
         custom_stopwords = []
     text = text.lower()
+
+    # Remove the phrase "I <something>" (e.g., "I think", "I know")
+    for stopword in custom_stopwords:
+        if stopword.lower().startswith("i "):  # if it begins with "I"
+            text = text.replace(stopword.lower() + " ", "")  # delete it
+
     text = re.sub(r"[^a-zA-Z\s]", "", text)
     text = re.sub(f"[{re.escape(string.punctuation)}]", "", text)
     tokens = word_tokenize(text)
@@ -61,9 +74,9 @@ def optimize_umap(embeddings, n_neighbors_range=None, n_components_range=None, m
     if min_dist_range is None:
         min_dist_range = [0.05, 0.1, 0.3, 0.5]
     if n_components_range is None:
-        n_components_range = [2, 5, 10]
+        n_components_range = [2, 3, 4, 5, 10]
     if n_neighbors_range is None:
-        n_neighbors_range = [2, 5, 15, 30]
+        n_neighbors_range = [2, 3, 4, 5, 15, 30]
     best_umap_model = None
     best_score = -np.inf
     best_params = {}
@@ -80,7 +93,7 @@ def optimize_umap(embeddings, n_neighbors_range=None, n_components_range=None, m
         model = UMAP(n_neighbors=params['n_neighbors'],
                      n_components=params['n_components'],
                      min_dist=params['min_dist'],
-                     metric='cosine')
+                     metric='cosine', random_state=SEED)
 
         # Fit the UMAP model and compute the metric (Silhouette score here)
         embeddings_ = model.fit_transform(embeddings)
@@ -104,9 +117,9 @@ def optimize_umap(embeddings, n_neighbors_range=None, n_components_range=None, m
 
 def optimize_hdbscan(embeddings, min_cluster_size_range=None, min_samples_range=None):
     if min_samples_range is None:
-        min_samples_range = [2, 3, 5, 7, 10]
+        min_samples_range = [2, 3, 4, 5, 7, 10]
     if min_cluster_size_range is None:
-        min_cluster_size_range = [3, 5, 10, 15, 20]
+        min_cluster_size_range = [3, 4, 5, 7, 10, 15, 20]
     best_hdbscan_model = None
     best_score = -np.inf
     best_params = {}
@@ -165,7 +178,17 @@ def evaluate_hdbscan_score(model, embeddings):
     return score
 
 
-def train_bertopic(docs):
+def plot_umap_embeddings(embeddings, topics, labels, save_path, save_name, fmt="svg", dpi=1000, dynamic_label_size=True,
+                         use_medoids=True, label_color_list=None):
+
+    plotter.plotter_umap_embeddings(embeddings=embeddings, topics=topics, labels_dict=labels,
+                                    save_path=save_path, save_name=save_name, fmt=fmt, dpi=dpi,
+                                    dynamic_label_size=dynamic_label_size, use_medoids=use_medoids,
+                                    label_color_list=label_color_list)
+    return
+
+
+def train_bertopic(docs, save_path):
     embedding_model = SentenceTransformer("all-mpnet-base-v2")
 
     # Generate embeddings for the documents
@@ -173,6 +196,7 @@ def train_bertopic(docs):
 
     # Apply GridSearch on UMAP and HDBSCAN
     best_umap_model = optimize_umap(embeddings)
+    best_umap_params = best_umap_model.get_params()
     umap_embeddings = best_umap_model.transform(embeddings)
 
     # Now we set prediction_data=True explicitly for HDBSCAN
@@ -200,6 +224,39 @@ def train_bertopic(docs):
 
     # Now transform the data to get the topics and probabilities
     topics, probs = topic_model.transform(docs)
+
+    # Extract the UMAP embeddings from the trained model
+    umap_embeddings = topic_model.umap_model.transform(embeddings)
+
+    # labels
+    topic_labels = generate_llm_labels(topic_model)
+
+
+    """
+    *** PLOT ***
+    Our goal is to visualize in 2D while ensuring the most accurate representation of the data in two dimensions, 
+    so we will set n_components=2 direcly. But we already have a UMAP model, which might have a higher number of
+    components. So we will use the n_components=2 option when fitting the model. 
+    """
+
+    # list of colors for visualization:
+    label_color_list = ['#1d3557', '#22333B', '#385f71', '#d7b377', '#C6AC8F', '#8f754f', '#5E503F',
+                        '#5A6872', '#6C7A8A', '#7A8F99', '#9E9C8A', '#B5B59A', '#C8B5A3', '#D4C5A0',
+                        '#6E4B3A', '#8F6E58']
+
+    # Create a new UMAP model with n_components=2, but using the optimal parameters
+    reduced_umap_model = UMAP(
+        n_components=2,
+        n_neighbors=best_umap_params["n_neighbors"],
+        min_dist=best_umap_params["min_dist"],
+        metric=best_umap_params["metric"],
+        random_state=best_umap_params["random_state"]
+    )
+    reduced_umap_embeddings = reduced_umap_model.fit_transform(embeddings)
+    plot_umap_embeddings(embeddings=reduced_umap_embeddings, topics=topics, labels=topic_labels,
+                         save_path=save_path, save_name="umap_embeddings", fmt="svg", dpi=1000, dynamic_label_size=True,
+                         use_medoids=True, label_color_list=label_color_list)
+
     return topic_model, topics, probs
 
 
@@ -237,6 +294,7 @@ def save_outputs(df, topic_model, topics, probs, cv_score, umass_score, labels, 
     df["topic"] = topics
     df["topic_label"] = df["topic"].apply(lambda topic: labels.get(topic, "Unknown").split(': ')[-1].split()[0] if topic != -1 else "Unknown")
     df["soft_topic_assignment"] = [probs[i][topics[i]] if topics[i] != -1 else 0.0 for i in range(len(topics))]
+    df["all_topic_assignments"] = [probs[i] if topics[i] != -1 else [0.0] * len(probs[i]) for i in range(len(topics))]
     df.to_csv(os.path.join(output_dir, "preprocessed_responses.csv"), index=False)
 
     # save the BERTopic model
@@ -263,27 +321,120 @@ def save_outputs(df, topic_model, topics, probs, cv_score, umass_score, labels, 
             f.write(f"Topic {topic_id}: {label}\n")
 
 
-def main():
-    import os
-    FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\i_c_s"
-    FILE_PATH = os.path.join(FOLDER_PATH, "goals_intentions without consciousness.csv")
-    TEXT_COL = "Do you have an example of a case of goals/intentions without consciousness?"
-    EXCLUDE_WORDS = ["goal", "goals", "intention", "intentions", "consciousness"]
-    OUTPUT_DIR = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\i_c_s\topic_modelling"
+def main(file_path, output_path, text_col, exclude_words):
     # redirect all "prints" to a log file
-    sys.stdout = open(os.path.join(OUTPUT_DIR, "output_log.txt"), "w")
+    sys.stdout = open(os.path.join(output_path, "output_log.txt"), "w")
 
-    df = pd.read_csv(FILE_PATH)
-    df = tokenize_responses(df=df, text_col=TEXT_COL, custom_stopwords=EXCLUDE_WORDS)
+    df = pd.read_csv(file_path)
+    df = tokenize_responses(df=df, text_col=text_col, custom_stopwords=exclude_words)
 
-    topic_model, topics, probs = train_bertopic(df["cleaned"].tolist())
+    topic_model, topics, probs = train_bertopic(df["cleaned"].tolist(), save_path=output_path)
     cv_score, umass_score = evaluate_model(topic_model, df["cleaned"].tolist())
     labels = generate_llm_labels(topic_model)
 
     save_outputs(df=df, topic_model=topic_model, topics=topics, probs=probs, cv_score=cv_score, umass_score=umass_score,
-                 labels=labels, output_dir=OUTPUT_DIR)
-    print(f"Outputs saved to {OUTPUT_DIR}")
+                 labels=labels, output_dir=output_path)
+    print(f"Outputs saved to {output_path}")
+    print(f"list of excluded words: \n{exclude_words}")
+    return
 
 
 if __name__ == "__main__":
-    main()
+
+    GLOBAL_EXCLUSION_LIST = ["without", "I think", "I would", "I believe", "don't", "dont"]
+
+    """
+    I_C_S
+    """
+
+    """
+    Concsciousness w/o intentions/goals
+    """
+    # question
+    TEXT_COL = "Do you have an example of a case of consciousness without intentions/goals?"
+
+    # data
+    FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\i_c_s"
+    FILE_PATH = os.path.join(FOLDER_PATH, "consciousness without intentions_goals.csv")
+    OUTPUT_NAME = "consciousness_wo_intentions"
+    OUTPUT_DIR = os.path.join(FOLDER_PATH, "topic_modelling", OUTPUT_NAME)
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+
+    # global and specific
+    EXCLUDE_WORDS = GLOBAL_EXCLUSION_LIST + ["intention", "intentions", "goal", "goals", "consciousness", "conscious", "concious"]
+
+    main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
+    exit()
+
+
+    """
+    Concsciousness w/o sensations
+    """
+    # question
+    TEXT_COL = "Do you have an example of a case of consciousness without sensations of pleasure or pain?"
+
+    # data
+    FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\i_c_s"
+    FILE_PATH = os.path.join(FOLDER_PATH, "consciousness without sensations of pleasure or pain.csv")
+    OUTPUT_NAME = "consciousness_wo_sensations"
+    OUTPUT_DIR = os.path.join(FOLDER_PATH, "topic_modelling", OUTPUT_NAME)
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+
+    EXCLUDE_WORDS = ["pain", "pleasure", "sensation", "sensations", "consciousness"]
+    main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
+
+    """
+    Sensations w/o consciousness
+    """
+    # question
+    TEXT_COL = "Do you have an example of a case of positive/negative sensations without consciousness?"
+
+    # data
+    FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\i_c_s"
+    FILE_PATH = os.path.join(FOLDER_PATH, "positive_negative sensations without consciousness.csv")
+    OUTPUT_NAME = "sensations_wo_consciousness"
+    OUTPUT_DIR = os.path.join(FOLDER_PATH, "topic_modelling", OUTPUT_NAME)
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+
+    EXCLUDE_WORDS = ["positive", "negative", "sensation", "sensations", "consciousness"]
+    main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
+
+
+    """
+    Intentions/Goals without consciousness
+    """
+    # question
+    TEXT_COL = "Do you have an example of a case of goals/intentions without consciousness?"
+
+    # data
+    FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\i_c_s"
+    FILE_PATH = os.path.join(FOLDER_PATH, "goals_intentions without consciousness.csv")
+    OUTPUT_NAME = "intentions_wo_consciousness"
+    OUTPUT_DIR = os.path.join(FOLDER_PATH, "topic_modelling", OUTPUT_NAME)
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+
+    EXCLUDE_WORDS = ["goal", "goals", "intention", "intentions", "consciousness", "conscious"]
+    main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
+
+
+
+    """
+    Consciousness and intelligence - related to the same third factor
+    """
+    TEXT_COL = "What is the common denominator?"
+    FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\consciousness_intelligence"
+    FILE_PATH = os.path.join(FOLDER_PATH, "common_denominator.csv")
+    OUTPUT_NAME = "common_denominator"
+    OUTPUT_DIR = os.path.join(FOLDER_PATH, "topic_modelling", OUTPUT_NAME)
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+    EXCLUDE_WORDS = ["intelligent", "intelligence", "conscious", "consciousness"]
+    main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
+
+
+
+

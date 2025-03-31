@@ -14,6 +14,7 @@ import seaborn as sns
 import textwrap
 import geopandas as gpd
 import math
+import datamapplot
 import geodatasets
 
 # Modify the default font settings
@@ -26,6 +27,41 @@ sns.set_theme(style="ticks", rc=custom_params)
 nice_palette = ["#C17C74", "#BCAC9B", "#DDC9B4", "#2A3D45", "#7A6C5D"]
 
 max_text_width = 20  # characters per line
+
+
+def plotter_umap_embeddings(embeddings, topics, labels_dict, save_path, save_name, fmt="svg", dpi=1000,
+                            dynamic_label_size=True, use_medoids=True, label_color_list=None,
+                            size_inches_x=15, size_inches_y=15):
+
+    string_labels = [labels_dict.get(topic, "Noise").split("Label for: ")[1].split(" (")[0].title() if topic != -1 else "Noise" for topic in topics]
+
+    if label_color_list is not None:
+        string_label_set = list(set(string_labels))
+        label_color_map = {string_label_set[i]: label_color_list[i] for i in range(len(string_label_set))}
+    else:
+        label_color_map = None
+
+    fig, ax = datamapplot.create_plot(data_map_coords=embeddings,
+                                      labels=string_labels,
+                                      label_font_size=15,
+                                      title=f"Topic representations",
+                                      sub_title=f"Representations on reduced 2D embeddings",
+                                      label_wrap_width=20,
+                                      use_medoids=use_medoids,  # Whether to use medoids instead of centroids to determine the "location" of the cluster
+                                      dynamic_label_size=dynamic_label_size,
+                                      dpi=dpi,
+                                      label_color_map=label_color_map
+                                      )
+
+    # save plot
+    figure = plt.gcf()  # get current figure
+    figure.set_size_inches(size_inches_x, size_inches_y)
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=dpi,
+                bbox_inches='tight', pad_inches=0.01)
+    del figure
+    plt.clf()
+    plt.close()
+    return
 
 
 def diverging_palette(color_order, left, right):
