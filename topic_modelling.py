@@ -157,7 +157,12 @@ def evaluate_umap_score(embeddings, best_hdbscan_model, original_embeddings):
     # Get the cluster labels from HDBSCAN after fitting the model
     cluster_labels = best_hdbscan_model.labels_
 
-    # We need to ignore noise points labeled as -1 (which are considered outliers by HDBSCAN)
+    # If there is only one cluster, which would mean that all points are classified as noise (-1)
+    if len(set(cluster_labels)) == 1 and -1 in set(cluster_labels):
+        # Return a very low score indicating this is not a good result
+        print("Only 'noise' (-1) cluster found")
+        return -np.inf
+
     # Compute the silhouette score directly on the UMAP embeddings with cluster labels
     score = silhouette_score(original_embeddings, cluster_labels, metric='cosine')
 
@@ -341,46 +346,46 @@ def main(file_path, output_path, text_col, exclude_words):
 
 if __name__ == "__main__":
 
-    GLOBAL_EXCLUSION_LIST = ["without", "I think", "I would", "I believe", "I don't", "I dont", "Maybe"]
+    """
+    Consciousness and intelligence - related to the same third factor
+    """
+    TEXT_COL = "What is the common denominator?"
+    FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\consciousness_intelligence"
+    FILE_PATH = os.path.join(FOLDER_PATH, "common_denominator.csv")
+    OUTPUT_NAME = "common_denominator"
+    OUTPUT_DIR = os.path.join(FOLDER_PATH, "topic_modelling", OUTPUT_NAME)
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+    EXCLUDE_WORDS = ["intelligent", "intelligence", "conscious", "consciousness", "related", "common"]
+    main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
+    exit()
 
     """
     I_C_S
     """
 
+    GLOBAL_EXCLUSION_LIST = ["without", "I think", "I would", "I believe", "I don't", "I dont", "Maybe"]
+
     """
-   Sensations w/o consciousness
-   """
+    Concsciousness w/o intentions/goals
+    """
     # question
-    TEXT_COL = "Do you have an example of a case of positive/negative sensations without consciousness?"
+    TEXT_COL = "Do you have an example of a case of consciousness without intentions/goals?"
 
     # data
     FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\i_c_s"
-    FILE_PATH = os.path.join(FOLDER_PATH, "positive_negative sensations without consciousness.csv")
-    OUTPUT_NAME = "sensations_wo_consciousness"
+    FILE_PATH = os.path.join(FOLDER_PATH, "consciousness without intentions_goals.csv")
+    OUTPUT_NAME = "consciousness_wo_intentions"
     OUTPUT_DIR = os.path.join(FOLDER_PATH, "topic_modelling", OUTPUT_NAME)
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
 
-    EXCLUDE_WORDS = GLOBAL_EXCLUSION_LIST + ["positive", "negative", "sensation", "sensations", "consciousness"]
+    # global and specific
+    EXCLUDE_WORDS = GLOBAL_EXCLUSION_LIST + ["intention", "intentions", "goal", "goals", "consciousness", "conscious",
+                                             "concious"]
+
     main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
-    exit()
 
-    """
-    Intentions/Goals without consciousness
-    """
-    # question
-    TEXT_COL = "Do you have an example of a case of goals/intentions without consciousness?"
-
-    # data
-    FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\i_c_s"
-    FILE_PATH = os.path.join(FOLDER_PATH, "goals_intentions without consciousness.csv")
-    OUTPUT_NAME = "intentions_wo_consciousness"
-    OUTPUT_DIR = os.path.join(FOLDER_PATH, "topic_modelling", OUTPUT_NAME)
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
-
-    EXCLUDE_WORDS = GLOBAL_EXCLUSION_LIST + ["goal", "goals", "intention", "intentions", "consciousness", "conscious"]
-    main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
 
 
     """
@@ -404,38 +409,52 @@ if __name__ == "__main__":
 
 
     """
-    Concsciousness w/o intentions/goals
+    Intentions/Goals without consciousness
     """
     # question
-    TEXT_COL = "Do you have an example of a case of consciousness without intentions/goals?"
+    TEXT_COL = "Do you have an example of a case of goals/intentions without consciousness?"
 
     # data
     FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\i_c_s"
-    FILE_PATH = os.path.join(FOLDER_PATH, "consciousness without intentions_goals.csv")
-    OUTPUT_NAME = "consciousness_wo_intentions"
+    FILE_PATH = os.path.join(FOLDER_PATH, "goals_intentions without consciousness.csv")
+    OUTPUT_NAME = "intentions_wo_consciousness"
     OUTPUT_DIR = os.path.join(FOLDER_PATH, "topic_modelling", OUTPUT_NAME)
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
 
-    # global and specific
-    EXCLUDE_WORDS = GLOBAL_EXCLUSION_LIST + ["intention", "intentions", "goal", "goals", "consciousness", "conscious", "concious"]
-
+    EXCLUDE_WORDS = GLOBAL_EXCLUSION_LIST + ["goal", "goals", "intention", "intentions", "consciousness", "conscious"]
     main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
 
 
+    """
+    Sensations w/o consciousness
+    """
+    # question
+    TEXT_COL = "Do you have an example of a case of positive/negative sensations without consciousness?"
 
-    """
-    Consciousness and intelligence - related to the same third factor
-    """
-    TEXT_COL = "What is the common denominator?"
-    FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\consciousness_intelligence"
-    FILE_PATH = os.path.join(FOLDER_PATH, "common_denominator.csv")
-    OUTPUT_NAME = "common_denominator"
+    # data
+    FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\i_c_s"
+    FILE_PATH = os.path.join(FOLDER_PATH, "positive_negative sensations without consciousness.csv")
+    OUTPUT_NAME = "sensations_wo_consciousness"
     OUTPUT_DIR = os.path.join(FOLDER_PATH, "topic_modelling", OUTPUT_NAME)
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
-    EXCLUDE_WORDS = GLOBAL_EXCLUSION_LIST + ["intelligent", "intelligence", "conscious", "consciousness"]
+
+    EXCLUDE_WORDS = GLOBAL_EXCLUSION_LIST + ["positive", "negative", "sensation", "sensations", "consciousness"]
     main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
