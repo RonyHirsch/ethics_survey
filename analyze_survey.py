@@ -784,17 +784,37 @@ def kill_for_test(analysis_dict, save_path, df_earth_cluster):
     df_test = df_test_orig.rename(columns=survey_mapping.important_test_kill_tokens, inplace=False)  # shorter names
     # columns
     one_feature = [survey_mapping.Q_SENSATIONS, survey_mapping.Q_INTENTIONS, survey_mapping.Q_CONSCIOUSNESS]
-    two_features = [survey_mapping.Q_CONSCIOUSNESS_SENSATIONS, survey_mapping.Q_SENSATIONS_INTENTIONS,
-                    survey_mapping.Q_VULCAN]
+    two_features = [survey_mapping.Q_CONSCIOUSNESS_SENSATIONS,
+                    survey_mapping.Q_SENSATIONS_INTENTIONS, survey_mapping.Q_VULCAN]
     df_test_binary = df_test.replace(survey_mapping.ANS_KILLING_MAP, inplace=False)  # convert columns
+
     # calculate the average 'yes' responses for each person for 1-feature and 2-feature creatures
     df_test_binary["kill_one_avg"] = df_test_binary[one_feature].mean(axis=1)
     df_test_binary["kill_two_avg"] = df_test_binary[two_features].mean(axis=1)
     df_test_binary.to_csv(os.path.join(result_path, f"kill_to_pass_coded.csv"), index=False)
+
+    # filter out responses that are all-no / all-yes; I don't do that because then the comparison is unfair.
+    #condition = ~df_test_binary[one_feature + two_features].isin([1, 0]).any(axis=1)
+    #filtered_df = df_test_binary[condition]
+
     # paired t-test
     paired_ttest = helper_funcs.dependent_samples_ttest(list_group1=df_test_binary["kill_one_avg"].tolist(),
                                                         list_group2=df_test_binary["kill_two_avg"].tolist())
     paired_ttest.to_csv(os.path.join(result_path, f"kill_oneVtwofeatures_ttest.csv"), index=False)
+
+    # plot it
+    df_test_binary["kill_one_avg"] = 100 * df_test_binary["kill_one_avg"]
+    df_test_binary["kill_two_avg"] = 100 * df_test_binary["kill_two_avg"]
+    plotter.plot_raincloud(df=df_test_binary, id_col="response_id", data_col_names=["kill_one_avg", "kill_two_avg"],
+                           data_col_colors={"kill_one_avg": "#457b9d", "kill_two_avg": "#1d3557"},
+                           save_path=result_path, save_name=f"kill_oneVtwofeatures", fmt="svg",
+                           x_title="", x_name_dict={"kill_one_avg": "One Feature", "kill_two_avg": "Two Features"},
+                           title="", y_title="Amount of killed entities", ymin=0, ymax=100, yskip=33.33,
+                           y_ticks=["No entities", "One entity", "Two entities", "All entities"], y_jitter=10,
+                           data_col_violin_left=None, violin_alpha=0.65, violin_width=0.5, group_spacing=0.5,
+                           marker_spread=0.1, marker_size=100, marker_alpha=0.25, scatter_lines=True,
+                           size_inches_x=15, size_inches_y=12)
+
 
     """
     Now, let's focus on the people - who would kill them all? Who wouldn't kill any?
@@ -819,33 +839,27 @@ def kill_for_test(analysis_dict, save_path, df_earth_cluster):
     kill_breakdown = kill_breakdown.transpose()
     kill_breakdown.to_csv(os.path.join(result_path, f"all_yes_no.csv"), index=True)
 
-    cat_names = ["Won't kill any", "Kill at least one", "Kill all entities"]
-    cat_counts = [all_nos_prop, rest_prop, all_yes_prop]
-    cat_colors = {"Won't kill any": "#033860", "Kill at least one": "#C2948A", "Kill all entities": "#723D46"}
-    plotter.plot_pie(categories_names=cat_names, categories_counts=cat_counts,
-                     categories_colors=cat_colors, title=f"Would kill in any of the scenarios",
-                     save_path=result_path, save_name="all_yes_no", fmt="png")
-
-    # why?
-    colors = {survey_mapping.ANS_ALLNOS_IMMORAL: "#E7A391",
-              survey_mapping.ANS_ALLNOS_KILL: "#E6898B",
-              survey_mapping.ANS_ALLNOS_INTERESTS: "#BA7880",
-              f"{survey_mapping.ANS_ALLNOS_IMMORAL},{survey_mapping.ANS_ALLNOS_KILL}": "#93032E",
-              f"{survey_mapping.ANS_ALLNOS_IMMORAL},{survey_mapping.ANS_ALLNOS_INTERESTS}": "#FB3772",
-              f"{survey_mapping.ANS_ALLNOS_INTERESTS},{survey_mapping.ANS_ALLNOS_KILL}": "#FC739C",
-              f"{survey_mapping.ANS_ALLNOS_IMMORAL},{survey_mapping.ANS_ALLNOS_INTERESTS},{survey_mapping.ANS_ALLNOS_KILL}": "#FEC3D5",
-              f"{survey_mapping.ANS_ALLNOS_IMMORAL},{survey_mapping.ANS_OTHER}": "#E3E7AF",
-              f"{survey_mapping.ANS_ALLNOS_IMMORAL},{survey_mapping.ANS_ALLNOS_INTERESTS},{survey_mapping.ANS_ALLNOS_KILL},{survey_mapping.ANS_OTHER}": "#6C6173",
-              f"{survey_mapping.ANS_ALLNOS_IMMORAL},{survey_mapping.ANS_ALLNOS_KILL},{survey_mapping.ANS_OTHER}": "#775144",
-              f"{survey_mapping.ANS_ALLNOS_IMMORAL},{survey_mapping.ANS_ALLNOS_INTERESTS},{survey_mapping.ANS_OTHER}": "#775144",
-              f"{survey_mapping.ANS_OTHER}": "#05B3B3"}
+    cat_props = {"Won't kill any": all_nos_prop, "Kill at least one": rest_prop, "Kill all entities": all_yes_prop}
+    cat_colors = ["#033860", "#C2948A", "#723D46"]
+    category_props = pd.DataFrame(list(cat_props.items()), columns=["killing", "proportion"])
+    plotter.plot_categorical_bars(categories_prop_df=category_props,
+                                  category_col="killing", y_min=0, y_max=105, y_skip=10,
+                                  data_col="proportion", delete_y=False, add_pcnt=True,
+                                  categories_colors=cat_colors,
+                                  save_path=result_path, save_name=f"all_yes_no", fmt="svg")
 
     # flatten the selections
     all_selections = all_nos["You wouldn't eliminate any of the creatures; why?"].str.split(',').explode()
-    category_counts = all_selections.value_counts()
-    plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
-                     categories_colors=colors, title=f"You wouldn't eliminate any of the creatures; why?",
-                     save_path=result_path, save_name="all_nos_reason", fmt="png")
+    category_props = all_selections.value_counts(normalize=True)
+    category_props = category_props.reset_index(drop=False, inplace=False)
+    category_props["proportion"] = 100 * category_props["proportion"]
+    color_list = ["#006d77", "#83c5be", "#ffddd2", "#e29578"]
+    plotter.plot_categorical_bars(categories_prop_df=category_props,
+                                  category_col="You wouldn't eliminate any of the creatures; why?",
+                                  y_min=0, y_max=105, y_skip=10,
+                                  data_col="proportion", delete_y=False, add_pcnt=True,
+                                  categories_colors=color_list,
+                                  save_path=result_path, save_name=f"all_nos_why", fmt="svg")
 
     """
     If df_earth_cluster is not None, take the clustering from the Earth-in-danger scenarios, and see if they apply 
@@ -2107,8 +2121,11 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     else:
         df_earth_cluster = earth_in_danger(analysis_dict, save_path)
 
-    ics(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
+
+    kill_for_test(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
     exit()
+
+    ics(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
     other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False, df_earth_cluster=None)
 
@@ -2117,7 +2134,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
 
 
 
-    kill_for_test(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
+
 
 
 

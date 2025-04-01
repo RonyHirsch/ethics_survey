@@ -174,7 +174,7 @@ def plot_raincloud(df, id_col, data_col_names, data_col_colors, save_path, save_
                    x_title, x_name_dict, title,
                    y_title, ymin, ymax, yskip, y_ticks=None, y_jitter=0,
                    data_col_violin_left=None, violin_alpha=0.65, violin_width=0.5, group_spacing=0.5,
-                   marker_spread=0.1, marker_size=100, marker_alpha=0.25, scatter_lines=True, format="svg",
+                   marker_spread=0.1, marker_size=100, marker_alpha=0.25, scatter_lines=True, fmt="svg",
                    size_inches_x=15, size_inches_y=12):
     # ids
     ids = df[id_col].unique().tolist()
@@ -197,6 +197,7 @@ def plot_raincloud(df, id_col, data_col_names, data_col_colors, save_path, save_
         # plot violin
         violin = plt.violinplot(y_values, positions=[x_loc], widths=violin_width, showmeans=True,
                                 showextrema=False, showmedians=False)
+
         if left_flag:
             # make it a half-violin plot (only to the LEFT of center)
             for b in violin['bodies']:
@@ -258,7 +259,7 @@ def plot_raincloud(df, id_col, data_col_names, data_col_colors, save_path, save_
     if y_ticks is None:
         plt.yticks([y for y in np.arange(ymin, ymax, yskip)], fontsize=15)
     else:
-        plt.yticks(ticks=[y for y in np.arange(ymin, ymax, yskip)], labels=[item for item in y_ticks], fontsize=15)
+        plt.yticks(ticks=[y for y in np.arange(ymin, ymax, yskip)], labels=y_ticks, fontsize=15)
     plt.xlabel(x_title, fontsize=22, labelpad=10)
     plt.xticks(ticks=[(idx * group_spacing) for idx, item in enumerate(data_col_names)],
                labels=[x_name_dict[item] for item in data_col_names], fontsize=15)
@@ -267,12 +268,8 @@ def plot_raincloud(df, id_col, data_col_names, data_col_colors, save_path, save_
     # save plot
     figure = plt.gcf()  # get current figure
     figure.set_size_inches(size_inches_x, size_inches_y)
-    if format == "svg":
-        plt.savefig(os.path.join(save_path, f"{save_name}.svg"), format="svg", dpi=1000, bbox_inches='tight',
-                    pad_inches=0.01)
-    if format == "png":
-        plt.savefig(os.path.join(save_path, f"{save_name}.png"), format="png", dpi=1000, bbox_inches='tight',
-                    pad_inches=0.01)
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches='tight',
+                pad_inches=0.01)
     del figure
     plt.clf()
     plt.close()
