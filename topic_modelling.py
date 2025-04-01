@@ -12,7 +12,6 @@ from sklearn.metrics import silhouette_score
 from bertopic import BERTopic
 from umap import UMAP
 import hdbscan
-import datamapplot
 from sentence_transformers import SentenceTransformer
 from bertopic.vectorizers import ClassTfidfTransformer
 from gensim.models.coherencemodel import CoherenceModel
@@ -95,8 +94,20 @@ def optimize_umap(embeddings, n_neighbors_range=None, n_components_range=None, m
                      min_dist=params['min_dist'],
                      metric='cosine', random_state=SEED)
 
-        # Fit the UMAP model and compute the metric (Silhouette score here)
-        embeddings_ = model.fit_transform(embeddings)
+        # Fit the UMAP model and compute the silhouette score
+        """
+        Typically, embeddings have a large number of features (e.g., hundreds or thousands of dimensions) for each 
+        sample. If the number of features (columns) is smaller than the number of samples (rows), or the data is sparse, 
+        it can cause issues during dimensionality reduction.
+        """
+        try:
+            embeddings_ = model.fit_transform(embeddings)
+        except TypeError:
+            if embeddings.shape[0] <= 1.5 * embeddings.shape[1]:
+                print(f"Error: {embeddings.shape[0]} responses and {embeddings.shape[1]} features, this is too small")
+                return best_umap_model
+            else:
+                raise Exception
 
         # Now optimize HDBSCAN based on these UMAP embeddings
         best_hdbscan_model = optimize_hdbscan(embeddings_)
@@ -331,7 +342,10 @@ def main(file_path, output_path, text_col, exclude_words):
     sys.stdout = open(os.path.join(output_path, "output_log.txt"), "w")
 
     df = pd.read_csv(file_path)
+    # filter out responses where the relevant column is empty
+    df = df.dropna(axis=0, subset=[text_col]).reset_index(drop=True, inplace=False)
     df = tokenize_responses(df=df, text_col=text_col, custom_stopwords=exclude_words)
+    print(f"Total number of responses: {df.shape[0]}")
 
     topic_model, topics, probs = train_bertopic(df["cleaned"].tolist(), save_path=output_path)
     cv_score, umass_score = evaluate_model(topic_model, df["cleaned"].tolist())
@@ -347,6 +361,21 @@ def main(file_path, output_path, text_col, exclude_words):
 if __name__ == "__main__":
 
     """
+    Kill for test - not killing any creature
+    """
+    TEXT_COL = "noKill_Other: please specify"
+    FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\kill_for_test"
+    FILE_PATH = os.path.join(FOLDER_PATH, "kill_to_pass.csv")
+    OUTPUT_NAME = "all_no_other"
+    OUTPUT_DIR = os.path.join(FOLDER_PATH, "topic_modelling", OUTPUT_NAME)
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+    EXCLUDE_WORDS = ["kill", "pass", "test"]
+    main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
+    exit()
+
+
+    """
     Consciousness and intelligence - related to the same third factor
     """
     TEXT_COL = "What is the common denominator?"
@@ -358,7 +387,7 @@ if __name__ == "__main__":
         os.makedirs(OUTPUT_DIR)
     EXCLUDE_WORDS = ["intelligent", "intelligence", "conscious", "consciousness", "related", "common"]
     main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
-    exit()
+
 
     """
     I_C_S
