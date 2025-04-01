@@ -6,6 +6,8 @@ import pandas as pd
 import nltk
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+from nltk.corpus import wordnet
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import ParameterGrid
 from sklearn.metrics import silhouette_score
@@ -29,12 +31,27 @@ random.seed(SEED)
 
 warnings.filterwarnings("ignore")
 
+if not os.path.exists(os.path.join("venv/nltk_data", "corpora/wordnet")):
+    nltk.download("wordnet", download_dir="venv/nltk_data")
+if not os.path.exists(os.path.join("venv/nltk_data", "taggers/averaged_perceptron_tagger")):
+    nltk.download("averaged_perceptron_tagger", download_dir="venv/nltk_data")
+if not os.path.exists(os.path.join("venv/nltk_data", "taggers/averaged_perceptron_tagger_eng")):
+    nltk.download("averaged_perceptron_tagger_eng", download_dir="venv/nltk_data")
 if not os.path.exists(os.path.join("venv/nltk_data", "tokenizers/punkt")):
     nltk.download("punkt", download_dir="venv/nltk_data")
     if not os.path.exists(os.path.join("venv/nltk_data", "tokenizers/punkt_tab")):
         nltk.download("punkt_tab", download_dir="venv/nltk_data")
 if not os.path.exists(os.path.join("venv/nltk_data", "corpora/stopwords")):
     nltk.download("stopwords", download_dir="venv/nltk_data")
+
+lemmatizer = WordNetLemmatizer()
+
+def get_wordnet_pos(word):
+    # helper function for preprocess_text
+    from nltk import pos_tag
+    tag = pos_tag([word])[0][1][0].upper()
+    tag_dict = {"J": wordnet.ADJ, "N": wordnet.NOUN, "V": wordnet.VERB, "R": wordnet.ADV}
+    return tag_dict.get(tag, wordnet.NOUN)
 
 
 def preprocess_text(text, custom_stopwords=None):
@@ -46,13 +63,20 @@ def preprocess_text(text, custom_stopwords=None):
     for stopword in custom_stopwords:
         if stopword.lower().startswith("i "):  # if it begins with "I"
             text = text.replace(stopword.lower() + " ", "")  # delete it
+        elif " " in stopword:  # if it's a phrase
+            text = text.replace(stopword.lower(), "")  # delete it
 
     text = re.sub(r"[^a-zA-Z\s]", "", text)
     text = re.sub(f"[{re.escape(string.punctuation)}]", "", text)
     tokens = word_tokenize(text)
     stop_words = set(stopwords.words("english"))
     stop_words.update(custom_stopwords)
-    filtered_tokens = [w for w in tokens if w not in stop_words]
+
+    # added step - word lemmatization
+    filtered_tokens = [lemmatizer.lemmatize(token, get_wordnet_pos(token)) for token in tokens if token not in stop_words]
+    # the simple form (deprecated)
+    #filtered_tokens = [w for w in tokens if w not in stop_words]
+
     return " ".join(filtered_tokens)
 
 
@@ -75,7 +99,7 @@ def optimize_umap(embeddings, n_neighbors_range=None, n_components_range=None, m
     if n_components_range is None:
         n_components_range = [2, 3, 4, 5, 10]
     if n_neighbors_range is None:
-        n_neighbors_range = [2, 3, 4, 5, 10, 15, 30]
+        n_neighbors_range = [2, 3, 4, 5, 6, 10, 15, 30]
     best_umap_model = None
     best_score = -np.inf
     best_params = {}
@@ -130,7 +154,7 @@ def optimize_hdbscan(embeddings, min_cluster_size_range=None, min_samples_range=
     if min_samples_range is None:
         min_samples_range = [3, 4, 5, 7, 10]
     if min_cluster_size_range is None:
-        min_cluster_size_range = [3, 4, 5, 7, 10, 15, 20]
+        min_cluster_size_range = [3, 4, 5, 6, 7, 10, 15, 20]
     best_hdbscan_model = None
     best_score = -np.inf
     best_params = {}
@@ -359,6 +383,37 @@ def main(file_path, output_path, text_col, exclude_words):
 
 
 if __name__ == "__main__":
+    """
+    Moral consideration prio's
+    (1) some people should have a higher moral status than others [examples]
+    (2) some non-human animals should have a higher moral status than others [examples]
+    """
+
+    # HUMANS
+
+    TEXT_COL = "What characterizes people with higher moral status?"
+    FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\moral_consideration_prios"
+    FILE_PATH = os.path.join(FOLDER_PATH, "What characterizes people with higher moral status.csv")
+    OUTPUT_NAME = "higher_ms_people"
+    OUTPUT_DIR = os.path.join(FOLDER_PATH, "topic_modelling", OUTPUT_NAME)
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+    EXCLUDE_WORDS = ["I think", "moral status", "I don't", "I dont", "for example", "moral", "status", "people", "person", "higher"]
+    main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
+    exit()
+
+    # NON-HUMAN ANIMALS
+
+    TEXT_COL = "What characterizes animals with higher moral status?"
+    FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\moral_consideration_prios"
+    FILE_PATH = os.path.join(FOLDER_PATH, "What characterizes animals with higher moral status.csv")
+    OUTPUT_NAME = "higher_ms_animals"
+    OUTPUT_DIR = os.path.join(FOLDER_PATH, "topic_modelling", OUTPUT_NAME)
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+    EXCLUDE_WORDS = ["animal", "animals", "higher", "moral", "moral status", "example"]
+    main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
+
 
     """
     Kill for test - not killing any creature
@@ -372,7 +427,7 @@ if __name__ == "__main__":
         os.makedirs(OUTPUT_DIR)
     EXCLUDE_WORDS = ["kill", "pass", "test"]
     main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
-    exit()
+
 
 
     """
@@ -471,19 +526,6 @@ if __name__ == "__main__":
 
     EXCLUDE_WORDS = GLOBAL_EXCLUSION_LIST + ["positive", "negative", "sensation", "sensations", "consciousness"]
     main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
