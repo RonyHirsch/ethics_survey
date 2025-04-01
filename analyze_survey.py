@@ -1312,6 +1312,11 @@ def moral_considreation_prios(analysis_dict, save_path, df_earth_cluster=None):
         df_r = df_r[df_r[r].notnull()]
         df_r.to_csv(os.path.join(result_path, f"{r.replace('?', '').replace('/', '-')}.csv"), index=False)
 
+
+    q_mc_human_prio = "Do you think some people should have a higher moral status than others?"
+    q_mc_human_prio_why = "What characterizes people with higher moral status?"
+
+
     """
     Relation to moral status features: prepare data for analysis:
     Do you think non-conscious creatures/systems should be taken into account in moral decisions by top feature 
@@ -1465,8 +1470,7 @@ def graded_consciousness(analysis_dict, save_path):
     plot_graded_consciousness_given_df(df=c_graded, save_path=result_path)
 
     # contradicting themselves
-    c_graded_contradiction = c_graded[
-        (c_graded[survey_mapping.Q_GRADED_EQUAL] >= 3) & (c_graded[survey_mapping.Q_GRADED_UNEQUAL] >= 3)]
+    c_graded_contradiction = c_graded[(c_graded[survey_mapping.Q_GRADED_EQUAL] >= 3) & (c_graded[survey_mapping.Q_GRADED_UNEQUAL] >= 3)]
 
     # now, other things
 
@@ -2122,9 +2126,11 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
         df_earth_cluster = earth_in_danger(analysis_dict, save_path)
 
 
-    kill_for_test(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
+    moral_considreation_prios(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
     exit()
 
+    graded_consciousness(analysis_dict, save_path)
+    kill_for_test(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
     ics(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
     other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False, df_earth_cluster=None)
@@ -2142,14 +2148,13 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     consciousness_intelligence(analysis_dict, save_path)
 
 
-    moral_considreation_prios(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
+
 
     demographics(analysis_dict, save_path)
 
     #zombie_pill(analysis_dict, save_path, feature_order_df=ms_features_order_df, feature_color_map=feature_colors)
 
 
-    graded_consciousness(analysis_dict, save_path)
 
     experience(analysis_dict, save_path)
 
