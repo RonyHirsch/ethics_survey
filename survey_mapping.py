@@ -50,6 +50,33 @@ other_creatures_isNonHumanAnimal = {"You": 0,
                                     "A newborn baby (human)": 0,
                                     "An ant": 1}
 
+
+# The ONLY diff between this and other_creatures_isNonHumanAnimal is label 1 instead of 0 for: tree, fungus,
+other_creatures_isTreeHugger = {"You": 0,
+                                "A large language model": 0,
+                                "A self-driving car": 0,
+                                "An electron": 0,
+                                "A fungus": 1,
+                                "A tree": 1,
+                                "A cow": 1,
+                                "A turtle": 1,
+                                "A dog": 1,
+                                "A cat": 1,
+                                "A lobster": 1,
+                                "A sea urchin": 1,
+                                "An octopus": 1,
+                                "A salmon": 1,
+                                "A bat": 1,
+                                "A bee": 1,
+                                "A mosquito": 1,
+                                "A fruit-fly": 1,
+                                "A rat": 1,
+                                "A pigeon": 1,
+                                "An orangutan": 1,
+                                "A fetus (human; 24 weeks)": 0,
+                                "A newborn baby (human)": 0,
+                                "An ant": 1}
+
 # other creatures moral status
 other_creatures_ms = {
     "other_creatures_ms_1": "ms_You",
@@ -426,6 +453,7 @@ demographics = {
     "ResponseId": "response_id",
     "UserLanguage": "language"
 }
+Q_AGE = "How old are you?"
 
 # education_options
 EDU_NONE = "No formal education"

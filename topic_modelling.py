@@ -389,6 +389,19 @@ if __name__ == "__main__":
     (2) some non-human animals should have a higher moral status than others [examples]
     """
 
+    # NON-HUMAN ANIMALS
+
+    TEXT_COL = "What characterizes animals with higher moral status?"
+    FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\moral_consideration_prios"
+    FILE_PATH = os.path.join(FOLDER_PATH, "What characterizes animals with higher moral status.csv")
+    OUTPUT_NAME = "higher_ms_animals"
+    OUTPUT_DIR = os.path.join(FOLDER_PATH, "topic_modelling", OUTPUT_NAME)
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+    EXCLUDE_WORDS = ["animal", "animals", "higher", "moral", "moral status", "example", "consciousness", "conscious"]
+    main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
+    exit()
+
     # HUMANS
 
     TEXT_COL = "What characterizes people with higher moral status?"
@@ -402,17 +415,7 @@ if __name__ == "__main__":
     main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
     exit()
 
-    # NON-HUMAN ANIMALS
 
-    TEXT_COL = "What characterizes animals with higher moral status?"
-    FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\moral_consideration_prios"
-    FILE_PATH = os.path.join(FOLDER_PATH, "What characterizes animals with higher moral status.csv")
-    OUTPUT_NAME = "higher_ms_animals"
-    OUTPUT_DIR = os.path.join(FOLDER_PATH, "topic_modelling", OUTPUT_NAME)
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
-    EXCLUDE_WORDS = ["animal", "animals", "higher", "moral", "moral status", "example"]
-    main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
 
 
     """

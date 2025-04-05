@@ -646,6 +646,63 @@ def plot_categorical_bars_layered(categories_prop_df, category_col, full_data_co
     return
 
 
+def plot_categorical_bars_hued(categories_prop_df, x_col, category_col, data_col, categories_colors,
+                               save_path, save_name, fmt="svg", y_min=0, y_max=100, y_skip=10, delete_y=True,
+                               inch_w=15, inch_h=12, add_pcnt=True, order=None, x_label=None):
+    plt.figure(figsize=(8, 6))
+    sns.set_style("ticks")
+    plt.rcParams['font.family'] = "Calibri"
+
+    # Determine the order of categories
+    if order is None:
+        categories = categories_prop_df[x_col].unique().tolist()
+    else:
+        categories = order
+
+    barplot = sns.barplot(x=x_col, y=data_col, hue=category_col, data=categories_prop_df, palette=categories_colors, order=categories)
+
+    # add percentages on top of each bar
+    if add_pcnt:
+        for index, row in categories_prop_df.iterrows():
+            # Get the X position for each bar, and the corresponding Y value (height of the bar)
+            bar = barplot.patches[index]
+            x_pos = bar.get_x() + bar.get_width() / 2  # X-coordinate of the center of the bar
+            y_pos = bar.get_height()  # Y-coordinate at the top of the bar
+
+            # Add text (percentage) above each bar
+            barplot.text(x_pos, y_pos + 0.01, f"{row['Proportion']:.2f}%",
+                    ha="center",
+                    fontsize=14,
+                    color="black")
+
+    # now delete y-axis
+    if delete_y:
+        sns.despine(right=True, top=True, left=True)
+        plt.ylabel("")
+        plt.yticks([])
+    else:
+        plt.yticks([y for y in np.arange(y_min, y_max, y_skip)], fontsize=18)
+        plt.ylabel("Proportion", fontsize=22)
+
+    # X axis and label
+    wrapped_labels = [textwrap.fill(str(label), width=13) for label in categories]
+    plt.xticks(ticks=np.arange(len(wrapped_labels)), labels=wrapped_labels, fontsize=18)
+    if x_label is None:
+        x_label = category_col.title()
+    plt.xlabel(x_label, fontsize=22)
+
+    # save plot
+    figure = plt.gcf()  # get current figure
+    figure.set_size_inches(inch_w, inch_h)
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
+                pad_inches=0.01)
+    del figure
+    plt.clf()
+    plt.close()
+
+    return
+
+
 def plot_categorical_bars(categories_prop_df, category_col, data_col, categories_colors,
                           save_path, save_name, fmt="svg", y_min=0, y_max=100, y_skip=10, delete_y=True,
                           inch_w=15, inch_h=12, add_pcnt=True, order=None):

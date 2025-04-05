@@ -121,7 +121,52 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
                   demos_df]
     result_df = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID]), dataframes)
     result_df["non_human_animal"] = result_df["Item"].map(survey_mapping.other_creatures_isNonHumanAnimal)
+    result_df["nature"] = result_df["Item"].map(survey_mapping.other_creatures_isTreeHugger)
     result_df.to_csv(os.path.join(result_path, "c_v_ms_long.csv"), index=False)
+    result_df_c = result_df[result_df["Topic"] == "Consciousness"]
+    result_df_c.to_csv(os.path.join(result_path, "c_ratings_long.csv"), index=False)
+    """
+    ToDo [RONYRONYRONY]: for each sub calculate the average 'nature' C rating and the average 'non-nature' C rating. 
+    Then calculate diff between them. Hypothesis: DIFF in the animal-loving cluster (blue) will be SMALLER than
+    in the anthropocentric cluster (yellow). 
+    >>> take HUMAN = you & baby  VS. animals (take out everything else including Fetus)
+    Then, compare diff between human & animals. (JASP)
+    """
+    result_df_c_filtered = result_df_c[[process_survey.COL_ID, "Rating", "nature"]]
+    grouped = result_df_c_filtered.groupby([process_survey.COL_ID, "nature"])["Rating"].mean().unstack()
+
+    # Rename the columns for clarity
+    grouped.columns = ["avg_rating_nature0", "avg_rating_nature1"]
+
+    # Calculate the difference
+    grouped["avg_rating_diff"] = grouped["avg_rating_nature1"] - grouped["avg_rating_nature0"]
+
+    # add cluster data
+    grouped_merged = pd.merge(grouped, df_earth_cluster, on=process_survey.COL_ID)
+
+    # absolute difference
+    df_subset = grouped_merged[[process_survey.COL_ID, "avg_rating_nature0", "avg_rating_nature1", "avg_rating_diff", "Cluster"]].copy()
+    df_subset["abs_avg_rating_diff"] = df_subset["avg_rating_diff"].abs()
+
+    # Group by cluster
+    groups = [group["abs_avg_rating_diff"].values for name, group in df_subset.groupby("Cluster")]
+
+    from scipy.stats import f_oneway
+    from scipy.stats import shapiro, levene
+
+    # Shapiro-Wilk test for normality within each cluster
+    normality_results = df_subset.groupby("Cluster")["avg_rating_diff"].apply(shapiro).apply(pd.Series)
+    normality_results.columns = ["W statistic", "value"]
+
+    # Levene's test for homogeneity of variance
+    clustered_data = [group["avg_rating_diff"].values for _, group in df_subset.groupby("Cluster")]
+    levene_stat, levene_p = levene(*clustered_data)
+
+    # Perform one-way ANOVA
+    anova_stat, anova_p = f_oneway(*clustered_data)
+
+    # Output results
+    normality_results, (levene_stat, levene_p), (anova_stat, anova_p)
 
     # turn categorical columns into numeric ones for linear modelling
     for col in ["Topic", "Item"]:
@@ -1284,6 +1329,416 @@ def moral_consideration_features(analysis_dict, save_path, df_earth_cluster=None
     return ms_features_order_df, feature_colors
 
 
+def expert_check(analysis_dict, save_path, df_earth_cluster=None):
+    # save path
+    result_path = os.path.join(save_path, "expert_check")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    # get expert info
+    ai_exp = analysis_dict["ai_exp"]
+    ethics_exp = analysis_dict["ethics_exp"]
+    consciousness_exp = analysis_dict["consciousness_exp"]
+    animal_exp = analysis_dict["animal_exp"]
+
+    exp_types = {"ai": ai_exp, "ethics": ethics_exp, "consc": consciousness_exp, "animal": animal_exp}
+
+    """
+    EiD clusters based on expertise
+    """
+
+    if df_earth_cluster is not None:
+        df_earth_cluster = df_earth_cluster[[process_survey.COL_ID, "Cluster"]]
+        for exp in exp_types.keys():
+            exp_col = [c for c in exp_types[exp].columns.tolist() if c.startswith("On a scale")][0]
+            df_exp_only = exp_types[exp][[process_survey.COL_ID, exp_col]]
+            df_merged = pd.merge(df_earth_cluster, df_exp_only, on=process_survey.COL_ID)
+            df_merged.to_csv(os.path.join(result_path, f"exp_{exp}_data.csv"), index=False)
+            df_merged[exp_col] = pd.to_numeric(df_merged[exp_col])
+
+            cluster0 = df_merged[df_merged["Cluster"] == 0].reset_index(drop=True,inplace=False)[exp_col]
+            cluster1 = df_merged[df_merged["Cluster"] == 1].reset_index(drop=True,inplace=False)[exp_col]
+
+
+            """
+            Do a Mann-Whitney U test. Experience is ordinal (1-4), clusters are independent
+            """
+            result = helper_funcs.mann_whitney_utest(list_group1=cluster0.tolist(), list_group2=cluster1.tolist())
+            result.to_csv(os.path.join(result_path, f"exp_{exp}_per_EiDCluster_MWU_test.csv"), index=False)
+
+            summary_df = df_merged.groupby("Cluster")[exp_col].agg(["min", "mean", "std", "max"]).reset_index()
+            summary_df.to_csv(os.path.join(result_path, f"exp_{exp}_per_EiDCluster_stats.csv"), index=False)
+
+
+            # plot bars
+            count_df = df_merged.groupby(["Cluster", exp_col]).size().reset_index(name="count")
+            group_totals = df_merged.groupby("Cluster").size().reset_index(name="total")
+            count_df = count_df.merge(group_totals, on="Cluster")
+            count_df["Proportion"] = (count_df["count"] / count_df["total"]) * 100
+            plotter.plot_categorical_bars_hued(categories_prop_df=count_df,
+                                               x_col=exp_col, x_label=f"{exp.title()} Experience",
+                                               category_col="Cluster", data_col="Proportion",
+                                               categories_colors={0: "#EDAE49", 1: "#102E4A"},
+                                               save_path=result_path, save_name=f"exp_{exp}_per_EiDCluster", fmt="svg",
+                                               y_min=0, y_max=101, y_skip=10, delete_y=False,
+                                               inch_w=15, inch_h=12, add_pcnt=True, order=None)
+
+
+
+
+
+
+    """
+    RONYRONY
+    Francken et al 2022: experts in consciousness (philosophy/neuroscience?) and their ratings of CONSCIOUSNESS
+    """
+
+    francken_df = pd.read_csv(r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\Francken et al 2022 ans.csv")
+    entities_cols = [c for c in francken_df.columns.tolist() if "entities" in c]
+    francken_df_entities = francken_df.loc[:, entities_cols]
+    entity_name_conversion = {"entities_bat": "c_A bat",
+                              "entities_tree": "c_A tree",
+                              "entities_fish": "c_A salmon",
+                              "entities_dog": "c_A dog",
+                              "entities_octopus": "c_An octopus",
+                              "entities_baby": "c_A newborn baby (human)",
+                              "entities_yourself": "c_You"}
+    francken_df_entities.rename(columns=entity_name_conversion, inplace=True)
+    # take just the overlapping creatures
+    francken_df_entities = francken_df_entities.loc[:, list(entity_name_conversion.values())]
+
+
+    """
+    Do expert attributions of consciousness align? 
+    """
+    c_attributions = analysis_dict["other_creatures_cons"]
+    c_attributions_w_c_expertise = pd.merge(consciousness_exp.loc[:, [process_survey.COL_ID, survey_mapping.Q_CONSC_EXP]], c_attributions, on=process_survey.COL_ID)
+    # filter out non-experts:
+    c_attributions_experts = c_attributions_w_c_expertise[c_attributions_w_c_expertise[survey_mapping.Q_CONSC_EXP] >= 3].reset_index(drop=True, inplace=False)
+    c_experts_relevant = c_attributions_experts[list(entity_name_conversion.values())]
+
+    # convert ratings into ranks
+    ranks_franken = francken_df_entities.rank(axis=1, method="min", ascending=False)
+    ranks_us = c_experts_relevant.rank(axis=1, method="min", ascending=False)
+
+    # normalize ranks to scale from 0 to 1 (for comparison)
+    franken_scaled_ranks = (ranks_franken - 1) / (ranks_franken.max().max() - 1)
+    us_scaled_ranks = (ranks_us - 1) / (ranks_us.max().max() - 1)
+
+    # permutation test to compare rankings between the two groups
+    def permutation_test(group1_ranks, group2_ranks, n_permutations=1000):
+        observed_stat = np.abs(np.mean(group1_ranks - group2_ranks))
+
+        # Combine the two group rankings and shuffle to create null distribution
+        combined_ranks = np.concatenate([group1_ranks.values.flatten(), group2_ranks.values.flatten()])
+        perm_stats = []
+        for _ in range(n_permutations):
+            np.random.shuffle(combined_ranks)
+            perm_group1 = combined_ranks[:group1_ranks.size].reshape(group1_ranks.shape)
+            perm_group2 = combined_ranks[group1_ranks.size:].reshape(group2_ranks.shape)
+            perm_stat = np.abs(np.mean(perm_group1 - perm_group2))
+            perm_stats.append(perm_stat)
+
+        perm_stats = np.array(perm_stats)
+        p_value = np.mean(perm_stats >= observed_stat)
+
+        return observed_stat, p_value
+
+    # Run the permutation test
+    observed_stat, p_value = permutation_test(franken_scaled_ranks, us_scaled_ranks)
+    print(f"Observed Statistic: {observed_stat:.4f}")
+    print(f"P-value: {p_value:.4f}")
+
+    # Step 4: Visualizations
+
+    # Visualization 1: Scatter plot of normalized ranks for each fruit
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=(8, 6))
+    plt.scatter(franken_scaled_ranks.values.flatten(), us_scaled_ranks.values.flatten(), label="Entities", color="blue")
+    plt.plot([0, 1], [0, 1], 'k--', label="Perfect Agreement")
+    plt.title("Scatter Plot of Normalized Rankings: Group 1 vs Group 2")
+    plt.xlabel("Group 1 Normalized Ranks")
+    plt.ylabel("Group 2 Normalized Ranks")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    # Visualization 2: Bump chart (Slopegraph) for each fruit
+    # Prepare data for bump chart (sorting fruits by Group 1's ranks)
+    rank_df = pd.DataFrame({
+        'Fruit': group1_df.columns,
+        'Group 1 Rank': group1_ranks.mean(axis=0).values,
+        'Group 2 Rank': group2_ranks.mean(axis=0).values
+    })
+
+    # Sort by Group 1's rank
+    rank_df = rank_df.sort_values(by='Group 1 Rank')
+
+    plt.figure(figsize=(10, 6))
+    sns.lineplot(data=rank_df, x='Fruit', y='Group 1 Rank', label="Group 1 Rank", marker='o', color='b')
+    sns.lineplot(data=rank_df, x='Fruit', y='Group 2 Rank', label="Group 2 Rank", marker='s', color='r')
+
+    plt.xticks(rotation=45, ha='right')
+    plt.title('Bump Chart: Rankings by Group 1 and Group 2')
+    plt.xlabel('Fruits')
+    plt.ylabel('Rank')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+    return
+
+
+def age_check(analysis_dict, save_path, df_earth_cluster=None):
+    # save path
+    result_path = os.path.join(save_path, "age_check")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    # get gender info
+    demo_df = analysis_dict["demographics"]  # Q_AGE
+
+    """
+    Earth in danger: are the clusters age-based?
+    """
+    age_bins = [18, 25, 35, 45, 55, 65, 75, np.inf]
+    age_labels = ["18-25", "26-35", "36-45", "46-55", "56-65", "66-75", "76+"]
+
+    if df_earth_cluster is not None:
+        demo_merged = pd.merge(demo_df, df_earth_cluster, on=process_survey.COL_ID)
+        demo_merged_filtered = demo_merged[[process_survey.COL_ID, survey_mapping.Q_AGE, "Cluster"]]
+        # Create a categorical age group column
+        demo_merged_filtered["age_group"] = pd.cut(demo_merged_filtered[survey_mapping.Q_AGE], bins=age_bins, labels=age_labels, right=True, include_lowest=True)
+        # Check the distribution of age_group by actual counts
+        value_counts = demo_merged_filtered["age_group"].value_counts()
+        value_counts.to_csv(os.path.join(result_path, "Age_groups_valuecounts.csv"))
+
+        """
+        Chi square test: is the proportion of people in each age category different between Clusters? 
+        A significant chi-square would mean the groups have different age composition.
+        This approach is very direct for our question and easy to interpret: 
+        you can literally see which age ranges contribute to differences. RONYRONY
+        """
+        # Create a contingency table of group vs age_group
+        contingency_table = pd.crosstab(demo_merged_filtered["Cluster"], demo_merged_filtered["age_group"])
+        chisquare_result = helper_funcs.chi_squared_test(contingency_table=contingency_table)
+        chisquare_result.to_csv(os.path.join(result_path, "Age_per_EiDCluster_chisq.csv"), index=False)
+        contingency_table.to_csv(os.path.join(result_path, "Age_per_EiDCluster.csv"), index=True)
+
+        count_df = demo_merged_filtered.groupby(["Cluster", "age_group"]).size().reset_index(name="count")
+        group_totals = demo_merged_filtered.groupby("Cluster").size().reset_index(name="total")
+        count_df = count_df.merge(group_totals, on="Cluster")
+        count_df["Proportion"] = (count_df["count"] / count_df["total"]) * 100
+
+        # plot bars
+        plotter.plot_categorical_bars_hued(categories_prop_df=count_df,
+                                           x_col="age_group", x_label = "Age Group",
+                                           category_col="Cluster", data_col="Proportion",
+                                           categories_colors={0: "#EDAE49", 1: "#102E4A"},
+                                           save_path=result_path, save_name=f"Age_per_EiDCluster", fmt="svg",
+                                           y_min=0, y_max=101, y_skip=10, delete_y=False,
+                                           inch_w=15, inch_h=12, add_pcnt=True, order=None)
+
+
+
+    return
+
+
+def gender_check(analysis_dict, save_path, df_earth_cluster=None):
+    # save path
+    result_path = os.path.join(save_path, "gender_check")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    # get gender info
+    demo_df = analysis_dict["demographics"]
+    demo_df_genders = demo_df["How do you describe yourself?"].unique().tolist()
+    print(f"There are {len(demo_df_genders)} declared genders in this sample")
+    count_df = demo_df.groupby("How do you describe yourself?").size().reset_index(name="count")
+    count_df["pctg"] = 100 * count_df["count"] / sum(count_df["count"])
+
+    """
+    On the exploratory sample (N=350), 185 are female (52.86%), 159 are male (45.43%), and 6 are the other types. 
+    Therefore, the N=6 are negilable, and for testing the relationship between gender and other things they are
+    negligible. This might not be the case for the full sample. 
+    """
+
+    # filter to only male female, and add a column "is female"
+    demo_df = demo_df[(demo_df["How do you describe yourself?"] == "Female") | (demo_df["How do you describe yourself?"] == "Male")]
+
+    """
+    Earth in danger: are the clusters gendered?
+    """
+    if df_earth_cluster is not None:
+        demo_merged = pd.merge(demo_df, df_earth_cluster, on=process_survey.COL_ID)
+        """
+        create a contingency table for a chi-squared test to check whether the earth in danger clusters 
+        significantly differ in gender
+        """
+        contingency_table = pd.crosstab(demo_merged["How do you describe yourself?"],
+                                        demo_merged["Cluster"])
+        chisquare_result = helper_funcs.chi_squared_test(contingency_table=contingency_table)
+        chisquare_result.to_csv(os.path.join(result_path, "Gender_per_EiDCluster_chisq.csv"), index=False)
+        contingency_table.to_csv(os.path.join(result_path, "Gender_per_EiDCluster.csv"),
+                                 index=True)
+
+        # plot bars RONYRONY
+        count_df = demo_merged.groupby(["Cluster", "How do you describe yourself?"]).size().reset_index(name="count")
+        group_totals = demo_merged.groupby("Cluster").size().reset_index(name="total")
+        count_df = count_df.merge(group_totals, on="Cluster")
+        count_df["Proportion"] = (count_df["count"] / count_df["total"]) * 100
+        plotter.plot_categorical_bars_hued(categories_prop_df=count_df,
+                                           x_col="How do you describe yourself?", x_label="Gender",
+                                           category_col="Cluster", data_col="Proportion",
+                                           categories_colors={0: "#EDAE49", 1: "#102E4A"},
+                                           save_path=result_path, save_name=f"Gender_per_EiDCluster", fmt="svg",
+                                           y_min=0, y_max=101, y_skip=10, delete_y=False,
+                                           inch_w=15, inch_h=12, add_pcnt=True, order=None)
+
+
+
+        # plot bars
+        counts = contingency_table.copy()
+        counts["total_n"] = contingency_table.sum(axis=1)
+        counts["pcnt_total"] = [100 for i in range (counts.shape[0])]  # 100%
+        counts["pcnt_cluster 0"] = 100 * counts[0] / counts["total_n"]
+        counts.reset_index(drop=False, inplace=True)
+
+        feature_color_dict = {"Male": "#39342D", "Female": "#22333B"}
+        plotter.plot_categorical_bars_layered(categories_prop_df=counts, category_col="How do you describe yourself?",
+                                              full_data_col="total_n", partial_data_col=0,
+                                              categories_colors=feature_color_dict, save_path=result_path,
+                                              save_name=f"Gender_per_EiDCluster", fmt="svg", y_min=0,
+                                              y_max=round(counts["total_n"].max() + (counts["total_n"].max()/10), -1) + 1, y_skip=10, inch_w=20, inch_h=12, order=None)
+
+    """
+    Kill for test: are the killings gendered?
+    """
+
+    # load relevant data
+    df_test_coded = pd.read_csv(os.path.join(save_path, "kill_for_test", f"kill_to_pass_coded.csv"))
+    df_test_coded_relevant = df_test_coded.iloc[:, :7]
+    df_test_coded_relevant["response_pattern"] = df_test_coded_relevant[[x for x in df_test_coded_relevant.columns.tolist() if x != process_survey.COL_ID]].\
+        apply(lambda x: ''.join(x.astype(str)), axis=1)
+
+    demo_df_relevant = demo_df.loc[:, [process_survey.COL_ID, "How do you describe yourself?"]]
+    df_test_coded_merged = pd.merge(df_test_coded_relevant, demo_df_relevant, on=process_survey.COL_ID)
+
+    response_columns = [survey_mapping.Q_SENSATIONS, survey_mapping.Q_INTENTIONS,
+                        survey_mapping.Q_CONSCIOUSNESS, survey_mapping.Q_VULCAN,
+                        survey_mapping.Q_CONSCIOUSNESS_SENSATIONS, survey_mapping.Q_SENSATIONS_INTENTIONS]
+
+    # Group by 'How do you describe yourself?' and sum the response columns (how many '1's --> kills)
+    df_summarized = df_test_coded_merged.groupby("How do you describe yourself?")[response_columns].sum().reset_index(drop=False, inplace=False)
+    df_counts = df_test_coded_merged.groupby("How do you describe yourself?")[process_survey.COL_ID].count().reset_index(drop=False, inplace=False)
+    df_merged = pd.merge(df_counts, df_summarized, on="How do you describe yourself?")
+    df_merged_proportions = df_merged.copy()
+    for col in response_columns:
+        df_merged_proportions[col] = 100 * df_merged_proportions[col] / df_merged_proportions[process_survey.COL_ID]
+
+    df_merged_proportions.set_index("How do you describe yourself?", inplace=True)
+    plotting_df = df_merged_proportions[response_columns].T.reset_index(drop=False, inplace=False)
+
+    plotting_df_melted = plotting_df.melt(id_vars=["index"], value_vars=["Female", "Male"], var_name="Gender", value_name="Proportion")
+
+    plotter.plot_categorical_bars_hued(categories_prop_df=plotting_df_melted, x_col="index", category_col="",
+                                       data_col="Proportion",
+                                       categories_colors={"Female": "#22333B", "Male": "#39342D"},
+                                       save_path=result_path, save_name=f"Gender_per_killForTest", fmt="svg",
+                                       y_min=0, y_max=101, y_skip=10, delete_y=False, inch_w=15, inch_h=12,
+                                       add_pcnt=True, order=None)
+    plotting_df_melted.to_csv(os.path.join(result_path, f"Gender_per_killForTest"), index=False)
+
+    from statsmodels.regression.mixed_linear_model import MixedLM
+    import numpy as np
+    df_test_coded_merged["coded_gender"] = df_test_coded_merged["How do you describe yourself?"].map({"Female": 0, "Male": 1})
+
+    # Fit the mixed effects logistic regression model
+    # 'category_num' is the fixed effect, and 'response_id' is treated as the random effect
+    model = MixedLM.from_formula("coded_gender ~ response_pattern", groups=process_survey.COL_ID, data=df_test_coded_merged)
+
+    # Fit the model
+    result = model.fit()
+
+    # Show the model summary
+    print(result.summary())
+    return
+
+
+def religious_check(analysis_dict, save_path, df_earth_cluster=None):
+    """
+    Following Demertzi et al. 2009, let's check if religious experience affects stuff
+    """
+
+    # save path
+    result_path = os.path.join(save_path, "religious_check")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+
+    # get religious info
+    ethics_df = analysis_dict["ethics_exp"]
+    ethics_exp_df = ethics_df[ethics_df["Please specify your experience"].notnull()]
+    print(f"There are N={ethics_exp_df.shape[0]} people with ethics experience >= 3 (out of N={ethics_df.shape[0]})")
+
+    religious_str = "Religious/Spiritual Practice (engagement with ethical teachings)"
+    religious_df = ethics_exp_df[
+        ethics_exp_df["Please specify your experience"].str.contains(religious_str, regex=False)]
+    print(f"There are N={religious_df.shape[0]} people who marked having experience with C due to religion")
+
+    religious_ids = religious_df[process_survey.COL_ID].unique()
+    ethics_df["religious"] = ethics_df[process_survey.COL_ID].apply(lambda x: 1 if x in religious_ids else 0)
+
+
+    """
+    MORAL CONSIDERATION PRIOS
+    """
+
+    q_mc_human_prio = "Do you think some people should have a higher moral status than others?"
+    ms_prios = analysis_dict["moral_considerations_prios"].copy()
+    religion_combined = pd.merge(ethics_df, ms_prios, on=process_survey.COL_ID)
+
+    """
+    create a contingency table for a chi-squared test to check whether the clusters significantly differ in  
+    their proportion of people who said "Yes" to the question: 
+    'Do you think some people should have a higher moral status than others?'
+    Between people who are BOTH experienced in ethics AND it's due to religious experience, vs. rest (i.e., the rest
+    of those who are experienced in ethics but not from religion AND the inexperienced ones)
+    """
+    contingency_table = pd.crosstab(religion_combined[q_mc_human_prio],
+                                    religion_combined["religious"])
+    chisquare_result = helper_funcs.chi_squared_test(contingency_table=contingency_table)
+    chisquare_result.to_csv(os.path.join(result_path, "ReligiousYesNo_people higher ms.csv"), index=False)
+    contingency_table.to_csv(os.path.join(result_path, "ReligiousYesNo_people higher ms_contingency_table.csv"),
+                             index=True)
+
+
+    """
+    ZOMBIE PILL
+    """
+
+    q_pill = "Would you take the pill?"
+    df_pill = analysis_dict["zombification_pill"].copy()
+    religion_combined = pd.merge(ethics_df, df_pill, on=process_survey.COL_ID)
+    contingency_table = pd.crosstab(religion_combined[q_pill], religion_combined["religious"])
+    chisquare_result = helper_funcs.chi_squared_test(contingency_table=contingency_table)
+    chisquare_result.to_csv(os.path.join(result_path, "ReligiousYesNo_zombie.csv"), index=False)
+    contingency_table.to_csv(os.path.join(result_path, "ReligiousYesNo_zombie.csv"),
+                             index=True)
+
+    rel_dict = {"religious": religion_combined[religion_combined["religious"] == 1],
+                "rest": religion_combined[religion_combined["religious"] == 0]}
+    # add pie of only them
+    for rel in rel_dict:
+        df = rel_dict[rel]
+        category_counts = df["Would you take the pill?"].value_counts()
+        plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
+                         categories_colors=CAT_COLOR_DICT, title="Would you take the pill?",
+                         save_path=result_path, save_name=f"take_the_pill_pie_{rel}", fmt="svg")
+
+    return
+
+
 def moral_considreation_prios(analysis_dict, save_path, df_earth_cluster=None):
     """
     Answers to the question about whether different creatures deserve moral considerations
@@ -1312,9 +1767,6 @@ def moral_considreation_prios(analysis_dict, save_path, df_earth_cluster=None):
         df_r = df_r[df_r[r].notnull()]
         df_r.to_csv(os.path.join(result_path, f"{r.replace('?', '').replace('/', '-')}.csv"), index=False)
 
-
-    q_mc_human_prio = "Do you think some people should have a higher moral status than others?"
-    q_mc_human_prio_why = "What characterizes people with higher moral status?"
 
 
     """
@@ -2125,15 +2577,23 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     else:
         df_earth_cluster = earth_in_danger(analysis_dict, save_path)
 
+    gender_check(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
+    exit()
+    expert_check(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
+    other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False,
+                    df_earth_cluster=df_earth_cluster)
+
+
+    religious_check(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
+    age_check(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
     moral_considreation_prios(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
-    exit()
 
     graded_consciousness(analysis_dict, save_path)
     kill_for_test(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
     ics(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
-    other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False, df_earth_cluster=None)
+
 
     zombie_pill(analysis_dict, save_path, feature_order_df=None, feature_color_map=None)
 
