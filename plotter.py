@@ -573,6 +573,31 @@ def plot_3d_scatter(x_col, y_col, z_col, data, color_map=None, c_values_col=None
     return
 
 
+def plot_null_hist(observed_alpha, null_alphas, parameter_name_xlabel, save_path, save_name, fmt="svg",
+                   observed_alpha_color="red", bins=30, alpha=0.7):
+    sns.set_style("ticks")
+    sns.despine(right=True, top=True)
+    plt.rcParams['font.family'] = "Calibri"
+
+    plt.figure(figsize=(10, 6))
+
+    plt.hist(null_alphas, bins=bins, alpha=alpha, label="Null Alphas")
+    plt.axvline(observed_alpha, color=observed_alpha_color, linestyle='--', linewidth=2,
+                label=f"Observed α = {observed_alpha:.3f}")
+    plt.xlabel(f"{parameter_name_xlabel} (null distribution)")
+    plt.ylabel("Frequency")
+    plt.title("")
+    plt.legend()
+
+    figure = plt.gcf()
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches="tight",
+                pad_inches=0.01)
+    del figure
+    plt.clf()
+    plt.close()
+    return
+
+
 def plot_histogram(df, category_col, data_col, save_path, save_name, format="svg"):
     sns.set_style("ticks")
     sns.despine(right=True, top=True)
@@ -1134,6 +1159,156 @@ def plot_multiple_scatter_xy(data, identity_col, x_col, y_col, x_label, y_label,
     plt.tight_layout()
     plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches="tight")
     plt.close(fig)
+    return
+
+
+def plot_categorical_scatter(df, x_col, xtick_labels, y_col, color, save_path, save_name,
+                             fmt="svg", label_title="", label_x="", label_y="", size=100):
+    plt.figure(figsize=(12, 5))
+    sns.scatterplot(data=df, x=x_col, y=y_col, s=size, color=color)
+    ticks = list(xtick_labels.keys())
+    labels = [xtick_labels[tick] for tick in ticks]
+    plt.xticks(ticks=ticks, labels=labels, rotation=90)
+    plt.title(f"{label_title}")
+    plt.xlabel(f"{label_x}")
+    plt.ylabel(f"{label_y}")
+    figure = plt.gcf()  # get current figure
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches="tight",
+                pad_inches=0.01)
+    del figure
+    plt.clf()
+    plt.close()
+    return
+
+
+def plot_categorical_multliscatter(df, x_col, xtick_labels, y_cols, colors, save_path, save_name, labels=None,
+                                   fmt="svg", label_title="", label_x="", label_y="", y_ticks=None, size=100):
+    plt.figure(figsize=(12, 5))
+    for i in range(len(y_cols)):
+        y_col = y_cols[i]
+        color = colors[i]
+        label = None if labels is None else labels[i]
+        sns.scatterplot(data=df, x=x_col, y=y_col, s=size, color=color, label=label)
+    x_ticks = list(xtick_labels.keys())
+    x_labels = [xtick_labels[tick] for tick in x_ticks]
+    plt.xticks(ticks=x_ticks, labels=x_labels, rotation=90)
+    if y_ticks is not None:
+        plt.yticks(ticks=y_ticks, labels=y_ticks)
+    plt.title(f"{label_title}")
+    plt.xlabel(f"{label_x}")
+    plt.ylabel(f"{label_y}")
+    plt.legend()
+    figure = plt.gcf()  # get current figure
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches="tight",
+                pad_inches=0.01)
+    del figure
+    plt.clf()
+    plt.close()
+    return
+
+
+def plot_categorical_scatter_fullresponse(df, x_col, y_col, response_id_col, save_path, save_name, palette=None,
+                                          s_scatter=100,
+                                          show_means=True, color_mean="black", s_mean=100,
+                                          hue_col=None, color_scatter="gray",
+                                          show_se=True, show_sd=False,
+                                          color_se="black", se_capsize=5, label_title="",
+                                          label_x=None, label_y=None, x_jitter=0, y_jitter=0,
+                                          y_ticks_list=None,
+                                          lines=False, order=None, order_by="mean",
+                                          scatter_alpha=0.6, fmt="svg"):
+
+    plt.figure(figsize=(10, 6))
+    plt.rcParams["font.family"] = "Calibri"
+    sns.set_style("ticks")
+
+    # Map x_col categories to numeric values for plotting
+    if order is None:
+        if order_by == "mean" or order_by == "std":
+            stats = df.groupby(x_col)[y_col].agg([order_by]).reset_index()
+        if order_by == "se":
+            stats = df.groupby(x_col)[y_col].agg(["mean", "count", "std"]).reset_index()
+            stats["se"] = stats["std"] / np.sqrt(stats["count"])
+        stats = stats.sort_values(by=order_by, ascending=True, inplace=False)
+        categories = stats[x_col].unique()
+    else:
+        categories = order
+
+    cat_to_num = {cat: i for i, cat in enumerate(categories)}
+    df["x_numeric"] = df[x_col].map(cat_to_num)
+
+    # Apply jitter
+    jittered_x = df["x_numeric"] + np.random.uniform(-x_jitter, x_jitter, size=len(df))
+    jittered_y = df[y_col] + np.random.uniform(-y_jitter, y_jitter, size=len(df))
+
+    if isinstance(color_scatter, list):
+        # Map colors based on y value using the provided color list
+        color_map = {y_val: color for y_val, color in zip(sorted(df[y_col].unique()), color_scatter)}
+        colors = df[y_col].map(color_map)
+    else:
+        # If not a list, default to 'color_scatter' or use hue_col/palette
+        if hue_col is None:
+            colors = color_scatter
+        else:
+            if palette is None:
+                sns.scatterplot(x=jittered_x, y=jittered_y, hue=df[hue_col], alpha=scatter_alpha, s=s_scatter)
+            else:
+                sns.scatterplot(x=jittered_x, y=jittered_y, hue=df[hue_col], palette=palette, alpha=scatter_alpha,
+                                s=s_scatter)
+
+        # Scatter plot with the selected colors
+    if not isinstance(color_scatter, list) or len(color_scatter) != len(df):
+        plt.scatter(jittered_x, jittered_y, color=colors, alpha=scatter_alpha, s=s_scatter)
+    else:
+        plt.scatter(jittered_x, jittered_y, color=colors, alpha=scatter_alpha, s=s_scatter)
+
+    if lines:
+        for _, group in df.groupby(response_id_col):
+            xs = group[x_col].map(cat_to_num)
+            ys = group[y_col]
+            plt.plot(xs, ys, color="gray", alpha=0.3, linewidth=0.7)
+
+    if show_means or show_se or show_sd:
+        stats = df.groupby(x_col)[y_col].agg(["mean", "count", "std"]).reset_index()
+        stats["se"] = stats["std"] / np.sqrt(stats["count"])
+        stats["x_numeric"] = stats[x_col].map(cat_to_num)
+
+        if show_means:
+            sns.scatterplot(x=stats["x_numeric"], y=stats["mean"], color=color_mean, s=s_mean, label="")
+
+        if show_se:
+            plt.errorbar(x=stats["x_numeric"], y=stats["mean"], yerr=stats["se"],
+                         fmt="none", ecolor=color_se, capsize=se_capsize)
+
+        if show_sd:
+            plt.errorbar(x=stats["x_numeric"], y=stats["mean"], yerr=stats["std"],
+                         fmt="none", ecolor=color_se, capsize=se_capsize)
+
+    # Set custom x-axis ticks
+    plt.xticks(ticks=list(cat_to_num.values()), labels=list(cat_to_num.keys()), rotation=90, fontsize=18)
+    if y_ticks_list is None:
+        plt.yticks(fontsize=18)
+    else:
+        plt.yticks(y_ticks_list, y_ticks_list, fontsize=18)
+
+    if label_x is None:
+        plt.xlabel(x_col)
+    else:
+        plt.xlabel(f"{label_x}")
+    if label_y is None:
+        plt.ylabel(y_col)
+    else:
+        plt.ylabel(f"{label_y}")
+    plt.title(f"{label_title}")
+
+    sns.despine(right=True, top=True)
+    figure = plt.gcf()  # get current figure
+    figure.set_size_inches(18, 12)
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches="tight",
+                pad_inches=0.01)
+    del figure
+    plt.clf()
+    plt.close()
     return
 
 

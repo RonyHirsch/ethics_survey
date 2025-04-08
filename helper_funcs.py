@@ -961,4 +961,103 @@ def topic_modelling_GSDMM(df, text_column, save_path, save_name):
     return
 
 
+def premutations_for_array(matrix, metric_func, n_permutations=1000, print_iter=False, *args, **kwargs):
+    """
+    Performs permutation test on a matrix using a specified metric function.
+
+    Parameters:
+    - matrix (ndarray): The input data matrix (e.g., raters × items).
+    - metric_func (callable): Function that takes the matrix (and optional args) and returns a score.
+    - n_permutations (int): Number of permutations.
+    - print_iter (bool): Whether to print progress.
+    - *args, **kwargs: Additional arguments passed to metric_func.
+
+    Returns:
+    - null_scores (list): List of scores from permuted matrices.
+    """
+    null_alphas = []
+    for i in range(n_permutations):
+        if print_iter:
+            print(f"iter {i}")
+        shuffled_matrix = np.apply_along_axis(np.random.permutation, axis=0, arr=matrix)  # Shuffle columns
+        shuffled_matrix = np.apply_along_axis(np.random.permutation, axis=1, arr=shuffled_matrix)  # Shuffle rows
+        alpha_perm = metric_func(shuffled_matrix, *args, **kwargs)
+        null_alphas.append(alpha_perm)
+    return np.array(null_alphas)
+
+
+def nominal_metric(a, b):
+    return a != b
+
+
+def interval_metric(a, b):
+    return (a - b) ** 2
+
+
+def ratio_metric(a, b):
+    return ((a - b) / (a + b)) ** 2
+
+
+def krippendorff_alpha(data, metric=interval_metric, convert_items=float):
+    """
+    *** CREDIT TO: https://github.com/grrrr/krippendorff-alpha/blob/master/krippendorff_alpha.py ***
+    I changed some stuff for simplicity: The original version supports both a list of dicts and a matrix.
+    In my case, I know I only have matrices, so I made this streamlined for matrix input only. This avoids
+    extra logic for generality that I don't need - AND IT MAKES THE PERMUTATION TEST ***FASTER***!!!!!
+
+    Calculate Krippendorff's alpha (inter-rater reliability):
+
+    data is in the format
+    [
+        {unit1:value, unit2:value, ...},  # coder 1
+        {unit1:value, unit3:value, ...},   # coder 2
+        ...                            # more coders
+    ]
+    or
+    it is a sequence of (masked) sequences (list, numpy.array, numpy.ma.array, e.g.) with rows corresponding to coders and columns to items
+
+    metric: function calculating the pairwise distance
+    force_vecmath: force vector math for custom metrics (numpy required)
+    convert_items: function for the type conversion of items (default: float)
+    missing_items: indicator for missing items (default: None)
+    """
+
+    # number of coders
+    m = len(data)
+
+    # convert input data to a dict of items
+    units = {}
+    for i, row in enumerate(data):
+        for j, val in enumerate(row):
+            try:
+                its = units[j]
+            except KeyError:
+                its = []
+                units[j] = its
+            its.append(convert_items(val))
+
+    units = {k: v for k, v in units.items() if len(v) > 1}  # units with pairable values
+    n = sum(len(pv) for pv in units.values())  # number of pairable values
+
+    if n == 0:
+        raise ValueError("No items to compare.")
+
+    Do = 0.
+    for v in units.values():
+        v = np.asarray(v)
+        Du = sum(np.sum(metric(v, vi)) for vi in v)
+        Do += Du / float(len(v) - 1)
+    Do /= float(n)
+    if Do == 0:
+        return 1.
+    De = 0.
+    all_vals = list(units.values())
+    for v1 in all_vals:
+        v1 = np.asarray(v1)
+        for v2 in all_vals:
+            De += sum(np.sum(metric(v1, vi)) for vi in v2)
+    De /= float(n * (n - 1))
+    return 1. - Do / De if (Do and De) else 1.
+
+
 

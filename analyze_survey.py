@@ -5,6 +5,7 @@ import re
 from functools import reduce
 from itertools import combinations
 from sklearn.preprocessing import LabelEncoder
+from scipy.stats import iqr, friedmanchisquare
 import plotter
 import process_survey
 import survey_mapping
@@ -35,7 +36,7 @@ CAT_LABEL_DICT = {"Person": "Person",
                   }
 
 
-def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_cluster=None):
+def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_cluster=None, load=True):
     # save path
     result_path = os.path.join(save_path, "c_v_ms")
     if not os.path.isdir(result_path):
@@ -51,6 +52,192 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
     # codes and relevant stuff
     items = survey_mapping.other_creatures_general  # all rated items
     topic_name_map = {"c": "Consciousness", "ms": "Moral Status"}
+    rating_color_list = ["#DB5461", "#fb9a99", "#70a0a4", "#26818B"]
+    rating_labels = ["Does Not Have", "Probably Doesn't Have", "Probably Has", "Has"]
+
+    """
+    ITEM-LEVEL: do people agree or are they divided (on each item)? SD, IQR, CV
+    Standard Deviation (SD): maybe the simplest thing we can do to see dispersion. 
+    """
+    item_columns = [c for c in df_c.columns if c != process_survey.COL_ID]
+    stds = df_c[item_columns].std()
+
+    """
+    ITEM-LEVEL: do people agree or are they divided (on each item)? SD, IQR, CV
+    Interquartile Range (IQR)
+    The range of the middle 50% of responses (75th minus 25th percentile). 
+    It is a robust measure of dispersion less affected by outliers. 
+    IQR = 0 (all within one category): perfect consensus
+    IQR = 1: at least half of the respondents’ ratings fall within 1 scale point.
+    """
+
+    iqrs = df_c[item_columns].apply(iqr)
+
+    """
+    ITEM-LEVEL: do people agree or are they divided (on each item)? SD, IQR, CV
+    CV (coefficient of variation)
+    The ratio of the standard deviation to the mean.
+    The CV is unitless and tells us how large the spread is relative to each item's mean score. 
+    For example, an SD of 1 might be concerning if the mean is 2 (CV = 50%), but less so if the mean is 5 (CV = 20%). 
+    However, CV is not universally adopted in psychology – it assumes a ratio scale with a true zero 
+    (which Likert scales lack), and interpreting what is a “high” or “low” CV can be difficult. 
+    """
+
+    means = df_c[item_columns].mean()
+    cv = stds / means
+
+    stats_df = pd.DataFrame({"entity": item_columns,
+                             "Mean": means,
+                             "SD": stds,
+                             "IQR": iqrs,
+                             "CV": cv}).reset_index(drop=True, inplace=False)
+
+    entity_dict = {item: "You" if "You" in item else " ".join(item.replace("c_", "").split()[1:]) for item in stats_df["entity"]}
+
+    # statistical significance for the CV
+    def compute_cv_per_column(matrix):
+        means = np.mean(matrix, axis=0)
+        stds = np.std(matrix, axis=0, ddof=1)
+        return stds / means
+
+    # just the ratings
+    ratings_matrix = df_c[item_columns].astype(int).values
+
+    observed_cvs = compute_cv_per_column(ratings_matrix)
+    null_cv_distributions = helper_funcs.premutations_for_array(ratings_matrix, compute_cv_per_column, n_permutations=1000)
+    p_values_cv = (null_cv_distributions >= observed_cvs).sum(axis=0) / null_cv_distributions.shape[0]
+    stats_df["CV_p-value"] = p_values_cv  # These p-values indicate how likely such dispersion would occur by chance
+    stats_df.to_csv(os.path.join(result_path, "c_ratings_dispersion_by_item.csv"), index=False)
+
+    # plot the per-item CV
+    stats_cv_plot = stats_df.sort_values(by="CV", ascending=True, inplace=False)
+    plotter.plot_categorical_scatter(df=stats_cv_plot, x_col="entity", xtick_labels=entity_dict, label_x="Entity",
+                                     y_col="CV", label_y="Coefficient of Variation (CV)",
+                                     color="#4C5B5C", label_title="", size=100,
+                                     save_path=result_path, save_name="c_ratings_cv", fmt="svg")
+    # same for IQR
+    stats_iqr_plot = stats_df.sort_values(by="IQR", ascending=True, inplace=False)
+    plotter.plot_categorical_scatter(df=stats_iqr_plot, x_col="entity", xtick_labels=entity_dict, label_x="Entity",
+                                     y_col="IQR", label_y="Interquartile Range (IQR)",
+                                     color="#4C5B5C", label_title="", size=100,
+                                     save_path=result_path, save_name="c_ratings_iqr", fmt="svg")
+    # same for SD
+    stats_sd_plot = stats_df.sort_values(by="SD", ascending=True, inplace=False)
+    plotter.plot_categorical_scatter(df=stats_sd_plot, x_col="entity", xtick_labels=entity_dict, label_x="Entity",
+                                     y_col="SD", label_y="Standard Deviation (SD)",
+                                     color="#4C5B5C", label_title="", size=100,
+                                     save_path=result_path, save_name="c_ratings_sd", fmt="svg")
+    # all of them
+    stats_plot = stats_df.sort_values(by="Mean", ascending=True, inplace=False)
+    plotter.plot_categorical_multliscatter(df=stats_plot,
+                                           x_col="entity", xtick_labels=entity_dict, label_x="Entity",
+                                           y_cols=["SD", "IQR", "CV"], labels=["SD", "IQR", "CV"], label_y="Value",
+                                           y_ticks=[0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
+                                           colors=["#55828B", "#87BBA2", "#C9E4CA"],
+                                           label_title="", size=100,
+                                           save_path=result_path, save_name="c_ratings_by_item_divergence", fmt="svg")
+    # plot just the C ratings with M, SD (whiskers)
+    df_long = pd.melt(
+        df_c,
+        id_vars=[process_survey.COL_ID],
+        var_name="entity",
+        value_name="c_rating"
+    )
+    df_long = df_long.replace({"entity": entity_dict}, inplace=False)
+    #cv_order = [entity_dict[c] for c in stats_df_plot["entity"].tolist()]  # sorted by CV!
+    plotter.plot_categorical_scatter_fullresponse(df=df_long, x_col="entity", y_col="c_rating",
+                                                  s_scatter=60, y_ticks_list=[1, 2, 3, 4], scatter_alpha=0.4,
+                                                  response_id_col="response_id", color_scatter=rating_color_list,
+                                                  save_path=result_path, save_name="c_ratings_scatter",
+                                                  show_means=True, color_mean="black", s_mean=160,
+                                                  show_se=True, show_sd=False,
+                                                  color_se="black", se_capsize=7, label_title="",
+                                                  label_x="", label_y="Rating", x_jitter=0.2, y_jitter=0.2,
+                                                  lines=False, order=None, order_by="mean", fmt="svg")
+
+
+    """
+    GENERAL-LEVEL: is there consensus between people's rating behaviors? 
+    Method 1: Krippendorff’s Alpha - Inter-Annotator Data Reliability Metric
+    
+    Measures the agreement among observers or raters. 
+    Alpha compares the observed disagreement to the disagreement one 
+    would expect by chance. 
+    
+    It ranges from 1 (perfect agreement) down to 0 (no better than chance); it can even be negative if there is 
+    systematic disagreement (i.e. raters consistently oppose each other)
+    α = 1: perfect agreement
+    α = 0: Agreement is no better than random (essentially a lot of variability)
+    α < 0: Active disagreement (people’s ratings consistently oppose each other)
+    
+    We use this repo to calculate it: https://github.com/grrrr/krippendorff-alpha/tree/master
+    and send a nominal_metric to have the size of the punishment depend on the distance between the ratings. 
+    """
+
+    # we use interval_metric (not nominal or ratio_metric)
+
+    alpha_obs = helper_funcs.krippendorff_alpha(data=ratings_matrix, metric=helper_funcs.interval_metric)
+
+    # avoid re-calculating the permutations as it's heavy
+    if not load or not(os.path.isfile(os.path.join(result_path, "Krippendorff_null_alphas.csv"))):
+        null_alphas = helper_funcs.premutations_for_array(matrix=ratings_matrix,
+                                                          metric_func=helper_funcs.krippendorff_alpha,
+                                                          n_permutations=1000,
+                                                          print_iter=True, metric=helper_funcs.interval_metric)
+        null_alphas_df = pd.DataFrame(null_alphas)
+        null_alphas_df.to_csv(os.path.join(result_path, "Krippendorff_null_alphas.csv"), index=False)
+    else:
+        null_alphas_df = pd.read_csv(os.path.join(result_path, "Krippendorff_null_alphas.csv"))
+        null_alphas = null_alphas_df.to_numpy()
+
+    alpha_p_value = (null_alphas >= alpha_obs).sum() / len(null_alphas)
+
+    plotter.plot_null_hist(observed_alpha=alpha_obs, null_alphas=null_alphas_df,
+                           parameter_name_xlabel="Krippendorff’s Alpha", save_path=result_path,
+                           save_name=f"Krippendorff_hist", fmt="svg", observed_alpha_color="red", bins=50, alpha=0.7)
+    """
+    GENERAL-LEVEL: is there consensus between people's rating behaviors? 
+    Kendall’s Coefficient of Concordance (W)
+    Unlike α (which can be computed per item), Kendall’s W is a global measure of agreement among raters across 
+    a set of items. It asks: Do participants, as a whole, have a similar ranking of the items? 
+    If everyone tends to rate the same items high and the same items low, W will be close to 1. 
+    If there is no consensus pattern in how items are rated, W will be near 0. >> OVERALL
+     Kendall’s W is a single number for the whole set of items, not per item. 
+     It won’t directly tell you which specific item has high or low variability; rather, it tells if there’s a broad consensus trend. 
+     
+    How it's calculated: 
+    For each participant you take their 24 ratings and convert them to ranks (1 = lowest rating given by that person, 
+    24 = highest rating, with tied ratings getting average ranks). Then, for each item you sum up its ranks across all 
+    participants. If everyone had similar opinions, an item that is generally top-rated will have a high total rank sum, 
+    and an item viewed poorly will have a low rank sum. Kendall’s W is derived from the variance of these rank sums. 
+    
+    If W comes out to, say, 0.4 or 0.5, that indicates a moderate agreement in how participants rank the items. 
+    If W is very low (close to 0), it means different people have very different preferences or perceptions of which 
+    items deserve higher ratings. 
+    A very high W (close to 1) is unlikely in practice unless the items have an inherent ordering that 
+    everyone recognizes – but anything significantly above 0 is evidence of some concordance.
+    """
+
+    chi2, p_value_w = friedmanchisquare(*ratings_matrix.T)
+    n_raters = df_c.shape[0]
+    n_items = len(item_columns)
+    kendall_W = chi2 / (n_raters * (n_items - 1))
+
+    # unify into a single table
+    consensus_summary = pd.DataFrame({
+        "Metric": ["Krippendorff_Alpha", "Kendall_W"],
+        "Value": [alpha_obs, kendall_W],
+        "p_value": [alpha_p_value, p_value_w]
+    })
+    consensus_summary.to_csv(os.path.join(result_path, "c_ratings_dispersion_overall.csv"), index=False)
+    exit()  ## RONY RONY
+
+    # this is where I stopped
+
+
+    """
+    Cross people's ratings with their experience 
+    """
 
     # experience columns
     animal_experience_df = analysis_dict["animal_exp"].loc[:,
@@ -67,9 +254,6 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
     demos_df = analysis_dict["demographics"].loc[:, [process_survey.COL_ID, "How old are you?"]].rename(
         columns={"How old are you?": "age"}, inplace=False)
 
-    """
-    Cross people's ratings with their experience 
-    """
     experience_types = ["exp_animals", "exp_ai", "exp_ethics", "exp_consc"]
     item_cols = df_ms.columns[1:].tolist() + df_c.columns[1:].tolist()
     df_list = [df.copy(), animal_experience_df, ai_experience_df, ethics_experience_df, con_experience_df]
@@ -178,8 +362,7 @@ def other_creatures(analysis_dict, save_path, sort_together=True, df_earth_clust
     """
     Plot at the ratings individually for each item 
     """
-    rating_color_list = ["#DB5461", "#fb9a99", "#70a0a4", "#26818B"]
-    rating_labels = ["Does Not Have", "Probably Doesn't Have", "Probably Has", "Has"]
+
     sorting_method = None
     sorted_suffix = ""
 
@@ -831,12 +1014,32 @@ def kill_for_test(analysis_dict, save_path, df_earth_cluster):
     one_feature = [survey_mapping.Q_SENSATIONS, survey_mapping.Q_INTENTIONS, survey_mapping.Q_CONSCIOUSNESS]
     two_features = [survey_mapping.Q_CONSCIOUSNESS_SENSATIONS,
                     survey_mapping.Q_SENSATIONS_INTENTIONS, survey_mapping.Q_VULCAN]
+    all_features = one_feature + two_features
     df_test_binary = df_test.replace(survey_mapping.ANS_KILLING_MAP, inplace=False)  # convert columns
 
     # calculate the average 'yes' responses for each person for 1-feature and 2-feature creatures
     df_test_binary["kill_one_avg"] = df_test_binary[one_feature].mean(axis=1)
     df_test_binary["kill_two_avg"] = df_test_binary[two_features].mean(axis=1)
     df_test_binary.to_csv(os.path.join(result_path, f"kill_to_pass_coded.csv"), index=False)
+
+    # transform the data for modelling
+    relevant_cols = [process_survey.COL_ID] + all_features
+    df_test_binary_clean = df_test_binary[relevant_cols]
+    transformed_data = []
+    for index, row in df_test_binary_clean.iterrows():
+        response_id = row[process_survey.COL_ID]
+        for entity_index, entity_column in enumerate(all_features, start=1):
+            entity_id = f"{entity_column}"
+            consciousness = survey_mapping.Q_ENTITY_MAP[entity_column]["Consciousness"]
+            intentions = survey_mapping.Q_ENTITY_MAP[entity_column]["Intentions"]
+            sensations = survey_mapping.Q_ENTITY_MAP[entity_column]["Sensations"]
+            kill = 1 if row[entity_column] == 1 else 0
+            transformed_data.append([response_id, entity_id, consciousness, intentions, sensations, kill])
+
+    # Create the updated DataFrame
+    transformed_df = pd.DataFrame(transformed_data, columns=[process_survey.COL_ID, "entity",
+                                                             "Consciousness", "Intentions", "Sensations", "kill"])
+    transformed_df.to_csv(os.path.join(result_path, "kill_to_pass_coded_per_entity.csv"), index=False)
 
     # filter out responses that are all-no / all-yes; I don't do that because then the comparison is unfair.
     #condition = ~df_test_binary[one_feature + two_features].isin([1, 0]).any(axis=1)
@@ -2577,11 +2780,14 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     else:
         df_earth_cluster = earth_in_danger(analysis_dict, save_path)
 
-    gender_check(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
+
+
+    kill_for_test(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
     exit()
-    expert_check(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
     other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False,
                     df_earth_cluster=df_earth_cluster)
+    expert_check(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
+    gender_check(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
 
     religious_check(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
@@ -2590,23 +2796,13 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     moral_considreation_prios(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
     graded_consciousness(analysis_dict, save_path)
-    kill_for_test(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
-    ics(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
+    ics(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
 
 
     zombie_pill(analysis_dict, save_path, feature_order_df=None, feature_color_map=None)
 
-
-
-
-
-
-
-
-
     consciousness_intelligence(analysis_dict, save_path)
-
 
 
 

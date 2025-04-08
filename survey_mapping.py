@@ -204,6 +204,14 @@ Q_VULCAN = "Vulcan (Consciousness & Intentions, sans Sensations)"
 Q_CONSCIOUSNESS_SENSATIONS = "Consciousness & Sensations, sans Intentions"
 Q_SENSATIONS_INTENTIONS = "Sensations & Intentions, sans Consciousness"
 
+Q_ENTITY_MAP = {Q_SENSATIONS: {"Sensations": 1, "Consciousness": 0, "Intentions": 0},
+                Q_INTENTIONS: {"Sensations": 0, "Consciousness": 0, "Intentions": 1},
+                Q_CONSCIOUSNESS: {"Sensations": 0, "Consciousness": 1, "Intentions": 0},
+                Q_VULCAN: {"Sensations": 0, "Consciousness": 1, "Intentions": 1},
+                Q_CONSCIOUSNESS_SENSATIONS: {"Sensations": 1, "Consciousness": 1, "Intentions": 0},
+                Q_SENSATIONS_INTENTIONS: {"Sensations": 1, "Consciousness": 0, "Intentions": 1}}
+
+
 important_test_kill_tokens = {
     "A creature/system that can only feel positive/negative sensations (pleasure/pain), but is not conscious (not experiencing) and does not have plans/goals or intentions (for example, can't plan to avoid something that causes pain)": Q_SENSATIONS,
     "A creature/system that only has plans/goals and intentions (can plan to perform certain actions in the future), but is not conscious (not experiencing) and cannot feel positive/negative sensations (pleasure/pain)": Q_INTENTIONS,
