@@ -471,7 +471,7 @@ def manage_processing(prolific_data_path, free_data_path, all_save_path, load=Fa
     categorical_columns.append("age_group")  # now this is a categorical column we want to balance with the rest
     total_df.to_csv(os.path.join(all_save_path, "processed_data.csv"), index=False)  # re-save with this column
 
-    # Now, define the exploratory and replicaiton populations based on these columns
+    # Now, define the exploratory and replication populations based on these columns
     exploratory_df, exploratory_dict, replication_df, replication_dict = define_exploratory_replication_pops(sub_df=total_df,
                                                                                                              sub_dict=total_dict,
                                                                                                              categorical_cols=categorical_columns,

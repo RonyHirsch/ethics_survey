@@ -1,29 +1,29 @@
-other_creatures_general = [
-    "You",
-    "A large language model",
-    "A self-driving car",
-    "An electron",
-    "A fungus",
-    "A tree",
-    "A cow",
-    "A turtle",
-    "A dog",
-    "A cat",
-    "A lobster",
-    "A sea urchin",
-    "An octopus",
-    "A salmon",
-    "A bat",
-    "A bee",
-    "A mosquito",
-    "A fruit-fly",
-    "A rat",
-    "A pigeon",
-    "An orangutan",
-    "A fetus (human; 24 weeks)",
-    "A newborn baby (human)",
-    "An ant"
-]
+other_creatures_general_names = {
+    "You": "You",
+    "A large language model": "LLM",
+    "A self-driving car": "Self-driving car",
+    "An electron": "Electron",
+    "A fungus": "Fungus",
+    "A tree": "Tree",
+    "A cow": "Cow",
+    "A turtle": "Turtle",
+    "A dog": "Dog",
+    "A cat": "Cat",
+    "A lobster": "Lobster",
+    "A sea urchin": "Urchin",
+    "An octopus": "Octopus",
+    "A salmon": "Salmon",
+    "A bat": "Bat",
+    "A bee": "Bee",
+    "A mosquito": "Mosquito",
+    "A fruit-fly": "Fruitfly",
+    "A rat": "Rat",
+    "A pigeon": "Pigeon",
+    "An orangutan": "Orangutan",
+    "A fetus (human; 24 weeks)": "Fetus",
+    "A newborn baby (human)": "Newborn",
+    "An ant": "Ant"
+}
 
 other_creatures_isNonHumanAnimal = {"You": 0,
                                     "A large language model": 0,
@@ -139,6 +139,15 @@ ANS_UWS = "Person (unresponsive wakefulness syndrome)"
 ANS_FLY = "Fruit fly (a conscious one, for sure)"
 ANS_AI = "AI (that tells you that it's conscious)"
 
+# answers mapping
+EARTH_DANGER_ANS_MAP = {ANS_PERSON: "Person",
+                        ANS_DOG: "Dog",
+                        ANS_PET: "My pet",
+                        ANS_DICTATOR: "Dictator",
+                        ANS_UWS: "UWS",
+                        ANS_FLY: "Conscious Fruitfly",
+                        ANS_AI: "Conscious AI"}
+
 # CATEGORICAL!! not ordinal
 EARTH_DANGER_MAP = {ANS_PERSON: 1,
                     ANS_DOG: 2,
@@ -169,14 +178,24 @@ EARTH_DANGER_QA_MAP = {Q_PERSON_DOG: EARTH_DANGER_MAP_PERSON_DOG,
                        Q_AI_DOG: EARTH_DANGER_MAP_AI_DOG}
 
 # intentions, consciousness, sentience
+ICS_Q_INT_WO_CONS = "Do you think a creature/system can have intentions/goals without being conscious?"
+ICS_Q_CONS_WO_INT = "Do you think a creature/system can be conscious without having intentions/goals?"
+ICS_Q_SENS_WO_CONS = "Do you think a creature/system can have positive or negative sensations (pleasure/pain) without being conscious?"
+ICS_Q_CONS_WO_SENS = "Do you think a creature/system can be conscious without having positive or negative sensations (pleasure/pain)?"
+
+ICS_Q_NAME_MAP = {ICS_Q_INT_WO_CONS: "Intentions wo Consciousness",
+                  ICS_Q_CONS_WO_INT: "Consciousness wo Intentions",
+                  ICS_Q_SENS_WO_CONS: "Sensations wo Consciousness",
+                  ICS_Q_CONS_WO_SENS: "Consciousness wo Sensations"}
+
 ics = {
-    "ics_iWc": "Do you think a creature/system can have intentions/goals without being conscious?",
+    "ics_iWc": ICS_Q_INT_WO_CONS,
     "ics_iWc_example": "Do you have an example of a case of goals/intentions without consciousness?",
-    "ics_cWi": "Do you think a creature/system can be conscious without having intentions/goals?",
+    "ics_cWi": ICS_Q_CONS_WO_INT,
     "ics_cWi_example": "Do you have an example of a case of consciousness without intentions/goals?",
-    "ics_sWc": "Do you think a creature/system can have positive or negative sensations (pleasure/pain) without being conscious?",
+    "ics_sWc": ICS_Q_SENS_WO_CONS,
     "ics_sWc_example": "Do you have an example of a case of positive/negative sensations without consciousness?",
-    "ics_cWs": "Do you think a creature/system can be conscious without having positive or negative sensations (pleasure/pain)?",
+    "ics_cWs": ICS_Q_CONS_WO_SENS,
     "ics_cWs_example": "Do you have an example of a case of consciousness without sensations of pleasure or pain?",
 }
 # answers

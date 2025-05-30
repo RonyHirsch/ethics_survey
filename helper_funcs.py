@@ -1,6 +1,7 @@
 import os
 import re
 import logging
+import shap
 import pandas as pd
 import numpy as np
 import string
@@ -30,10 +31,46 @@ from statsmodels.stats.multitest import multipletests
 import statsmodels.formula.api as smf
 from statsmodels.stats.anova import anova_lm
 from statsmodels.multivariate.manova import MANOVA
+from tqdm import tqdm
+import time
 from gensim.models import LdaModel
 from gensim.corpora import Dictionary
 from gensim.models.coherencemodel import CoherenceModel
+from sklearn.base import BaseEstimator, TransformerMixin
+from scipy.stats import norm
+import statsmodels.api as sm
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.utils import resample
+from sklearn.metrics import classification_report
+from sklearn.model_selection import GridSearchCV, cross_val_score, StratifiedKFold
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.impute import SimpleImputer
+from sklearn.compose import ColumnTransformer
+from sklearn.utils import resample
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import make_scorer, f1_score, roc_auc_score
+import numpy as np
+import pandas as pd
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.model_selection import StratifiedKFold
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.utils import shuffle
+from sklearn.metrics import cohen_kappa_score
+from mord import LogisticIT
+from statsmodels.stats.multitest import multipletests
 import plotter
+
 
 """
 For free-text response analysis
@@ -46,6 +83,336 @@ STOPWORDS = {"the", "and", "to", "of", "a", "is", "in", "that", "it", "as", "for
 
 # Set up logging for debugging
 logging.basicConfig(level=logging.INFO)
+
+
+
+# Custom transformer to merge rare categories
+class RareCategoryMerger(BaseEstimator, TransformerMixin):
+    def __init__(self, threshold):
+        self.threshold = threshold
+        self.mappings_ = {}
+        self.dropped_categories_ = {}  # to track dropped ones
+
+    def fit(self, X, y=None):
+        for col in X.columns:
+            X[col] = X[col].astype(str)
+            value_counts = X[col].value_counts()
+            kept = value_counts[value_counts >= self.threshold].index.tolist()
+            dropped = value_counts[value_counts < self.threshold].index.tolist()
+            self.mappings_[col] = kept
+            self.dropped_categories_[col] = dropped
+        return self
+
+    def transform(self, X):
+        X_transformed = X.copy()
+        for col in X.columns:
+            X_transformed[col] = X_transformed[col].astype(str)
+            X_transformed[col] = X_transformed[col].where(X_transformed[col].isin(self.mappings_[col]), 'Other')
+        return X_transformed
+
+
+def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols, save_path, save_prefix="",
+                               rare_class_threshold=5, n_permutations=1000, scoring_method="accuracy",
+                               cv_folds=10):
+
+    print("starting RF pipeline")
+    # dep_col is assumed to be binary
+    df = dataframe.copy()
+    df_model = df[categorical_cols + order_cols + [dep_col]].dropna(subset=[dep_col])
+
+    # Merge rare categories
+    for col in categorical_cols:
+        df_model[col] = df_model[col].astype(str)
+    print("merging rare categories")
+    rare_merger = RareCategoryMerger(threshold=rare_class_threshold)
+    df_model[categorical_cols] = rare_merger.fit_transform(df_model[categorical_cols])
+
+    """
+    Balance the dataset >>
+    we'll us class weighting: RandomForestClassifier's class_weight='balanced' below
+    """
+
+    X = df_model[categorical_cols + order_cols]
+    y = df_model[dep_col]
+
+    # Preprocessing
+    print("setting up preprocessing and model pipeline")
+    categorical_transformer = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="most_frequent")),
+        ("onehot", OneHotEncoder(handle_unknown="ignore"))
+    ])
+    numerical_transformer = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="median"))
+    ])
+    preprocessor = ColumnTransformer(transformers=[
+        ("cat", categorical_transformer, categorical_cols),
+        ("num", numerical_transformer, order_cols)
+    ])
+
+    # Full pipeline
+    rf_pipeline = Pipeline(steps=[
+        ("preprocessor", preprocessor),
+        ("classifier", RandomForestClassifier(class_weight='balanced', random_state=42))  # "balanced" = to deal with having a majority/minority class
+    ])
+
+    # Grid search for hyperparameter tuning
+    param_grid = {
+        'classifier__n_estimators': [100, 200, 300],
+        'classifier__max_depth': [None, 10, 20],
+        'classifier__min_samples_split': [2, 5, 10],
+        'classifier__min_samples_leaf': [1, 2, 4],
+        'classifier__max_features': ['sqrt', 'log2']
+    }
+    print("grid search for hyperparameter tuning")
+    grid_search = GridSearchCV(rf_pipeline, param_grid, cv=cv_folds, scoring=scoring_method, n_jobs=-1)
+    grid_search.fit(X, y)
+
+    # Cross-validation with best estimator
+    best_model = grid_search.best_estimator_
+    print(f"Grid search complete. Best params: {grid_search.best_params_}")
+
+    print("cross-validation with best model")
+    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
+    scores = cross_val_score(best_model, X, y, cv=cv, scoring=scoring_method)
+    mean_scores = scores.mean()
+    print(f"mean {scoring_method}: {mean_scores:.4f}")
+
+    # Permutation test
+    print(f"permutation test with {n_permutations} iterations")
+    perm_accuracies = []
+    for i in tqdm(range(n_permutations), desc="Running permutation test"):
+        y_permuted = shuffle(y, random_state=i).reset_index(drop=True)
+        perm_scores = []
+        for train_idx, test_idx in cv.split(X, y_permuted):
+            best_model.fit(X.iloc[train_idx], y_permuted.iloc[train_idx])
+            preds = best_model.predict(X.iloc[test_idx])
+            if scoring_method == "accuracy":
+                perm_scores.append(accuracy_score(y_permuted.iloc[test_idx], preds))
+            elif scoring_method == "f1":
+                perm_scores.append(f1_score(y_permuted.iloc[test_idx], preds))
+        perm_accuracies.append(np.mean(perm_scores))
+
+    p_value = np.mean([acc >= mean_scores for acc in perm_accuracies])
+    print(f"permutation test complete. p-value: {p_value:.4f}")
+
+    df_model.to_csv(os.path.join(save_path, f"{save_prefix}_df_model.csv"), index=False)
+
+    # Feature importances
+    print("extracting feature importances")
+    best_model.fit(X, y)
+    feature_names = best_model.named_steps['preprocessor'].get_feature_names_out()
+    importances = best_model.named_steps['classifier'].feature_importances_
+    importances_df = pd.DataFrame({'Feature': feature_names, 'Importance': importances}).sort_values(by='Importance',
+                                                                                                     ascending=False)
+
+    """
+    Plot directionality
+    """
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    for col in order_cols:
+        # Stacked bar: cluster distribution by experience rating
+        ct = pd.crosstab(df_model[col], df_model[dep_col], normalize='index')
+        fig1 = ct.plot(kind='bar', stacked=True, colormap='tab10').get_figure()
+        plt.title(f"Cluster Proportion by '{col}' Rating")
+        plt.xlabel(col)
+        plt.ylabel("Proportion in Each Cluster")
+        fig1.savefig(os.path.join(save_path, f"{col}_cluster_distribution"))
+        plt.close(fig1)
+        ct.to_csv(os.path.join(save_path, f"{col}_cluster_distribution.csv"))
+
+        # Mean experience by cluster
+        fig2, ax2 = plt.subplots()
+        sns.pointplot(data=df_model, x=dep_col, y=col, ci='sd', ax=ax2)
+        ax2.set_title(f"Mean '{col}' by Cluster")
+        ax2.set_ylim(1, 5)
+        fig2.savefig(os.path.join(save_path, f"{col}_mean_by_cluster"))
+        plt.close(fig2)
+        df_model.loc[:, [dep_col, col]].to_csv(os.path.join(save_path, f"{col}_cluster_distribution.csv"))
+
+    """
+    SHAP (SHapley Additive exPlanations) analysis is a method for interpreting the predictions of machine learning 
+    models by explaining how each feature contributes to the model's output.
+    https://shap.readthedocs.io/en/latest/
+    """
+    import matplotlib.pyplot as plt
+
+    print("running SHAP analysis")
+    X_transformed = best_model.named_steps['preprocessor'].transform(X)
+
+    # convert sparse matrix to dense if needed
+    if hasattr(X_transformed, "toarray"):
+        X_transformed = X_transformed.toarray()
+    feature_names = best_model.named_steps['preprocessor'].get_feature_names_out()
+    feature_names = np.array(feature_names).flatten()
+
+    explainer = shap.TreeExplainer(best_model.named_steps['classifier'])
+    shap_values = explainer.shap_values(X_transformed)
+    shap_values_to_plot = shap_values[1] if isinstance(shap_values, list) and len(shap_values) == 2 else shap_values
+    assert shap_values_to_plot.shape[1] == len(feature_names), (
+        f"SHAP feature count ({shap_values_to_plot.shape[1]}) does not match "
+        f"feature_names length ({len(feature_names)})"
+    )
+
+
+    """
+    SHAP summary plot
+    Each dot = one observation
+    X-axis = SHAP value: How much that feature pushed the prediction toward one class or the other.
+    Negative SHAP = push toward class 0
+    Positive SHAP = push toward class 1
+    Color = feature value (red = high, blue = low)
+    Y-axis = features ranked by importance (from top to bottom)
+    """
+    shap.summary_plot(shap_values_to_plot, X_transformed, feature_names=feature_names, show=False)
+    shap_plot_path = os.path.join(save_path, f"{save_prefix}_shap_summary_plot_{scoring_method}.png")
+    plt.tight_layout()
+    plt.savefig(shap_plot_path)
+    plt.close()
+
+    # Save mean absolute SHAP values
+    mean_abs_shap = np.mean(np.abs(shap_values_to_plot), axis=0).flatten()
+    mean_abs_shap.to_csv(os.path.join(save_path, f"{save_prefix}_shap_importances_{scoring_method}.csv"), index=False)
+
+    # summary
+    result = {
+        'best_params': grid_search.best_params_,
+        'cv_scores': scores,
+        f"mean_{scoring_method}": mean_scores,
+        'p_value': p_value,
+        'dropped_categories': rare_merger.dropped_categories_,
+        'importances_df': importances_df
+    }
+
+    summary_data = {
+        'best_params': str(result['best_params']),
+        f"mean_{scoring_method}": result[f"mean_{scoring_method}"],
+        'p_value': result['p_value'],
+        'cv_scores': ', '.join([f"{s:.3f}" for s in result['cv_scores']]),
+        'dropped_categories': str(result['dropped_categories'])
+    }
+
+    summary_df = pd.DataFrame(list(summary_data.items()), columns=["Metric", "Value"])
+    summary_df.to_csv(os.path.join(save_path, f"{save_prefix}_random_forest_summary_{scoring_method}.csv"), index=False)
+    result['importances_df'].to_csv(os.path.join(save_path, f"{save_prefix}_random_forest_importances_{scoring_method}.csv"), index=False)
+
+    return result
+
+
+def run_group_mann_whitney(df, comparison_cols, group_col, group_col_name, group1_val, group1_name,
+                           group2_val, group2_name, p_corr_method="fdr_bh"):
+    """
+    Run Mann Whitney U test on multiple columns that we want to compare between two groups.
+    group_col is the column denoting the two groups,
+    comparison_cols are the columns to be compared (one by one with a MW-U test)
+    """
+    results = []
+    for col in comparison_cols:
+        group1 = df[df[group_col] == group1_val][col].dropna()
+        group2 = df[df[group_col] == group2_val][col].dropna()
+        result = mann_whitney_utest(list_group1=group1, list_group2=group2)
+        result["Item"] = col
+
+        result[f"N_{group_col_name}={group1_name}"] = len(group1)
+        result[f"Mean_{group_col_name}={group1_name}"] = group1.mean()
+
+        result[f"N_{group_col_name}={group2_name}"] = len(group2)
+        result[f"Mean_{group_col_name}={group2_name}"] = group2.mean()
+
+        results.append(result)
+
+    result_df = pd.concat(results)
+    # Correct for multiple comparisons
+    raw_pvals = result_df["p"]
+    _, corrected_pvals, _, _ = multipletests(raw_pvals, method=p_corr_method)  # benjamini-hochberg
+
+    result_df[f"p_{p_corr_method}"] = corrected_pvals
+    result_df = result_df.sort_values(by=f"p_{p_corr_method}")
+    return result_df, f"p_{p_corr_method}"
+
+
+def run_ordinal_pipeline(dataframe, dep_col, categorical_cols, order_cols, save_path, save_prefix="",
+                         rare_class_threshold=5, n_permutations=1000):
+    """
+    RandomForestClassifier ➜ mord.LogisticIT() for ordinal modeling
+    Accuracy ➜ cohen_kappa_score with weights="quadratic"
+    GridSearchCV removed (LogisticIT has only one tunable parameter: alpha)
+    Permutation test based on QWK for statistical significance
+    """
+    df = dataframe.copy()
+    df_model = df[categorical_cols + order_cols + [dep_col]].dropna(subset=[dep_col])
+
+    for col in categorical_cols:
+        df_model[col] = df_model[col].astype(str)
+    rare_merger = RareCategoryMerger(threshold=rare_class_threshold)
+    df_model[categorical_cols] = rare_merger.fit_transform(df_model[categorical_cols])
+
+    X = df_model[categorical_cols + order_cols]
+    y = df_model[dep_col].astype(int)  # Ensure it's numeric/ordinal
+
+    # Preprocessing
+    categorical_transformer = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="most_frequent")),
+        ("onehot", OneHotEncoder(handle_unknown="ignore"))
+    ])
+    numerical_transformer = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="median"))
+    ])
+    preprocessor = ColumnTransformer(transformers=[
+        ("cat", categorical_transformer, categorical_cols),
+        ("num", numerical_transformer, order_cols)
+    ])
+
+    # Full pipeline with ordinal classifier
+    ordinal_pipeline = Pipeline(steps=[
+        ("preprocessor", preprocessor),
+        ("classifier", LogisticIT())  # Mord's ordinal logistic regression
+    ])
+
+    # Cross-validation using Quadratic Weighted Kappa
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    qwk_scores = []
+    for train_idx, test_idx in cv.split(X, y):
+        ordinal_pipeline.fit(X.iloc[train_idx], y.iloc[train_idx])
+        preds = ordinal_pipeline.predict(X.iloc[test_idx])
+        score = cohen_kappa_score(y.iloc[test_idx], preds, weights="quadratic")
+        qwk_scores.append(score)
+
+    mean_qwk = np.mean(qwk_scores)
+
+    # Permutation test
+    perm_qwk_scores = []
+    for i in range(n_permutations):
+        y_permuted = shuffle(y, random_state=i).reset_index(drop=True)
+        perm_scores = []
+        for train_idx, test_idx in cv.split(X, y_permuted):
+            ordinal_pipeline.fit(X.iloc[train_idx], y_permuted.iloc[train_idx])
+            preds = ordinal_pipeline.predict(X.iloc[test_idx])
+            perm_scores.append(cohen_kappa_score(y_permuted.iloc[test_idx], preds, weights="quadratic"))
+        perm_qwk_scores.append(np.mean(perm_scores))
+
+    p_value = np.mean([score >= mean_qwk for score in perm_qwk_scores])
+
+    result = {
+        'mean_qwk': mean_qwk,
+        'cv_scores': qwk_scores,
+        'p_value': p_value,
+        'dropped_categories': rare_merger.dropped_categories_
+    }
+
+    summary_data = {
+        'mean_qwk': result['mean_qwk'],
+        'p_value': result['p_value'],
+        'cv_scores': ', '.join([f"{s:.3f}" for s in result['cv_scores']]),
+        'dropped_categories': str(result['dropped_categories'])
+    }
+
+    summary_df = pd.DataFrame(list(summary_data.items()), columns=["Metric", "Value"])
+    summary_df.to_csv(os.path.join(save_path, f"{save_prefix}_ordinal_summary.csv"), index=False)
+
+    return result
+
+
 
 
 def mixed_effects_model(long_df, dep_col, ind_col1, ind_col2, id_col, cols_to_standardize=list()):
@@ -315,7 +682,7 @@ def perform_PCA(df_pivot, save_path, save_name, components=2):
     txt_output = list()
 
     # Perform PCA
-    pca = PCA(n_components=components)
+    pca = PCA(n_components=components)  # deterministic by default
     pca_result = pca.fit_transform(df_pivot)
 
     # Create a DataFrame for PCA results
@@ -439,7 +806,7 @@ def perform_kmeans(df_pivot, save_path, save_name, clusters=2, normalize=False):
         for line in txt_output:
             file.write(str(line) + '\n')
 
-    return df_pivot, kmeans
+    return df_pivot, kmeans, cluster_centroids
 
 
 def plot_kmeans_on_PCA(df_pivot, pca_df, save_path, save_name, palette=None):
@@ -475,7 +842,7 @@ def plot_kmeans_on_PCA(df_pivot, pca_df, save_path, save_name, palette=None):
 
 
 def plot_cluster_centroids(cluster_centroids, cluster_sems, save_path, save_name, label_map=None, binary=True,
-                           threshold=0, overlaid=False, cluster_colors_overlaid=None, fmt="png"):
+                           threshold=0, overlaid=False, cluster_colors_overlaid=None, fmt="png", label_names_coding=None):
     """
     Plots the centroids for each cluster with preferences and uncertainty.
     Can either plot individual plots per cluster or a single overlaid plot for all clusters.
@@ -526,7 +893,8 @@ def plot_cluster_centroids(cluster_centroids, cluster_sems, save_path, save_name
             save_name=f"{save_name}_overlaid_centroids",
             save_path=save_path,
             threshold=threshold,
-            fmt=fmt
+            fmt=fmt,
+            label_names_coding=label_names_coding
         )
     else:
         # Plot per cluster
@@ -548,7 +916,8 @@ def plot_cluster_centroids(cluster_centroids, cluster_sems, save_path, save_name
                     label_map=label_map,
                     title=f"Cluster {cluster}",
                     save_name=f"{save_name}_cluster_{cluster}_centroids",
-                    save_path=save_path
+                    save_path=save_path,
+                    label_names_coding=label_names_coding, fmt="svg"
                 )
             else:
                 preferences = cluster_centroid.iloc[0]
@@ -567,7 +936,8 @@ def plot_cluster_centroids(cluster_centroids, cluster_sems, save_path, save_name
                     label_map=label_map,
                     title=f"Cluster {cluster}",
                     save_name=f"{save_name}_cluster_{cluster}_centroids",
-                    save_path=save_path
+                    save_path=save_path,
+                    label_names_coding=label_names_coding
                 )
     return
 

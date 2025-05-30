@@ -93,7 +93,8 @@ def generate_embeddings(docs, model):
     return model.encode(docs, show_progress_bar=True)
 
 
-def optimize_umap(embeddings, n_neighbors_range=None, n_components_range=None, min_dist_range=None):
+def optimize_umap(embeddings, docs, embedding_model,
+                  n_neighbors_range=None, n_components_range=None, min_dist_range=None):
     if min_dist_range is None:
         min_dist_range = [0.05, 0.1, 0.2, 0.3, 0.5]
     if n_components_range is None:
@@ -134,14 +135,27 @@ def optimize_umap(embeddings, n_neighbors_range=None, n_components_range=None, m
                 raise Exception
 
         # Now optimize HDBSCAN based on these UMAP embeddings
-        best_hdbscan_model = optimize_hdbscan(embeddings_)
+        best_hdbscan_model = optimize_hdbscan(embeddings_, docs, embedding_model)
 
-        # Compute silhouette score after fitting HDBSCAN on the UMAP embeddings
-        score = evaluate_umap_score(embeddings_, best_hdbscan_model, embeddings)
+        # DEPRECATED: Compute silhouette score after fitting HDBSCAN on the UMAP embeddings
+        # score = evaluate_umap_score(embeddings_, best_hdbscan_model, embeddings)
+        # Fit a temporary BERTopic model to evaluate coherence
+        temp_topic_model = BERTopic(
+            embedding_model=embedding_model,
+            umap_model=model,
+            hdbscan_model=best_hdbscan_model,
+            vectorizer_model=CountVectorizer(),
+            ctfidf_model=ClassTfidfTransformer(),
+            calculate_probabilities=False,
+            verbose=False
+        )
+        temp_topic_model.fit(docs)
+        # use our existing coherence evaluation
+        cv_score, umass_score = evaluate_model(temp_topic_model, docs)
 
         # Update best model and parameters
-        if score > best_score:
-            best_score = score
+        if cv_score > best_score:
+            best_score = cv_score
             best_umap_model = model
             best_params = params
 
@@ -150,7 +164,8 @@ def optimize_umap(embeddings, n_neighbors_range=None, n_components_range=None, m
     return best_umap_model
 
 
-def optimize_hdbscan(embeddings, min_cluster_size_range=None, min_samples_range=None):
+def optimize_hdbscan(embeddings, docs, embedding_model,
+                     min_cluster_size_range=None, min_samples_range=None):
     if min_samples_range is None:
         min_samples_range = [3, 4, 5, 7, 10]
     if min_cluster_size_range is None:
@@ -175,11 +190,23 @@ def optimize_hdbscan(embeddings, min_cluster_size_range=None, min_samples_range=
         model.fit(embeddings)
 
         # Evaluate the model using silhouette score
-        score = evaluate_hdbscan_score(model, embeddings)
+        #score = evaluate_hdbscan_score(model, embeddings)
+        # Fit temporary BERTopic model for coherence eval
+        temp_topic_model = BERTopic(
+            embedding_model=embedding_model,
+            umap_model=None,
+            hdbscan_model=model,
+            vectorizer_model=CountVectorizer(),
+            ctfidf_model=ClassTfidfTransformer(),
+            calculate_probabilities=False,
+            verbose=False
+        )
+        temp_topic_model.fit(docs)
+        cv_score, umass_score = evaluate_model(temp_topic_model, docs)
 
         # Update best model and parameters
-        if score > best_score:
-            best_score = score
+        if cv_score > best_score:
+            best_score = cv_score
             best_hdbscan_model = model
             best_params = params
 
@@ -187,7 +214,7 @@ def optimize_hdbscan(embeddings, min_cluster_size_range=None, min_samples_range=
 
     return best_hdbscan_model
 
-
+# DEPRECATED: silhouette-based score
 def evaluate_umap_score(embeddings, best_hdbscan_model, original_embeddings):
     # Get the cluster labels from HDBSCAN after fitting the model
     cluster_labels = best_hdbscan_model.labels_
@@ -203,7 +230,7 @@ def evaluate_umap_score(embeddings, best_hdbscan_model, original_embeddings):
 
     return score
 
-
+# DEPRECATED: silhouette-based score
 def evaluate_hdbscan_score(model, embeddings):
     # Get the cluster labels from HDBSCAN
     cluster_labels = model.labels_
@@ -235,12 +262,12 @@ def train_bertopic(docs, save_path):
     embeddings = generate_embeddings(docs, embedding_model)
 
     # Apply GridSearch on UMAP and HDBSCAN
-    best_umap_model = optimize_umap(embeddings)
+    best_umap_model = optimize_umap(embeddings, docs, embedding_model)
     best_umap_params = best_umap_model.get_params()
     umap_embeddings = best_umap_model.transform(embeddings)
 
     # Now we set prediction_data=True explicitly for HDBSCAN
-    best_hdbscan_model = optimize_hdbscan(umap_embeddings)
+    best_hdbscan_model = optimize_hdbscan(umap_embeddings, docs, embedding_model)
 
     # Make sure to generate prediction data for HDBSCAN
     best_hdbscan_model.set_params(prediction_data=True)  # Ensure prediction data is available
@@ -268,8 +295,8 @@ def train_bertopic(docs, save_path):
     # Extract the UMAP embeddings from the trained model
     umap_embeddings = topic_model.umap_model.transform(embeddings)
 
-    # labels
-    topic_labels = generate_llm_labels(topic_model)
+    topic_labels = generate_topk_labels(topic_model)
+    #topic_labels = generate_llm_labels(topic_model)
 
 
     """
@@ -310,11 +337,26 @@ def evaluate_model(topic_model, docs):
         if topic_id == -1:
             continue
         words = [word for word, _ in topic_model.get_topic(topic_id)]
+        if not words:
+            continue  # skip if the topic has no words
         topic_words.append(words)
-
+    if not topic_words:  # if no valid topics found, return a very low score
+        return -np.inf, -np.inf
     cm_cv = CoherenceModel(topics=topic_words, texts=docs_tokenized, dictionary=dictionary, coherence="c_v")
     cm_umass = CoherenceModel(topics=topic_words, texts=docs_tokenized, dictionary=dictionary, coherence="u_mass")
     return cm_cv.get_coherence(), cm_umass.get_coherence()
+
+
+# DEPRECATED
+def generate_topk_labels(topic_model, top=10):
+    topics = topic_model.get_topics()
+    labels = {}
+    for topic_id in topics:
+        if topic_id == -1:
+            continue
+        keywords = [word for word, _ in topic_model.get_topic(topic_id)[:top]]  # top words
+        labels[topic_id] = f"Label for: {keywords[0]} ({keywords[1: ]})"
+    return labels
 
 
 def generate_llm_labels(topic_model, top=10):
@@ -373,7 +415,8 @@ def main(file_path, output_path, text_col, exclude_words):
 
     topic_model, topics, probs = train_bertopic(df["cleaned"].tolist(), save_path=output_path)
     cv_score, umass_score = evaluate_model(topic_model, df["cleaned"].tolist())
-    labels = generate_llm_labels(topic_model)
+    labels = generate_topk_labels(topic_model)
+    #labels = generate_llm_labels(topic_model)
 
     save_outputs(df=df, topic_model=topic_model, topics=topics, probs=probs, cv_score=cv_score, umass_score=umass_score,
                  labels=labels, output_dir=output_path)
@@ -383,6 +426,22 @@ def main(file_path, output_path, text_col, exclude_words):
 
 
 if __name__ == "__main__":
+
+    """
+    Consciousness and intelligence - related to the same third factor
+    """
+    TEXT_COL = "What is the common denominator?"
+    FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\consciousness_intelligence"
+    FILE_PATH = os.path.join(FOLDER_PATH, "common_denominator.csv")
+    OUTPUT_NAME = "common_denominator"
+    OUTPUT_DIR = os.path.join(FOLDER_PATH, "topic_modelling", OUTPUT_NAME)
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+    EXCLUDE_WORDS = ["intelligent", "intelligence", "conscious", "consciousness", "related", "common"]
+    main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
+    exit()
+
+
     """
     Moral consideration prio's
     (1) some people should have a higher moral status than others [examples]
@@ -433,18 +492,7 @@ if __name__ == "__main__":
 
 
 
-    """
-    Consciousness and intelligence - related to the same third factor
-    """
-    TEXT_COL = "What is the common denominator?"
-    FOLDER_PATH = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\consciousness_intelligence"
-    FILE_PATH = os.path.join(FOLDER_PATH, "common_denominator.csv")
-    OUTPUT_NAME = "common_denominator"
-    OUTPUT_DIR = os.path.join(FOLDER_PATH, "topic_modelling", OUTPUT_NAME)
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
-    EXCLUDE_WORDS = ["intelligent", "intelligence", "conscious", "consciousness", "related", "common"]
-    main(file_path=FILE_PATH, output_path=OUTPUT_DIR, text_col=TEXT_COL, exclude_words=EXCLUDE_WORDS)
+
 
 
     """

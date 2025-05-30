@@ -280,7 +280,12 @@ def plot_pie(categories_names, categories_counts, title, save_path, save_name,
              fmt="svg", pie_direction=180, categories_colors=None, categories_labels=None,
              annot_groups=True, annot_group_selection=None, annot_props=True,
              legend=False, legend_order=None, legend_vertical=True,
-             edge_color="white"):
+             edge_color="white", rotate_labels=True, label_dist=1.01, props_in_legend=False):
+
+    sns.set_style("ticks")
+    sns.despine(right=True, top=True)
+    plt.rcParams['font.family'] = "Calibri"
+
     if categories_colors is not None:
         try:
             categories_colors_list = [categories_colors[cat] for cat in categories_names]
@@ -322,8 +327,8 @@ def plot_pie(categories_names, categories_counts, title, save_path, save_name,
 
     # plot
     wedges, texts, autotexts = ax.pie(categories_counts, labels=label, autopct=pctgs,
-                                      colors=categories_colors_list, rotatelabels=True, labeldistance=1.01,
-                                      startangle=startangle, textprops={"fontsize": 18},
+                                      colors=categories_colors_list, rotatelabels=rotate_labels,
+                                      labeldistance=label_dist, startangle=startangle, textprops={"fontsize": 18},
                                       wedgeprops={"edgecolor": edge_color})
 
     # add a title and subtitle
@@ -340,24 +345,35 @@ def plot_pie(categories_names, categories_counts, title, save_path, save_name,
             anchor = (0.5, -0.1)
             n_col = len(categories_labels_list)
 
-        if legend_order is None:
-            ax.legend(wedges, categories_labels_list, loc=location, bbox_to_anchor=anchor, ncol=n_col, fontsize=18)
+        total_count = sum(categories_counts)
+        proportions = [f"{(count / total_count) * 100:.1f}%" for count in categories_counts]
+
+        if props_in_legend:
+            categories_labels_with_props = [f"{label} ({prop})" for label, prop in zip(categories_labels_list, proportions)]
         else:
-            label_to_wedge_color = {label: (wedge, color) for label, wedge, color in
-                                    zip(categories_labels_list, wedges, categories_colors_list)}
+            categories_labels_with_props = categories_labels_list
+
+        if legend_order is None:
+            ax.legend(wedges, categories_labels_with_props, loc=location, bbox_to_anchor=anchor, ncol=n_col, fontsize=18,
+                      frameon=False)
+        else:
+            label_to_wedge_color = {label: (wedge, color, prop) for label, wedge, color, prop in
+                                    zip(categories_labels_list, wedges, categories_colors_list, proportions)}
 
             ordered_wedges = [label_to_wedge_color[label][0] for label in legend_order if label in label_to_wedge_color]
-            ordered_labels = [label for label in legend_order if label in label_to_wedge_color]
-            ax.legend(ordered_wedges, ordered_labels, loc=location, bbox_to_anchor=anchor, ncol=n_col, fontsize=17)
+            if props_in_legend:
+                ordered_labels = [f"{label} ({label_to_wedge_color[label][2]})" for label in legend_order if
+                                  label in label_to_wedge_color]
+            else:
+                ordered_labels = [label for label in legend_order if label in label_to_wedge_color]
+
+            ax.legend(ordered_wedges, ordered_labels, loc=location, bbox_to_anchor=anchor, ncol=n_col, fontsize=17,
+                      frameon=False)
 
     # save
     figure = plt.gcf()  # get current figure
-    if fmt == "svg":
-        plt.savefig(os.path.join(save_path, f"{save_name}.svg"), format="svg", dpi=1000, bbox_inches='tight',
-                    pad_inches=0.01)
-    if fmt == "png":
-        plt.savefig(os.path.join(save_path, f"{save_name}.png"), format="png", dpi=1000, bbox_inches='tight',
-                    pad_inches=0.01)
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
+                pad_inches=0.01)
     plt.clf()
     plt.close()
     return
@@ -407,10 +423,13 @@ def get_labels(label_dict, min_val=0, max_val=1):
 
 
 def plot_overlaid_preferences(all_preferences, all_sems, all_colors, labels, label_map, cluster_names,
-                              binary, save_name, save_path, threshold=0, fmt="png"):
+                              binary, save_name, save_path, threshold=0, fmt="png", label_names_coding=None):
     """
     Creates a single plot overlaying centroids (preferences) and SEMs for all clusters.
     """
+
+    plt.rcParams['font.family'] = "Calibri"
+
     fig, ax = plt.subplots(figsize=(16, 6))
     y_pos = np.arange(len(labels))
 
@@ -426,26 +445,30 @@ def plot_overlaid_preferences(all_preferences, all_sems, all_colors, labels, lab
         for i, (mean, sem, color) in enumerate(zip(preferences, sems, colors)):
             ax.hlines(y=y_pos[i], xmin=(-1 if binary else min_max[0]), xmax=(1 if binary else min_max[1]),
                       color="lightgray", linestyle='--', linewidth=1)
-            ax.errorbar(mean, y_pos[i], xerr=sem, fmt='o', color=color, markersize=8,
+            ax.errorbar(mean, y_pos[i], xerr=sem, fmt='o', color=color, markersize=15,
                         ecolor="black", elinewidth=2, capsize=4)
 
     ax.axvline(0 if binary else threshold, color='black', linewidth=1)
     ax.set_yticks(y_pos)
+    plt.xticks(fontsize=18)
     ax.set_yticklabels(["" for _ in display_labels])
-    ax.set_xlabel("No Preference" if binary else "Threshold", fontsize=15)
-    ax.set_title("Overlaid Cluster Centroids", fontsize=15)
+    ax.set_xlabel("No Preference" if binary else "Threshold", fontsize=22)
+    ax.set_title("Overlaid Cluster Centroids", fontsize=22)
     ax.invert_yaxis()
     ax.set_xlim([-1, 1] if binary else [min_max[0], min_max[1]])
 
     for i, label in enumerate(display_labels):
         label_0, label_1 = get_labels(label_map[labels[i]]) if binary else get_labels(label_map[labels[i]],
                                                                                       min_val=1, max_val=4)
-        ax.text(-1.05 if binary else min_max[0] - 0.05, i, label_0, va='center', ha='right', fontsize=15, color='black')
-        ax.text(1.05 if binary else min_max[1] + 0.05, i, label_1, va='center', ha='left', fontsize=15, color='black')
+        if label_names_coding is not None:
+            label_0 = label_names_coding[label_0]
+            label_1 = label_names_coding[label_1]
+        ax.text(-1.05 if binary else min_max[0] - 0.05, i, label_0, va='center', ha='right', fontsize=20, color='black')
+        ax.text(1.05 if binary else min_max[1] + 0.05, i, label_1, va='center', ha='left', fontsize=20, color='black')
 
     # Add legend for clusters
     handles = [plt.Line2D([0], [0], color=colors[0], lw=4) for colors in all_colors]
-    ax.legend(handles, cluster_names, loc="upper right", fontsize=10)
+    ax.legend(handles, cluster_names, loc="upper right", fontsize=20)
 
     # Save the figure
     figure = plt.gcf()
@@ -459,7 +482,10 @@ def plot_overlaid_preferences(all_preferences, all_sems, all_colors, labels, lab
 
 
 def plot_nonbinary_preferences(means, sems, colors, labels, label_map, title, min, max, thresh,
-                               save_name, save_path, fmt="png"):
+                               save_name, save_path, fmt="png", label_names_coding=None):
+
+    plt.rcParams['font.family'] = "Calibri"
+
     fig, ax = plt.subplots(figsize=(16, 6))
     y_pos = np.arange(len(means))
 
@@ -480,6 +506,9 @@ def plot_nonbinary_preferences(means, sems, colors, labels, label_map, title, mi
     ax.set_xlim([min, max])
     for i, label in enumerate(labels):
         label_0, label_1 = get_labels(label_map[label], min_val=min, max_val=max)
+        if label_names_coding is not None:
+            label_0 = label_names_coding[label_0]
+            label_1 = label_names_coding[label_1]
         ax.text(min - 0.05, i, label_0, va='center', ha='right', fontsize=15, color='black')
         ax.text(max + 0.05, i, label_1, va='center', ha='left', fontsize=15, color='black')
 
@@ -494,7 +523,9 @@ def plot_nonbinary_preferences(means, sems, colors, labels, label_map, title, mi
     return
 
 
-def plot_binary_preferences(means, sems, colors, labels, label_map, title, save_name, save_path, fmt="png"):
+def plot_binary_preferences(means, sems, colors, labels, label_map, title, save_name, save_path, fmt="png",
+                            label_names_coding=None):
+    plt.rcParams['font.family'] = "Calibri"
     fig, ax = plt.subplots(figsize=(16, 6))
     y_pos = np.arange(len(means))
 
@@ -512,15 +543,20 @@ def plot_binary_preferences(means, sems, colors, labels, label_map, title, save_
     ax.axvline(0, color='black', linewidth=1)
     ax.set_yticks(y_pos)
     ax.set_yticklabels(["" for i in labels])
-    ax.set_xlabel("No Preference", fontsize=15)
-    ax.set_title(title, fontsize=15)
+    ax.set_xlabel("No Preference", fontsize=20)
+    ax.set_xticks(fontsize=20)
+    ax.set_title(title, fontsize=20)
     ax.invert_yaxis()
     ax.set_xlim([-1, 1])
     for i, label in enumerate(labels):
         label_0, label_1 = get_labels(label_map[label])
-        ax.text(-1.05, i, label_0, va='center', ha='right', fontsize=15, color='black')
-        ax.text(1.05, i, label_1, va='center', ha='left', fontsize=15, color='black')
+        if label_names_coding is not None:
+            label_0 = label_names_coding[label_0]
+            label_1 = label_names_coding[label_1]
+        ax.text(-1.05, i, label_0, va='center', ha='right', fontsize=18, color='black')
+        ax.text(1.05, i, label_1, va='center', ha='left', fontsize=18, color='black')
 
+    plt.legend(fontsize=18)
     # save plot
     figure = plt.gcf()  # get current figure
     figure.set_size_inches(15, 12)
@@ -598,27 +634,35 @@ def plot_null_hist(observed_alpha, null_alphas, parameter_name_xlabel, save_path
     return
 
 
-def plot_histogram(df, category_col, data_col, save_path, save_name, format="svg"):
+def plot_histogram(df, category_col, data_col, save_path, save_name, format="svg", color_palette="Greens_d", color=None,
+                   x_label="", y_label=""):
+
     sns.set_style("ticks")
     sns.despine(right=True, top=True)
     plt.rcParams['font.family'] = "Calibri"
 
-    plt.figure(figsize=(10, 6))
-    sns.barplot(data=df, x=category_col, y=data_col, palette='viridis')
+    plt.figure(figsize=(20, 12))
 
-    # Customize x-ticks to avoid crowding
-    plt.xticks(rotation=45)
-    plt.xlabel('Age')
-    plt.ylabel('Count')
-    plt.tight_layout()  # Adjust layout to fit labels
+    if color is None:  # use our default palette
+        pal = sns.color_palette(color_palette, len(df))
+        data = df.to_numpy()
+        rank = data[:, 1].argsort().argsort()
+        colors = np.array(pal)[rank]
+        sns.barplot(x=data[:, 0], y=data[:, 1], palette=colors)
+    else:  # use color
+        sns.barplot(data=df, x=category_col, y=data_col, color=color)
 
-    plt.xticks(fontsize=18)
+    plt.xticks(fontsize=20)
+    plt.xlabel(x_label, fontsize=25)
     plt.yticks(fontsize=22)
-    plt.xlabel(category_col.title(), fontsize=20)
+    plt.ylabel(y_label, fontsize=25)
+
+    ax = plt.gca()  # get current axis
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
 
     # save plot
-    figure = plt.gcf()  # get current figure
-    figure.set_size_inches(20, 12)
+    figure = plt.gcf()
     plt.savefig(os.path.join(save_path, f"{save_name}.{format}"), format=f"{format}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
@@ -656,11 +700,17 @@ def plot_categorical_bars_layered(categories_prop_df, category_col, full_data_co
     plt.yticks([y for y in np.arange(y_min, y_max, y_skip)], fontsize=16)
 
     wrapped_labels = [textwrap.fill(label, width=10) for label in categories]
-    plt.xticks(ticks=np.arange(len(wrapped_labels)), labels=wrapped_labels, fontsize=16)
+    plt.xticks(ticks=np.arange(len(wrapped_labels)), labels=wrapped_labels, fontsize=22)
+    plt.yticks(fontsize=22)
     plt.xlabel(category_col.title(), fontsize=20)
-    plt.ylabel("Proportion", fontsize=20)
+    plt.ylabel("Proportion", fontsize=25)
+
+    ax = plt.gca()  # get current axis
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
 
     # save plot
+
     figure = plt.gcf()  # get current figure
     figure.set_size_inches(inch_w, inch_h)
     plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
@@ -671,9 +721,9 @@ def plot_categorical_bars_layered(categories_prop_df, category_col, full_data_co
     return
 
 
-def plot_categorical_bars_hued(categories_prop_df, x_col, category_col, data_col, categories_colors,
-                               save_path, save_name, fmt="svg", y_min=0, y_max=100, y_skip=10, delete_y=True,
-                               inch_w=15, inch_h=12, add_pcnt=True, order=None, x_label=None):
+def plot_categorical_bars_hued(categories_prop_df, x_col, category_col, data_col, categories_colors, save_path,
+                               save_name, fmt="svg", y_label="", y_min=0, y_max=100, y_skip=10, delete_y=True,
+                               inch_w=15, inch_h=12, add_pcnt=True, order=None, x_label=None, x_rotation=0):
     plt.figure(figsize=(8, 6))
     sns.set_style("ticks")
     plt.rcParams['font.family'] = "Calibri"
@@ -707,14 +757,19 @@ def plot_categorical_bars_hued(categories_prop_df, x_col, category_col, data_col
         plt.yticks([])
     else:
         plt.yticks([y for y in np.arange(y_min, y_max, y_skip)], fontsize=18)
-        plt.ylabel("Proportion", fontsize=22)
+        plt.ylabel(y_label, fontsize=22)
 
     # X axis and label
     wrapped_labels = [textwrap.fill(str(label), width=13) for label in categories]
-    plt.xticks(ticks=np.arange(len(wrapped_labels)), labels=wrapped_labels, fontsize=18)
+    plt.xticks(ticks=np.arange(len(wrapped_labels)), labels=wrapped_labels, fontsize=18, rotation=x_rotation)
     if x_label is None:
         x_label = category_col.title()
     plt.xlabel(x_label, fontsize=22)
+
+    # despine
+    ax = plt.gca()  # get current axis
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
 
     # save plot
     figure = plt.gcf()  # get current figure
@@ -730,7 +785,9 @@ def plot_categorical_bars_hued(categories_prop_df, x_col, category_col, data_col
 
 def plot_categorical_bars(categories_prop_df, category_col, data_col, categories_colors,
                           save_path, save_name, fmt="svg", y_min=0, y_max=100, y_skip=10, delete_y=True,
-                          inch_w=15, inch_h=12, add_pcnt=True, order=None):
+                          inch_w=15, inch_h=12, add_pcnt=True, order=None, text_wrap_width=13,
+                          x_label="", y_fontsize=28):
+
     plt.figure(figsize=(8, 6))
     sns.set_style("ticks")
     plt.rcParams['font.family'] = "Calibri"
@@ -752,10 +809,10 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
             barplot.text(
                 index,  # X-coordinate (position of the bar)
                 row[data_col] + 1,  # Y-coordinate (slightly above the bar)
-                f"{row[data_col]:.2f}%",  # The text (percentage value)
+                f"{row[data_col]:.0f}%",  # The text (percentage value)
                 color="black",  # Text color
                 ha="center",  # Horizontal alignment
-                fontsize=25  # Font size
+                fontsize=28  # Font size
             )
 
     # now delete y-axis
@@ -764,19 +821,69 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
         plt.ylabel("")
         plt.yticks([])
     else:
-        plt.yticks([y for y in np.arange(y_min, y_max, y_skip)], fontsize=16)
-        plt.ylabel("Proportion", fontsize=20)
+        plt.yticks([y for y in np.arange(y_min, y_max, y_skip)], fontsize=y_fontsize)
+        plt.ylabel("Proportion", fontsize=y_fontsize)
 
     # X axis and label
-    wrapped_labels = [textwrap.fill(label, width=13) for label in categories]
-    plt.xticks(ticks=np.arange(len(wrapped_labels)), labels=wrapped_labels, fontsize=16)
-    plt.xlabel(category_col.title(), fontsize=20)
+    wrapped_labels = [textwrap.fill(str(label), width=text_wrap_width) for label in categories]
+    plt.xticks(ticks=np.arange(len(wrapped_labels)), labels=wrapped_labels, fontsize=28)
+    plt.xlabel(x_label, fontsize=28)
+    ax = plt.gca()  # get current axis
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
 
     # save plot
     figure = plt.gcf()  # get current figure
     figure.set_size_inches(inch_w, inch_h)
-    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
-                pad_inches=0.01)
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight', pad_inches=0.01)
+    del figure
+    plt.clf()
+    plt.close()
+
+    return
+
+
+def plot_expertise_proportion_bars(df, x_axis_exp_col_name, x_label, cols, cols_colors, y_ticks,
+                                   save_name, save_path, plt_title="", fmt="svg", x_map=None):
+    sns.set_style("ticks")
+    sns.despine(right=True, top=True)
+    plt.rcParams['font.family'] = "Calibri"
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    if x_map is not None:
+        # group and reorder according to x_map
+        grouped = df.groupby(x_axis_exp_col_name).sum().reindex(x_map.keys())
+        x_vals = [x_map[key] for key in grouped.index]
+        bottom = None
+        for label in cols:
+            ax.bar(x_vals, grouped[label],
+                   bottom=bottom, label=label, color=cols_colors[label], edgecolor='white')
+            bottom = grouped[label] if bottom is None else bottom + grouped[label]
+        ax.set_xticks(list(x_map.values()))
+        ax.set_xticklabels(list(x_map.keys()))
+    else:
+        # assume df[x] is numeric
+        x_vals = df[x_axis_exp_col_name]
+        bottom = None
+        for label in cols:
+            ax.bar(x_vals, df[label],
+                   bottom=bottom, label=label, color=cols_colors[label], edgecolor='white')
+            bottom = df[label] if bottom is None else bottom + df[label]
+        ax.set_xticks(sorted(x_vals.unique()))
+
+    # labels and styling
+    ax.set_yticks(y_ticks)
+    ax.set_yticklabels(y_ticks)
+    ax.set_ylabel("Proportion")
+    ax.set_xlabel(x_label)
+    ax.legend(title=plt_title)
+
+    plt.tight_layout()
+    sns.despine(right=True, top=True)
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches="tight", pad_inches=0.01)
+
+    figure = plt.gcf()
     del figure
     plt.clf()
     plt.close()
@@ -831,13 +938,84 @@ def plot_categorical_proportion_bar(categories_prop_df, category_col, data_col, 
     return
 
 
+def plot_stacked_proportion_bars_in_a_batch(df, rating_col, item_cols, color_map, save_path, save_name, alpha_value=1.0,
+                                            rating_label="", plot_title="", annotate=True,
+                                            annot_font_size=15, annot_font_colors=None,
+                                            ytick_visible=True, y_tick_rotation=0,
+                                            text_width=max_text_width, fmt="svg"):
+
+    sns.set_style("ticks")
+    plt.rcParams['font.family'] = "Calibri"
+
+    fig, axs = plt.subplots(len(item_cols), 1, figsize=(15, (len(list(color_map.keys())) + 1) * len(item_cols)), sharex=True)
+
+    for i, item in enumerate(item_cols):
+        a = axs[i]
+        item_data = df[[rating_col, item]]
+        item_data[f"{item} proportions"] = 100 * item_data[item] / item_data[item].sum()
+        start = 0
+        for index, row in item_data.iterrows():
+            a.barh(0, row[f"{item} proportions"], left=start, height=0.8, color=color_map[row[rating_col]], label=item,
+                   edgecolor="none", alpha=alpha_value)
+            # annotate the bar with the proportion value
+            if annotate:
+                if annot_font_colors is None:
+                    annot_font_colors = ["black" for i in range(len(list(color_map.keys())))]
+                a.text(start + row[f"{item} proportions"] / 2, 0, f"{row[f'{item} proportions']:.2f}%",
+                       ha='center', va='center', fontsize=annot_font_size, color=annot_font_colors[index])
+            start += row[f"{item} proportions"]
+
+        # customize each subplot
+        a.tick_params(axis='x', labelsize=18)
+        if ytick_visible:
+            wrapped_col_name = textwrap.fill(str(item).title(), width=text_width)  # limit the text line width
+            a.set_yticks(np.array([0]))
+            a.set_yticklabels([wrapped_col_name], fontsize=22, rotation=y_tick_rotation, ha='center', va='center')
+        else:
+            a.set_yticklabels("")
+            a.spines["left"].set_visible(False)
+        a.set_xticks([0, 25, 50, 75, 100])
+        a.set_xticklabels([0, 25, 50, 75, 100], fontsize=20)
+        a.set_xlim(0, 100)  # Set x-axis limits from 0 to 100
+
+        # despine
+        a.spines["right"].set_visible(False)
+        a.spines["top"].set_visible(False)
+
+
+    # finalize figure
+    fig.text(0.5, -0.05, "Proportion of Responses (%)", ha="center", fontsize=22)
+    fig.suptitle(f"{plot_title}", fontsize=25, y=1.02)
+
+    handles = [plt.Rectangle((0, 0), 1, 1, color=color_map[rating]) for rating in df[rating_col]]
+    labels = [str(rating) for rating in df[rating_col]]
+    fig.legend(
+        handles=handles,
+        labels=labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1),  # adjust y value to position the legend
+        ncol=len(handles),  # arrange in a single row
+        frameon=False,
+        fontsize=18
+    )
+
+    plt.tight_layout()
+    figure = plt.gcf()  # get current figure
+    figure.set_size_inches(15, 12)
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches="tight",
+                pad_inches=0.01)
+    del figure
+    plt.clf()
+    plt.close()
+    return
+
+
 def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save_path, save_name, title,
-                                 legend_labels=None,
-                                 show_mean=True, sem_line=True, ytick_visible=True, y_title=None,
-                                 default_ticks=True,
-                                 text_width=max_text_width, fmt="png",
+                                 legend_labels=None, show_mean=True, sem_line=True, ytick_visible=True, y_title=None,
+                                 default_ticks=True, text_width=max_text_width, fmt="png", annotate_bar=False,
+                                 annot_font_color="white", split=False, relative=True,
                                  bar_relative=True, bar_range_min=1, bar_range_max=4, inches_w=18, inches_h=12,
-                                 split=False, relative=True, yes_all_proportion=None, no_all_proportion=None,
+                                 yes_all_proportion=None, no_all_proportion=None,
                                  punishment_alpha=0.6):
     """
     Plots horizontal stacked proportion bars for multiple items with optional error bars for mean ratings.
@@ -851,6 +1029,8 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
     :param text_width: Maximum width for wrapped text. Defaults to 30.
     """
 
+    sns.set_style("ticks")
+    plt.rcParams['font.family'] = "Calibri"
     fig, axs = plt.subplots(num_plots, 1, figsize=(15, (num_ratings + 1) * num_plots), sharex=True)
 
     # plot each column as a separate bar
@@ -896,10 +1076,18 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
         if relative:
             for j, (label, proportion, color, alpha_value) in enumerate(sorted_proportions):
                 a.barh(col, proportion, color=color, label=label, edgecolor='none', left=bottom, alpha=alpha_value)
+                # annotate the bar with the proportion value
+                if annotate_bar:
+                    a.text(bottom + proportion / 2, 0, f"{proportion:.2f}%", ha='center', va='center', fontsize=21,
+                           color=annot_font_color)
                 bottom += proportion
         else:
             for j, (label, proportion, color, alpha_value) in enumerate(sorted_proportions):
                 a.barh(0, proportion, color=color, label=label, edgecolor='none', left=bottom, alpha=alpha_value)
+                # annotate the bar with the proportion value
+                if annotate_bar:
+                    a.text(bottom + proportion / 2, 0, f"{proportion:.2f}%", ha='center', va='center', fontsize=21,
+                           color=annot_font_color)
                 bottom += proportion
 
         if show_mean:
@@ -944,6 +1132,9 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
             a.spines["left"].set_visible(False)
         a.set_xticks([0, 25, 50, 75, 100])
         a.set_xlim(0, 100)  # Set x-axis limits from 0 to 100
+        # despine
+        a.spines["right"].set_visible(False)
+        a.spines["top"].set_visible(False)
 
     # finalize figure
     fig.text(0.5, 0.06, "Proportion of Responses (%)", ha="center", fontsize=18)
@@ -984,6 +1175,8 @@ def plot_scatter_xy_panel(df, identity_col, x_col, x_label, x_min, x_max, x_tick
                           title_fontsize=14, axis_fontsize=12, hide_axes_names=False,
                           violins=False, violin_alpha=0.5, violin_color="gray"):
 
+    sns.set_style("ticks")
+    plt.rcParams['font.family'] = "Calibri"
     # use the provided axis for plotting
     plt.sca(ax)
 
@@ -1129,6 +1322,8 @@ def plot_multiple_scatter_xy(data, identity_col, x_col, y_col, x_label, y_label,
     save_name = save_name if not violins else f"{save_name}_withViolins"
 
     # Create a figure with subplots
+    sns.set_style("ticks")
+    plt.rcParams['font.family'] = "Calibri"
     fig, axs = plt.subplots(rows, cols, figsize=(cols * 4, rows * 4))  # Adjust size as needed
     axs = axs.flatten()  # Flatten the 2D array of axes to 1D for easy indexing
 
@@ -1314,8 +1509,9 @@ def plot_categorical_scatter_fullresponse(df, x_col, y_col, response_id_col, sav
 
 def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_col, y_label, y_min, y_max, y_ticks,
                     save_path, save_name, color_col=None, color_col_colors=None, palette_bounds=None, annotate_id=True,
-                    title_text="", fmt="png", size=400, alpha=1, corr_line=False, diag_line=False, individual_df=None,
+                    title_text="", fmt="png", size=600, alpha=1, corr_line=False, diag_line=False, individual_df=None,
                     id_col=None, vertical_jitter=0, horizontal_jitter=0):
+
     plt.figure(figsize=(8, 6))
     plt.rcParams["font.family"] = "Calibri"
     sns.set_style("ticks")
@@ -1326,10 +1522,10 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
     df["combined"] = df["x_norm"] + df["y_norm"]
     norm = plt.Normalize(vmin=df["combined"].min(), vmax=df["combined"].max())
 
-    #if palette_bounds is None:
-    #    cmap = cm.get_cmap("viridis")
-    #else:
-    #    cmap = LinearSegmentedColormap.from_list("custom", [palette_bounds[0], palette_bounds[1]])
+    if palette_bounds is None:
+        cmap = cm.get_cmap("viridis")
+    else:
+        cmap = LinearSegmentedColormap.from_list("custom", [palette_bounds[0], palette_bounds[1]])
 
     # individual participant lines
     if individual_df is not None:
@@ -1370,21 +1566,19 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
 
     # scatter plot
     if color_col is None:  # cmap
-        sns.scatterplot(data=df, x=x_col, y=y_col, c="#003554", s=size, alpha=alpha,
+        sns.scatterplot(data=df, x=x_col, y=y_col, cmap=cmap, norm=norm, c=df["combined"], s=size, alpha=alpha,
                         zorder=3)
     else:  # hue is the diff
         if color_col_colors is None:
-            sns.scatterplot(data=df, x=x_col, y=y_col, c="#003554", s=size, alpha=alpha,
-                            zorder=3)
+            sns.scatterplot(data=df, x=x_col, y=y_col, cmap=cmap, norm=norm, hue=color_col, s=size, alpha=alpha, zorder=3)
         else:
-            sns.scatterplot(data=df, x=x_col, y=y_col, c="#003554", s=size, alpha=alpha,
+            sns.scatterplot(data=df, x=x_col, y=y_col, palette=color_col_colors, hue=color_col, s=size, alpha=alpha,
                             zorder=3)
 
     # annotate
     if annotate_id:
         for i in range(len(df)):
-            plt.text(df[x_col][i], df[y_col][i] + 0.065, df[identity_col][i],
-                     fontsize=20, ha="center")
+            plt.text(df[x_col][i], df[y_col][i] + 0.065, df[identity_col][i], fontsize=20, ha="center")
 
     # update limits based on jitter
     x_min_jittered = df[x_col].min() - horizontal_jitter
@@ -1396,12 +1590,12 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
     plt.ylim(y_min_jittered, y_max_jittered)
 
     # titles etc
-    plt.yticks(np.arange(y_min, y_max + (0.05 * y_ticks), y_ticks), fontsize=18)
-    plt.xticks(np.arange(x_min, x_max + (0.05 * x_ticks), x_ticks), fontsize=18)
+    plt.yticks(np.arange(y_min, y_max + (0.05 * y_ticks), y_ticks), fontsize=22)
+    plt.xticks(np.arange(x_min, x_max + (0.05 * x_ticks), x_ticks), fontsize=22)
     plt.xlim([x_min, x_max + (0.05 * y_ticks)])
     plt.ylim([y_min, y_max + (0.05 * y_ticks)])
-    plt.xlabel(x_label.title(), fontsize=18)
-    plt.ylabel(y_label.title(), fontsize=18)
+    plt.xlabel(x_label.title(), fontsize=25)
+    plt.ylabel(y_label.title(), fontsize=25)
     plt.title(f"{title_text.title()}", fontsize=16)
 
     # save plot
@@ -1419,6 +1613,7 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
 
 def plot_scatter(df, data_col, category_col, category_color_dict, category_order, title_text, x_label, y_label,
                  save_path, save_name, y_min, y_max, y_skip, vertical_jitter=0, horizontal_jitter=0.2):
+
     # calculate means and standard deviations for each category
     category_means = df.groupby(category_col)[data_col].mean()
     category_stds = df.groupby(category_col)[data_col].std()
@@ -1431,6 +1626,9 @@ def plot_scatter(df, data_col, category_col, category_color_dict, category_order
         df["jittered"] = df[data_col]
 
     plt.figure(figsize=(8, 6))
+    sns.set_style("ticks")
+    plt.rcParams['font.family'] = "Calibri"
+
     for category in category_order:
         sns.stripplot(x=category_col, y="jittered", data=df[df[category_col] == category],
                       jitter=horizontal_jitter, size=15, color=category_color_dict[category], alpha=0.8, zorder=1)
@@ -1475,7 +1673,8 @@ def plot_scatter(df, data_col, category_col, category_color_dict, category_order
     return
 
 
-def plot_world_map_proportion(country_proportions_df, data_column, save_path):
+def plot_world_map_proportion(country_proportions_df, data_column, save_path, save_name="proportion_by_country",
+                              fmt="svg"):
     """
     :param country_proportions_df:
     :param data_column:
@@ -1491,12 +1690,20 @@ def plot_world_map_proportion(country_proportions_df, data_column, save_path):
     - Then, map_shapfile_path should be the path to the '.shp' file in the unzipped folder
     
     """
-    map_shapfile_path = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\code\ethics_survey\ne_110m_admin_0_countries\ne_110m_admin_0_countries.shp"
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    map_shapfile_path = os.path.join(dir_path, r"ne_110m_admin_0_countries\ne_110m_admin_0_countries.shp")
+
     world = gpd.read_file(map_shapfile_path)
     world = world[world["CONTINENT"] != "Antarctica"]  # remove Antarctica
-    world = world[world["CONTINENT"] != "Seven seas (open ocean"]  # remove the seven seas
-    world.loc[world[
-                  "NAME"] == "Russia", "CONTINENT"] = "Eastern Europe"  # Russia is otherwise clustered with the whold of Europe
+    world = world[world["CONTINENT"] != "Seven seas (open ocean)"]  # remove the seven seas
+    world.loc[world["NAME"] == "Russia", "CONTINENT"] = "Eastern Europe"  # Russia is otherwise clustered with the whole of Europe
+
+    """
+    Colormaps
+    dark=0.1 is darker than 0.2, light=0.95 is lighter than 0.6, gamma<1 lighter in the middle, gamma=1 linear
+    """
+    #warm_brown_cmap = sns.color_palette("ch:start=0.5,rot=0.3", as_cmap=True)
+    warm_brown_cmap = sns.color_palette("ch:start=0.5,rot=0.3,dark=0.1,light=0.8,gamma=1", as_cmap=True)
 
     """
     Plot by country
@@ -1512,7 +1719,7 @@ def plot_world_map_proportion(country_proportions_df, data_column, save_path):
     new_world = world.merge(df, on="NAME", how="left")
 
     # ensure countries are aligned
-    world_with_props = new_world[~new_world["proportion"].isna()]
+    world_with_props = new_world[~new_world["proportion"].isna()].reset_index(inplace=False, drop=True)
     diff = world_with_props.shape[0] - df.shape[0]
     if diff < 0:  # we have countries with proportions that don't exist in the world map
         df_props_countries = df["NAME"].unique().tolist()
@@ -1524,10 +1731,10 @@ def plot_world_map_proportion(country_proportions_df, data_column, save_path):
             diff_lst.remove("Singapore")
         print(f"Mismatching countries: {diff_lst}")
 
-    fig, ax = plt.subplots(1, 1, figsize=(20, 14))
+    fig, ax = plt.subplots(1, 1, figsize=(18, 14))
     new_world.boundary.plot(ax=ax, linewidth=1, edgecolor="#050b0c")
     new_world.plot(column="proportion", ax=ax, legend=True,
-                   cmap=sns.color_palette("ch:start=.2,rot=-.3", as_cmap=True),
+                   cmap=warm_brown_cmap,
                    missing_kwds={"color": "white"},
                    legend_kwds={'label': "Proportion by Country",
                                 'orientation': "horizontal",
@@ -1537,8 +1744,8 @@ def plot_world_map_proportion(country_proportions_df, data_column, save_path):
 
     # save
     figure = plt.gcf()  # get current figure
-    figure.set_size_inches(16, 12)
-    plt.savefig(os.path.join(save_path, f"proportion_by_country.png"), format="png", dpi=1000, bbox_inches='tight',
+    figure.set_size_inches(15, 12)
+    plt.savefig(os.path.join(save_path, f"{save_name}_country.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
     plt.clf()
@@ -1558,10 +1765,10 @@ def plot_world_map_proportion(country_proportions_df, data_column, save_path):
     continent_df["continent_proportion"] = continent_df["continent_proportion"] * 100
     new_world = new_world.merge(continent_df, on="CONTINENT", how="left")  # add proportion data to world map
 
-    fig, ax = plt.subplots(1, 1, figsize=(20, 14))
+    fig, ax = plt.subplots(1, 1, figsize=(18, 14))
     new_world.boundary.plot(ax=ax, linewidth=1, edgecolor="#050b0c")
     new_world.plot(column="continent_proportion", ax=ax, legend=True,
-                   cmap=sns.color_palette("ch:start=.2,rot=-.3", as_cmap=True),
+                   cmap=warm_brown_cmap,
                    missing_kwds={"color": "white"},
                    legend_kwds={'label': "Proportion by Continent",
                                 'orientation': "horizontal",
@@ -1570,8 +1777,8 @@ def plot_world_map_proportion(country_proportions_df, data_column, save_path):
 
     # save
     figure = plt.gcf()  # get current figure
-    figure.set_size_inches(18, 12)
-    plt.savefig(os.path.join(save_path, f"proportion_by_continent.png"), format="png", dpi=1000, bbox_inches='tight',
+    figure.set_size_inches(15, 12)
+    plt.savefig(os.path.join(save_path, f"{save_name}_continent.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure
     plt.clf()
@@ -1581,7 +1788,7 @@ def plot_world_map_proportion(country_proportions_df, data_column, save_path):
     Save df with data
     """
     new_world_save = new_world.loc[:, ["NAME", "proportion", "CONTINENT", "continent_proportion"]]
-    new_world_save.to_csv(os.path.join(save_path, "proportion_geographic.csv"), index=False)
+    new_world_save.to_csv(os.path.join(save_path, f"{save_name}.csv"), index=False)
 
     return
 
