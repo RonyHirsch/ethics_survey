@@ -1309,6 +1309,17 @@ def calculate_ics_proportions(df_ics, save_path, prefix="", suffix=""):
     return plot_df
 
 
+def ics_group_map(row):  # x
+    if row[survey_mapping.ICS_Q_NAME_MAP[survey_mapping.ICS_Q_CONS_WO_INT]] == 0 and row[survey_mapping.ICS_Q_NAME_MAP[survey_mapping.ICS_Q_CONS_WO_SENS]] == 0:
+        return "Multidimensional"
+    if row[survey_mapping.ICS_Q_NAME_MAP[survey_mapping.ICS_Q_CONS_WO_INT]] == 0 and row[survey_mapping.ICS_Q_NAME_MAP[survey_mapping.ICS_Q_CONS_WO_SENS]] == 1:
+        return "Cognitive"
+    if row[survey_mapping.ICS_Q_NAME_MAP[survey_mapping.ICS_Q_CONS_WO_INT]] == 1 and row[survey_mapping.ICS_Q_NAME_MAP[survey_mapping.ICS_Q_CONS_WO_SENS]] == 0:
+        return "Valence"
+    if row[survey_mapping.ICS_Q_NAME_MAP[survey_mapping.ICS_Q_CONS_WO_INT]] == 1 and row[survey_mapping.ICS_Q_NAME_MAP[survey_mapping.ICS_Q_CONS_WO_SENS]] == 1:
+        return "Other"
+
+
 def ics(analysis_dict, save_path, df_earth_cluster=None, ms_features_order_df=None, feature_colors=None):
     """
     Answers to the "Do you think a creature/system can have intentions/consciousness/sensations w/o having..?" section
@@ -1338,16 +1349,6 @@ def ics(analysis_dict, save_path, df_earth_cluster=None, ms_features_order_df=No
                        "Valence": "Possible w/o intentions, but not w/o sensations",
                        "Other": "Possible w/o both sensations and intentions"}
 
-    def ics_group_map(row):  # x
-        if row[survey_mapping.ICS_Q_NAME_MAP[survey_mapping.ICS_Q_CONS_WO_INT]] == 0 and row[survey_mapping.ICS_Q_NAME_MAP[survey_mapping.ICS_Q_CONS_WO_SENS]] == 0:
-            return "Multidimensional"
-        if row[survey_mapping.ICS_Q_NAME_MAP[survey_mapping.ICS_Q_CONS_WO_INT]] == 0 and row[survey_mapping.ICS_Q_NAME_MAP[survey_mapping.ICS_Q_CONS_WO_SENS]] == 1:
-            return "Cognitive"
-        if row[survey_mapping.ICS_Q_NAME_MAP[survey_mapping.ICS_Q_CONS_WO_INT]] == 1 and row[survey_mapping.ICS_Q_NAME_MAP[survey_mapping.ICS_Q_CONS_WO_SENS]] == 0:
-            return "Valence"
-        if row[survey_mapping.ICS_Q_NAME_MAP[survey_mapping.ICS_Q_CONS_WO_INT]] == 1 and row[survey_mapping.ICS_Q_NAME_MAP[survey_mapping.ICS_Q_CONS_WO_SENS]] == 1:
-            return "Other"
-
     df_qs = df_ics[[process_survey.COL_ID] + list(survey_mapping.ICS_Q_NAME_MAP.keys())]
     df_qs.rename(columns=survey_mapping.ICS_Q_NAME_MAP, inplace=True)
     df_qs.to_csv(os.path.join(result_path, "i_c_s_ans.csv"), index=False)
@@ -1364,15 +1365,45 @@ def ics(analysis_dict, save_path, df_earth_cluster=None, ms_features_order_df=No
     result["Group Name"] = result["Group"].map(group_names_map)
     color_list = ["#e29578", "#ffddd2", "#dedbd2", "#84a98c"]
     plotter.plot_categorical_bars(categories_prop_df=result, data_col="proportion",
+                                  order=["Multidimensional", "Cognitive", "Valence", "Other"],
                                   category_col="Group Name", y_min=0, y_max=105, y_skip=10,
                                   delete_y=False, add_pcnt=True,
                                   categories_colors=color_list, text_wrap_width=16,
                                   save_path=result_path, save_name=f"ics_all_necessary ingredients", fmt="svg")
 
-
+    """
+    Do these groups belong to different clusters in the EiD dilemma?
+    """
     # tag them per group
     df_relevant_tagged = df_relevant.copy()
     df_relevant_tagged["Group"] = df_relevant_tagged.apply(lambda row: ics_group_map(row), axis=1)
+
+    if df_earth_cluster is not None:
+        df_earth_relevant = df_earth_cluster[[process_survey.COL_ID, "Cluster"]]
+        merged = pd.merge(df_relevant_tagged, df_earth_relevant, on=process_survey.COL_ID)
+        """
+        create a contingency table for a chi-squared test 
+        """
+        contingency_table = pd.crosstab(merged["Cluster"], merged["Group"])
+        chisquare_result = helper_funcs.chi_squared_test(contingency_table=contingency_table)
+        chisquare_result.to_csv(os.path.join(result_path, "c_wo_stuff_clusters.csv"), index=False)
+
+        count_df = merged.groupby(["Cluster", "Group"]).size().reset_index(name="count")
+        group_totals = merged.groupby("Cluster").size().reset_index(name="total")
+        count_df = count_df.merge(group_totals, on="Cluster")
+        count_df["Proportion"] = (count_df["count"] / count_df["total"]) * 100
+        plotter.plot_categorical_bars_hued(categories_prop_df=count_df,
+                                           x_col="Group", x_label=f"ICS Group",
+                                           order=["Multidimensional", "Cognitive", "Valence", "Other"],
+                                           category_col="Cluster", data_col="Proportion",
+                                           categories_colors={0: "#EDAE49", 1: "#102E4A"},
+                                           save_path=result_path, save_name=f"ics_group_per_EiDCluster", fmt="svg",
+                                           y_min=0, y_max=101, y_skip=10, delete_y=False,
+                                           inch_w=15, inch_h=12, add_pcnt=False)
+
+
+
+
 
 
     """
@@ -1391,7 +1422,7 @@ def ics(analysis_dict, save_path, df_earth_cluster=None, ms_features_order_df=No
         groups = ms_with_group["Group"].unique().tolist()
         for group in groups:
             ms_features_group = ms_with_group[ms_with_group["Group"] == group]
-            ms_features_order_df, feature_colors = calculate_moral_consideration_features(
+            ms_features_order_df, feature_colors, _ = calculate_moral_consideration_features(
                 ms_features_df=ms_features_group,
                 result_path=result_path,
                 save_prefix=f"ms_features_{group}_",
@@ -1542,30 +1573,7 @@ def ics(analysis_dict, save_path, df_earth_cluster=None, ms_features_order_df=No
                                        inch_w=15, inch_h=12, add_pcnt=True, order=None)
 
 
-    """
-    Do these groups belong to different clusters in the EiD dilemma?
-    """
-    if df_earth_cluster is not None:
-        df_earth_relevant = df_earth_cluster[[process_survey.COL_ID, "Cluster"]]
-        merged = pd.merge(df_relevant_tagged, df_earth_relevant, on=process_survey.COL_ID)
-        """
-        create a contingency table for a chi-squared test 
-        """
-        contingency_table = pd.crosstab(merged["Cluster"], merged["Group"])
-        chisquare_result = helper_funcs.chi_squared_test(contingency_table=contingency_table)
-        chisquare_result.to_csv(os.path.join(result_path, "c_wo_stuff_clusters.csv"), index=False)
 
-        count_df = merged.groupby(["Cluster", "Group"]).size().reset_index(name="count")
-        group_totals = merged.groupby("Cluster").size().reset_index(name="total")
-        count_df = count_df.merge(group_totals, on="Cluster")
-        count_df["Proportion"] = (count_df["count"] / count_df["total"]) * 100
-        plotter.plot_categorical_bars_hued(categories_prop_df=count_df,
-                                           x_col="Group", x_label=f"ICS Group",
-                                           category_col="Cluster", data_col="Proportion",
-                                           categories_colors={0: "#EDAE49", 1: "#102E4A"},
-                                           save_path=result_path, save_name=f"ics_group_per_EiDCluster", fmt="svg",
-                                           y_min=0, y_max=101, y_skip=10, delete_y=False,
-                                           inch_w=15, inch_h=12, add_pcnt=True, order=None)
 
 
 
@@ -1698,7 +1706,7 @@ def calculate_kill_for_test(df, save_path, prefix="", suffix=""):
     return
 
 
-def kill_for_test(analysis_dict, save_path, df_earth_cluster):
+def kill_for_test(analysis_dict, save_path, df_earth_cluster=None):
     """
     Answers to the "Do you think a creature/system can have intentions/consciousness/sensations w/o having..?" section
     """
@@ -1809,17 +1817,26 @@ def kill_for_test(analysis_dict, save_path, df_earth_cluster):
             transformed_data.append([response_id, entity_id, consciousness, intentions, sensations, kill])
 
 
-    # Create the updated DataFrame
-    transformed_df = pd.DataFrame(transformed_data, columns=[process_survey.COL_ID, "entity",
-                                                             "Consciousness", "Intentions", "Sensations", "kill"])
-    if df_earth_cluster is not None:
-        df_clusters = df_earth_cluster[[process_survey.COL_ID, "Cluster"]]
-        transformed_df = transformed_df.merge(df_clusters, on=process_survey.COL_ID)
-    transformed_df.to_csv(os.path.join(result_path, "kill_to_pass_coded_per_entity.csv"), index=False)
+    """
+    Is killing related to people's attitude towards the relationship between consciousness, sensations and intentions?
+    """
+    df_ics = analysis_dict["ics"].copy()
+    df_ics_relevant = df_ics.loc[:, [process_survey.COL_ID] + list(survey_mapping.ICS_Q_NAME_MAP.keys())]
+    df_ics_relevant[list(survey_mapping.ICS_Q_NAME_MAP.keys())] = df_ics_relevant[list(survey_mapping.ICS_Q_NAME_MAP.keys())].replace(survey_mapping.ANS_YESNO_MAP)
+    df_ics_relevant.rename(columns=survey_mapping.ICS_Q_NAME_MAP, inplace=True)
+    df_ics_relevant["Group"] = df_ics_relevant.apply(lambda row: ics_group_map(row), axis=1)
 
-    # filter out responses that are all-no / all-yes; I don't do that because then the comparison is unfair.
-    #condition = ~df_test_binary[one_feature + two_features].isin([1, 0]).any(axis=1)
-    #filtered_df = df_test_binary[condition]
+    df_test_relevant = df_test_orig.loc[:, [process_survey.COL_ID] + list(survey_mapping.important_test_kill_tokens.keys())]
+    df_test_relevant.rename(columns=survey_mapping.important_test_kill_tokens, inplace=True)
+    df_merged = pd.merge(df_ics_relevant.loc[:, [process_survey.COL_ID, "Group"]], df_test_relevant, on=process_survey.COL_ID)
+    kill_columns = list(survey_mapping.important_test_kill_tokens.values())
+    df_long = df_merged.melt(id_vars=[process_survey.COL_ID, "Group"],
+                             value_vars=kill_columns,
+                             var_name="Creature",
+                             value_name="Kill_Response")
+    df_long["Kill_binary"] = df_long["Kill_Response"].str.startswith("Yes").astype(int)
+    df_long.to_csv(os.path.join(result_path, f"kill_per_creature_icsGroup.csv"), index=False)
+
 
     """
     Do the killing features explain the clusters?
@@ -1828,6 +1845,13 @@ def kill_for_test(analysis_dict, save_path, df_earth_cluster):
     so we will ask whether a person’s pattern of decisions across different attribute combinations 
     (e.g., their responses to entities with or without certain attributes) predicts their Cluster.
     """
+    # Create the updated DataFrame
+    transformed_df = pd.DataFrame(transformed_data, columns=[process_survey.COL_ID, "entity",
+                                                             "Consciousness", "Intentions", "Sensations", "kill"])
+    if df_earth_cluster is not None:
+        df_clusters = df_earth_cluster[[process_survey.COL_ID, "Cluster"]]
+        transformed_df = transformed_df.merge(df_clusters, on=process_survey.COL_ID)
+    transformed_df.to_csv(os.path.join(result_path, "kill_to_pass_coded_per_entity.csv"), index=False)
     df_earth_cluster_relevant = df_earth_cluster[[process_survey.COL_ID, "Cluster"]]
     merged = pd.merge(df_test_binary_clean, df_earth_cluster_relevant, on=process_survey.COL_ID)
     merged.to_csv(os.path.join(result_path, "kill_to_pass_cluster.csv"), index=False)
@@ -1865,28 +1889,95 @@ def kill_for_test(analysis_dict, save_path, df_earth_cluster):
         result_df = pd.concat(stats_list)
         result_df.to_csv(os.path.join(result_path, f"chisqared_earthInDanger_clusters_per_Q.csv"), index=False)
 
-    c = 3  # TODO: DELETE THIS
 
     """
-    Follow up: Separate the killing choices based on people who even think it's possible to have one feature without
-    the others ('Yes' in the ics cluster of questions), and those who do not ('No') and see if they differ.
+    Can killings be predicted by demographics?
+    Random Forest classifier
     """
-    df_ics = analysis_dict["ics"].copy()
-    # key = ics question (is it possible); value = kill question (would you kill it)
-    ics_v_kill = {"Do you think a creature/system can have intentions/goals without being conscious?":
-                      [
-                          "A creature/system that only has plans/goals and intentions (can plan to perform certain actions in the future), but is not conscious (not experiencing) and cannot feel positive/negative sensations (pleasure/pain)",
-                          "A creature/system that can feel positive/negative sensations (pleasure/pain) and also has plans/goals and intentions (can plan to perform certain actions in the future), but is not conscious (not experiencing)"],
-                  "Do you think a creature/system can be conscious without having intentions/goals?":
-                      [
-                          "A creature/system that does not have plans/goals or intentions, and cannot feel positive/negative sensations (pleasure/pain), but is conscious (for example, sees colors, but does not feel anything negative or positive, and cannot plan)",
-                          "A creature/system that is both conscious (has experiences) and can feel positive/negative sensations (pleasure/pain), but does not have plans/goals or intentions (for example, can't plan to avoid something that causes pain)"],
-                  "Do you think a creature/system can have positive or negative sensations (pleasure/pain) without being conscious?":
-                      [
-                          "A creature/system that can only feel positive/negative sensations (pleasure/pain), but is not conscious (not experiencing) and does not have plans/goals or intentions (for example, can't plan to avoid something that causes pain)"],
-                  "Do you think a creature/system can be conscious without having positive or negative sensations (pleasure/pain)?":
-                      [
-                          "A creature/system that is both conscious (has experiences) and has plans/goals and intentions (can plan to perform certain actions in the future), but cannot feel positive/negative sensations (pleasure/pain)"]}
+
+
+
+    demographics_df = analysis_dict["demographics"].copy()
+    age_bins = [18, 25, 35, 45, 55, 65, 75, np.inf]
+    age_labels = ["18-25", "26-35", "36-45", "46-55", "56-65", "66-75", "76+"]
+    demographics_df["age_group"] = pd.cut(demographics_df[survey_mapping.Q_AGE], bins=age_bins, labels=age_labels, right=True, include_lowest=True)
+
+    categorical_cols = ["How do you describe yourself?",  # gender
+                        "In which country do you currently reside?",  # country
+                        "In what topic?",  # education topic: the education itself is ORDINAL
+                        "education_Other: please specify",
+                        "Current primary employment domain",
+                        "employment_Other: please specify"]
+
+    order_cols = ["age_group",
+                  "What is your education background?_coded"]
+
+    result = helper_funcs.run_random_forest_pipeline(dataframe=c_graded_with_personal_info,
+                                                     dep_col=f"binary_{question}",
+                                                     categorical_cols=categorical_cols,
+                                                     save_path=result_path, save_prefix="demographics",
+                                                     order_cols=experience_cols, rare_class_threshold=5, cv_folds=10,
+                                                     scoring_method="accuracy")
+
+    killing_with_personal = pd.merge(df_test_orig, demographics_df, on=process_survey.COL_ID)
+
+    for col in survey_mapping.ICS_Q_NAME_MAP:
+        c = 3
+
+    result = helper_funcs.run_random_forest_pipeline(dataframe=killing_with_personal,
+                                                     dep_col="con_intel_related",
+                                                     categorical_cols=categorical_cols,
+                                                     save_path=result_path, save_prefix="demographics",
+                                                     order_cols=experience_cols, rare_class_threshold=5, cv_folds=10,
+                                                     scoring_method="accuracy")
+
+    con_demo_relevant = con_demo.drop(columns=["date", "date_start", "date_end", "duration_sec", "language"],
+                                      inplace=False)
+    df_cluster_relevant = df_earth_cluster.loc[:, [process_survey.COL_ID, "Cluster"]]
+    cluster_with_demographics = pd.merge(con_demo_relevant, df_cluster_relevant, on=process_survey.COL_ID)
+    cluster_with_demographics.to_csv(os.path.join(result_path, "cluster_with_demographics.csv"), index=False)
+
+
+
+    order_cols = ["What is your education background?_coded"]
+
+    """
+    Can killings be predicted by experience?
+    Random Forest classifier
+    """
+    ai_exp = analysis_dict["ai_exp"][[process_survey.COL_ID, survey_mapping.Q_AI_EXP]]
+    animal_exp = analysis_dict["animal_exp"][[process_survey.COL_ID, survey_mapping.Q_ANIMAL_EXP]]
+    ethics_exp = analysis_dict["ethics_exp"][[process_survey.COL_ID, survey_mapping.Q_ETHICS_EXP]]
+    con_exp = analysis_dict["consciousness_exp"][[process_survey.COL_ID, survey_mapping.Q_CONSC_EXP]]
+
+    experience_df = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID], how='outer'),
+                           [ai_exp, animal_exp, ethics_exp, con_exp])
+
+    con_exp_relevant = merged_experience_df.loc[:, [process_survey.COL_ID,
+                                                    survey_mapping.Q_CONSC_EXP,
+                                                    survey_mapping.Q_AI_EXP,
+                                                    survey_mapping.Q_ANIMAL_EXP,
+                                                    survey_mapping.Q_ETHICS_EXP]]
+    df_cluster_relevant = df_earth_cluster.loc[:, [process_survey.COL_ID, "Cluster"]]
+    cluster_with_exp = pd.merge(con_exp_relevant, df_cluster_relevant, on=process_survey.COL_ID)
+    cluster_with_exp.to_csv(os.path.join(result_path, "cluster_with_experience.csv"), index=False)
+
+    cluster_with_exp.rename(columns=relevant_cols, inplace=True)
+
+    categorical_cols = []
+    order_cols = [relevant_cols[survey_mapping.Q_CONSC_EXP], relevant_cols[survey_mapping.Q_AI_EXP],
+                  relevant_cols[survey_mapping.Q_ANIMAL_EXP], relevant_cols[survey_mapping.Q_ETHICS_EXP]]
+
+    helper_funcs.run_random_forest_pipeline(dataframe=cluster_with_exp, dep_col="Cluster",
+                                            categorical_cols=categorical_cols,
+                                            order_cols=order_cols, save_path=result_path, save_prefix="",
+                                            rare_class_threshold=5, n_permutations=1000,
+                                            scoring_method="accuracy",
+                                            cv_folds=10)
+
+    rony = 5
+
+
 
     return
 
@@ -2874,49 +2965,72 @@ def graded_consciousness(analysis_dict, save_path, df_earth_cluster=None, remove
                                            save_name="c_graded_per_cons_exp_props",
                                            save_path=result_path, plt_title=survey_mapping.Q_GRADED_UNEQUAL)
 
+
+    """
+    If we have the cluster information here, can agreement with the assertions explain the clusters
+    """
+    assertions = [survey_mapping.Q_GRADED_EQUAL, survey_mapping.Q_GRADED_UNEQUAL, survey_mapping.Q_GRADED_INCOMP]
+    if df_earth_cluster is not None:
+        df_earth_cluster_relevant = df_earth_cluster[[process_survey.COL_ID, "Cluster"]]
+        c_graded_relevant = c_graded[[process_survey.COL_ID] + assertions]
+        merged = pd.merge(c_graded_relevant, df_earth_cluster_relevant, on=process_survey.COL_ID)
+        # modelling in R
+        column_mapping_dict = {survey_mapping.Q_GRADED_EQUAL: "if_c_then_equal",
+                               survey_mapping.Q_GRADED_UNEQUAL: "if_c_then_notNec_equal",
+                               survey_mapping.Q_GRADED_INCOMP: "if_c_then_incomp"}
+        merged.rename(columns=column_mapping_dict, inplace=True)
+        assertions_mapped = [column_mapping_dict[a] for a in assertions]
+        merged.to_csv(os.path.join(result_path, "graded_qs_with_EiDCluster.csv"), index=False)
+        """
+        Let's do a series of Mann-Whitney U-tests to see if with each assertion, agreement is different between the 
+        two clusters. 
+        """
+        cluster0 = merged[merged["Cluster"] == 0]
+        cluster1 = merged[merged["Cluster"] == 1]
+        results = list()
+        stats = list()
+        for a in assertions_mapped:
+            group_0 = cluster0.loc[:, a]
+            group_1 = cluster1.loc[:, a]
+            result = helper_funcs.mann_whitney_utest(list_group1=group_0.tolist(), list_group2=group_1.tolist())
+            result["question"] = a
+            results.append(result)
+            summary_df = merged.groupby("Cluster")[a].agg(["mean", "std", "min", "max", "count"]).reset_index()
+            summary_df["question"] = a
+            stats.append(summary_df)
+
+            # plot the agreement with the assertion for each cluster
+            merged_relevant = merged.loc[:, [process_survey.COL_ID, a, "Cluster"]]
+            count_df = merged_relevant.groupby(["Cluster", a]).size().reset_index(name='count')
+            count_df["total"] = count_df.groupby("Cluster")["count"].transform('sum')
+            count_df["proportion"] = 100 * count_df["count"] / count_df["total"]
+            count_df.to_csv(os.path.join(result_path, f"EiD_cluster_per_{a}.csv"), index=False)
+
+            plot_df = count_df.pivot(index="Cluster", columns=a, values="proportion").fillna(0)
+            plot_df.columns = plot_df.columns.astype(int)
+            cols = [1, 2, 3, 4]
+            cols_colors = {1: "#DB5461", 2: "#fb9a99", 3: "#70a0a4", 4: "#26818B"}
+            plot_df = plot_df.reset_index()  # add Cluster as a column again for use in the plotting
+            plotter.plot_expertise_proportion_bars(
+                df=plot_df,
+                x_axis_exp_col_name="Cluster",
+                x_label="Cluster",
+                cols=cols,
+                cols_colors=cols_colors,
+                y_ticks=[0, 25, 50, 75, 100],
+                save_name=f"{a}_with_EiDCluster",
+                save_path=result_path,
+                plt_title=f"{a} per Cluster",
+                fmt='svg',
+                x_map={0: '0', 1: '1'})
+
+        result_df = pd.concat(results).reset_index(drop=True, inplace=False)
+        result_df.to_csv(os.path.join(result_path, f"graded_qs_with_EiDCluster_MWU.csv"), index=False)
+        stats_df = pd.concat(stats)
+        stats_df.to_csv(os.path.join(result_path, f"graded_qs_with_EiDCluster_stats.csv"),index=False)
+
     return
 
-
-    """
-    ************ DEPRECATED *************
-    """
-
-
-    """
-    Random Forest Classifier: Personal Details --> Agreement with the graded consciousness sentence
-    For that, we binarize the agreement with this sentence 
-    """
-    question = survey_mapping.Q_GRADED_UNEQUAL
-    demographics_df = analysis_dict["demographics"]
-    age_bins = [18, 25, 35, 45, 55, 65, 75, np.inf]
-    age_labels = ["18-25", "26-35", "36-45", "46-55", "56-65", "66-75", "76+"]
-    demographics_df["age_group"] = pd.cut(demographics_df[survey_mapping.Q_AGE], bins=age_bins, labels=age_labels,
-                                          right=True, include_lowest=True)
-    categorical_cols = ["age_group", "How do you describe yourself?", "What is your education background?",
-                        "Current primary employment domain"]
-
-    ai_exp = analysis_dict["ai_exp"][[process_survey.COL_ID, survey_mapping.Q_AI_EXP]]
-    animal_exp = analysis_dict["animal_exp"][[process_survey.COL_ID, survey_mapping.Q_ANIMAL_EXP]]
-    ethics_exp = analysis_dict["ethics_exp"][[process_survey.COL_ID, survey_mapping.Q_ETHICS_EXP]]
-    con_exp = analysis_dict["consciousness_exp"][[process_survey.COL_ID, survey_mapping.Q_CONSC_EXP]]
-    experience_df = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID], how='outer'),
-                           [ai_exp, animal_exp, ethics_exp, con_exp])
-    experience_cols = [col for col in experience_df.columns if col.startswith("On a scale")]
-
-    c_graded_with_personal_info = reduce(lambda left, right:
-                                         pd.merge(left, right, on=[process_survey.COL_ID], how='outer'),
-                                         [demographics_df, experience_df, c_graded[[process_survey.COL_ID, question]]])
-    # turn into binary so that we can do a random forest classifier
-    c_graded_with_personal_info[f"binary_{question}"] = np.where(c_graded_with_personal_info[question] <= 2, 0, 1)
-    c_graded_with_personal_info.to_csv(os.path.join(result_path, "demographics_df.csv"), index=False)
-
-    result = helper_funcs.run_random_forest_pipeline(dataframe=c_graded_with_personal_info,
-                                                     dep_col=f"binary_{question}",
-                                                     categorical_cols=categorical_cols,
-                                                     save_path=result_path, save_prefix="demographics",
-                                                     order_cols=experience_cols, rare_class_threshold=5, cv_folds=10,
-                                                     scoring_method="accuracy")
-    return
 
 
     """
@@ -2929,78 +3043,6 @@ def graded_consciousness(analysis_dict, save_path, df_earth_cluster=None, remove
         c_graded = c_graded[~c_graded[process_survey.COL_ID].isin(c_subs)].reset_index(drop=True, inplace=False)
 
     # now, other things
-
-    """
-    """
-    if df_earth_cluster is not None:
-        df_earth_cluster_relevant = df_earth_cluster[[process_survey.COL_ID, "Cluster"]]
-        c_graded_relevant = c_graded[[process_survey.COL_ID, survey_mapping.Q_GRADED_EQUAL,
-                                      survey_mapping.Q_GRADED_UNEQUAL,
-                                      survey_mapping.Q_GRADED_INCOMP]]
-        merged = pd.merge(c_graded_relevant, df_earth_cluster_relevant, on=process_survey.COL_ID)
-        # modelling in R
-        column_mapping_dict = {survey_mapping.Q_GRADED_EQUAL: "if_c_then_equal",
-                               survey_mapping.Q_GRADED_UNEQUAL: "if_c_then_notNec_equal",
-                               survey_mapping.Q_GRADED_INCOMP: "if_c_then_incomp"}
-        merged.rename(columns=column_mapping_dict, inplace=True)
-        # convert to long:
-        df_long = pd.melt(
-            merged,
-            id_vars=[process_survey.COL_ID, "Cluster"],
-            value_vars=["if_c_then_equal", "if_c_then_notNec_equal", "if_c_then_incomp"],
-            var_name="assertion",
-            value_name="agreement"
-        )
-        df_long.to_csv(os.path.join(result_path, "graded_qs_with_EiDCluster.csv"), index=False)
-        summary_df = df_long.groupby(["Cluster", "assertion"])["agreement"].agg(
-            count="count",
-            mean="mean",
-            std="std",
-            min="min",
-            max="max"
-        ).reset_index()
-        summary_df.to_csv(os.path.join(result_path, "graded_qs_with_EiDCluster_descriptives.csv"), index=False)
-
-        import seaborn as sns
-        import matplotlib.pyplot as plt
-
-        plt.figure(figsize=(14, 6))
-        sns.set_style("ticks")
-        plt.rcParams['font.family'] = "Calibri"
-
-        jitter_strength = 0.2
-        df_long['rating_jittered'] = df_long['agreement'] + np.random.uniform(-jitter_strength, jitter_strength, size=len(df_long))
-
-        # Point plot for means and SE
-        ax = sns.pointplot(
-            data=df_long,
-            x='assertion', y='agreement', hue='Cluster',
-            dodge=0.3, markers='o', capsize=0.1, errorbar=('ci', 95),
-            linestyles='', palette={0: "#EDAE49", 1: "#102E4A"})
-
-        # Overlay with jittered individual dots
-        sns.stripplot(
-            data=df_long,
-            x='assertion', y='rating_jittered', hue='Cluster',
-            dodge=True, jitter=True, alpha=0.25, size=6, palette={0: "#EDAE49", 1: "#102E4A"})
-
-        # Remove duplicate legends
-        handles, labels = ax.get_legend_handles_labels()
-        unique = dict(zip(labels, handles))
-        plt.legend(unique.values(), unique.keys(), title="")
-
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-
-        plt.xlabel('Assertion', fontsize=14)
-        plt.ylabel('Agreement', fontsize=14)
-        plt.xticks(fontsize=14)
-        plt.yticks(ticks=[1, 2, 3, 4], fontsize=14)
-        plt.title('')
-        plt.tight_layout()
-        plt.savefig(os.path.join(result_path, f"fig.svg"), format=f"svg", dpi=1000, bbox_inches='tight',
-                    pad_inches=0.01)
-        c = 4
 
 
     """
@@ -3560,6 +3602,14 @@ def demographics(analysis_dict, save_path, df_earth_cluster=None):
 
     if df_earth_cluster is not None:
         con_demo_relevant = con_demo.drop(columns=["date", "date_start", "date_end", "duration_sec", "language"], inplace=False)
+        age_bins = [18, 25, 35, 45, 55, 65, 75, np.inf]
+        age_labels = ["18-25", "26-35", "36-45", "46-55", "56-65", "66-75", "76+"]
+        age_dict = {age_labels[i]: i for i in range(len(age_labels))}
+        con_demo_relevant["age_group"] = pd.cut(con_demo_relevant[survey_mapping.Q_AGE], bins=age_bins,
+                                                labels=age_labels, right=True, include_lowest=True)
+        # make it an ORDINAL column
+        con_demo_relevant["age_group_coded"] = con_demo_relevant["age_group"].map(age_dict)
+
         df_cluster_relevant = df_earth_cluster.loc[:, [process_survey.COL_ID, "Cluster"]]
         cluster_with_demographics = pd.merge(con_demo_relevant, df_cluster_relevant, on=process_survey.COL_ID)
         cluster_with_demographics.to_csv(os.path.join(result_path, "cluster_with_demographics.csv"), index=False)
@@ -3571,11 +3621,12 @@ def demographics(analysis_dict, save_path, df_earth_cluster=None):
                             "Current primary employment domain",
                             "employment_Other: please specify"]
 
-        order_cols = ["What is your education background?_coded"]
+        order_cols = ["age_group_coded",  # age group ORDINAL
+                      "What is your education background?_coded"]
 
         helper_funcs.run_random_forest_pipeline(dataframe=cluster_with_demographics, dep_col="Cluster",
                                                 categorical_cols=categorical_cols,
-                                                order_cols=order_cols, save_path=result_path, save_prefix="",
+                                                order_cols=order_cols, save_path=result_path, save_prefix="clusterEiD",
                                                 rare_class_threshold=5, n_permutations=1000,
                                                 scoring_method="accuracy",
                                                 cv_folds=10)
@@ -3904,12 +3955,23 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     else:
         df_earth_cluster = earth_in_danger(analysis_dict, save_path)
 
+
+
+    #kill_for_test(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
+    demographics(analysis_dict, save_path, df_earth_cluster=df_earth_cluster)
+    exit()
+
+    ics(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster,
+        ms_features_order_df=None, feature_colors=None)
+
+    graded_consciousness(analysis_dict, save_path, df_earth_cluster=df_earth_cluster, remove_contradicting=True)
+
+
     ms_features_order_df, feature_colors = moral_consideration_features(analysis_dict=analysis_dict,
                                                                         save_path=save_path,
                                                                         df_earth_cluster=df_earth_cluster)
-    exit()
     experience(analysis_dict, save_path, df_earth_cluster=df_earth_cluster)
-    demographics(analysis_dict, save_path, df_earth_cluster=df_earth_cluster)
+
 
     other_creatures(analysis_dict=analysis_dict, save_path=save_path, sort_together=False,
                     df_earth_cluster=df_earth_cluster)
@@ -3918,19 +3980,9 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
 
     consciousness_intelligence(analysis_dict, save_path)
 
-    graded_consciousness(analysis_dict, save_path, df_earth_cluster=df_earth_cluster, remove_contradicting=True)
+
 
     zombie_pill(analysis_dict, save_path, feature_order_df=None, feature_color_map=None)
-
-    ics(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster,
-        ms_features_order_df=None, feature_colors=None)
-
-
-    kill_for_test(analysis_dict=analysis_dict, save_path=save_path, df_earth_cluster=df_earth_cluster)
-
-
-
-
 
 
 

@@ -844,7 +844,8 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
 
 
 def plot_expertise_proportion_bars(df, x_axis_exp_col_name, x_label, cols, cols_colors, y_ticks,
-                                   save_name, save_path, plt_title="", fmt="svg", x_map=None):
+                                   save_name, save_path, plt_title="", fmt="svg", x_map=None,
+                                   plot_mean=False, stats_df=None):
     sns.set_style("ticks")
     sns.despine(right=True, top=True)
     plt.rcParams['font.family'] = "Calibri"
@@ -872,12 +873,24 @@ def plot_expertise_proportion_bars(df, x_axis_exp_col_name, x_label, cols, cols_
             bottom = df[label] if bottom is None else bottom + df[label]
         ax.set_xticks(sorted(x_vals.unique()))
 
+    if plot_mean:
+        if x_map is not None:
+            stats_df['x_val'] = stats_df[x_axis_exp_col_name].map(x_map)
+        else:
+            stats_df['x_val'] = stats_df[x_axis_exp_col_name]
+
+        for _, row in stats_df.iterrows():
+            sem = row["std"] / np.sqrt(row["count"])
+            ax.errorbar(
+                x=row["x_val"], y=row["mean"], yerr=sem, fmt="o", color="black", capsize=5, label="")
+
     # labels and styling
     ax.set_yticks(y_ticks)
     ax.set_yticklabels(y_ticks)
     ax.set_ylabel("Proportion")
     ax.set_xlabel(x_label)
     ax.legend(title=plt_title)
+    plt.title(plt_title)
 
     plt.tight_layout()
     sns.despine(right=True, top=True)
