@@ -273,14 +273,25 @@ ANS_THINK = "Thinking"
 ANS_OTHER = "Other"
 ALL_FEATURES = [ANS_LANG, ANS_SENS, ANS_SENTIENCE, ANS_PLAN, ANS_SELF, ANS_PHENOMENOLOGY, ANS_THINK, ANS_OTHER]
 
+PRIOS_Q_NONCONS = "Do you think non-conscious creatures/systems should be taken into account in moral decisions?"
+PRIOS_Q_CONS = "Do you think conscious creatures/systems should be taken into account in moral decisions?"
+PRIOS_Q_PEOPLE = "Do you think some people should have a higher moral status than others?"
+PRIOS_Q_ANIMALS = "Do you think some non-human animals should have a higher moral status than others?"
+
 moral_considerations_prios = {
-    "mc_Wc": "Do you think non-conscious creatures/systems should be taken into account in moral decisions?",
-    "mc_Wc_'no'": "Do you think conscious creatures/systems should be taken into account in moral decisions?",
-    "mc_human_prio": "Do you think some people should have a higher moral status than others?",
+    "mc_Wc": PRIOS_Q_NONCONS,
+    "mc_Wc_'no'": PRIOS_Q_CONS,
+    "mc_human_prio": PRIOS_Q_PEOPLE,
     "mc_human_prio_why": "What characterizes people with higher moral status?",
-    "mc_nonhuman_prio": "Do you think some non-human animals should have a higher moral status than others?",
+    "mc_nonhuman_prio": PRIOS_Q_ANIMALS,
     "mc_nonhuman_prio_why": "What characterizes animals with higher moral status?"
 }
+
+PRIOS_Q_NAME_MAP = {PRIOS_Q_NONCONS: "prios_nonCons",
+                    PRIOS_Q_CONS: "prios_cons",
+                    PRIOS_Q_PEOPLE: "prios_people",
+                    PRIOS_Q_ANIMALS: "prios_animals"}
+
 # answers: ANS_YES, ANS_NO, and free text
 
 

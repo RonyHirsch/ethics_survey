@@ -674,7 +674,7 @@ def plot_histogram(df, category_col, data_col, save_path, save_name, format="svg
 
 def plot_categorical_bars_layered(categories_prop_df, category_col, full_data_col, partial_data_col, categories_colors,
                                   save_path, save_name, fmt="svg", y_min=0, y_max=100, y_skip=10,
-                                  inch_w=15, inch_h=12, order=None):
+                                  inch_w=15, inch_h=12, order=None, annotate_bar=False, annot_font_color="white"):
     plt.figure(figsize=(8, 6))
     sns.set_style("ticks")
     plt.rcParams['font.family'] = "Calibri"
@@ -691,11 +691,26 @@ def plot_categorical_bars_layered(categories_prop_df, category_col, full_data_co
         index = categories_prop_df.index[categories_prop_df[category_col] == category][0]  # category's index in df
 
         # full data
-        plt.bar(row[category_col], row[full_data_col], color=categories_colors[row[category_col]],
-                label="" if index == 0 else "", alpha=0.4)
+        full_bar = plt.bar(row[category_col], row[full_data_col], color=categories_colors[row[category_col]],
+                            label="" if index == 0 else "", alpha=0.4)
         # partial data
-        plt.bar(row[category_col], row[partial_data_col], color=categories_colors[row[category_col]],
-                label="" if index == 0 else "", alpha=1.0)
+        partial_bar = plt.bar(row[category_col], row[partial_data_col], color=categories_colors[row[category_col]],
+                              label="" if index == 0 else "", alpha=1.0)
+
+        if annotate_bar:
+            # Annotate full bar
+            for rect in full_bar:
+                height = rect.get_height()
+                if height > 0:
+                    plt.text(rect.get_x() + rect.get_width() / 2, rect.get_height() / 2,
+                             f"{height:.2f}%", ha='center', va='center', fontsize=20, color=annot_font_color)
+            # Annotate partial bar
+            for rect in partial_bar:
+                height = rect.get_height()
+                if height > 0:
+                    partial_bar_y_position = rect.get_y() + height / 2  # Adjust y position based on the height
+                    plt.text(rect.get_x() + rect.get_width() / 2, partial_bar_y_position,
+                             f"{height:.2f}%", ha='center', va='center', fontsize=20, color=annot_font_color)
 
     plt.yticks([y for y in np.arange(y_min, y_max, y_skip)], fontsize=16)
 
@@ -845,7 +860,7 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
 
 def plot_expertise_proportion_bars(df, x_axis_exp_col_name, x_label, cols, cols_colors, y_ticks,
                                    save_name, save_path, plt_title="", fmt="svg", x_map=None,
-                                   plot_mean=False, stats_df=None):
+                                   plot_mean=False, stats_df=None, annotate_bar=False, annot_font_color="white"):
     sns.set_style("ticks")
     sns.despine(right=True, top=True)
     plt.rcParams['font.family'] = "Calibri"
@@ -856,21 +871,31 @@ def plot_expertise_proportion_bars(df, x_axis_exp_col_name, x_label, cols, cols_
         # group and reorder according to x_map
         grouped = df.groupby(x_axis_exp_col_name).sum().reindex(x_map.keys())
         x_vals = [x_map[key] for key in grouped.index]
-        bottom = None
+        bottom = np.zeros(len(grouped))
         for label in cols:
-            ax.bar(x_vals, grouped[label],
-                   bottom=bottom, label=label, color=cols_colors[label], edgecolor='white')
-            bottom = grouped[label] if bottom is None else bottom + grouped[label]
+            values = grouped[label]
+            ax.bar(x_vals, values, bottom=bottom, label=label, color=cols_colors[label], edgecolor='white')
+            if annotate_bar:
+                for idx, (x, val, bot) in enumerate(zip(x_vals, values, bottom)):
+                    if val > 0:
+                        ax.text(x, bot + val / 2, f"{val:.1f}%", ha='center', va='center', fontsize=12,
+                                color=annot_font_color)
+            bottom += values
         ax.set_xticks(list(x_map.values()))
         ax.set_xticklabels(list(x_map.keys()))
     else:
         # assume df[x] is numeric
         x_vals = df[x_axis_exp_col_name]
-        bottom = None
+        bottom = np.zeros(len(df))
         for label in cols:
-            ax.bar(x_vals, df[label],
-                   bottom=bottom, label=label, color=cols_colors[label], edgecolor='white')
-            bottom = df[label] if bottom is None else bottom + df[label]
+            values = df[label]
+            ax.bar(x_vals, values, bottom=bottom, label=label, color=cols_colors[label], edgecolor='white')
+            if annotate_bar:
+                for idx, (x, val, bot) in enumerate(zip(x_vals, values, bottom)):
+                    if val > 0:
+                        ax.text(x, bot + val / 2, f"{val:.1f}%", ha='center', va='center', fontsize=10,
+                                color=annot_font_color)
+            bottom += values
         ax.set_xticks(sorted(x_vals.unique()))
 
     if plot_mean:

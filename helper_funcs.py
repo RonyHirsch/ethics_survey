@@ -217,9 +217,9 @@ def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols,
         plt.title(f"Cluster Proportion by '{col}' Rating")
         plt.xlabel(col)
         plt.ylabel("Proportion in Each Cluster")
-        fig1.savefig(os.path.join(save_path, f"{col}_cluster_distribution"))
+        fig1.savefig(os.path.join(save_path, f"{save_prefix}_{col}_cluster_distribution"))
         plt.close(fig1)
-        ct.to_csv(os.path.join(save_path, f"{col}_cluster_distribution.csv"))
+        ct.to_csv(os.path.join(save_path, f"{save_prefix}_{col}_cluster_distribution.csv"))
 
         # Mean experience by cluster
         fig2, ax2 = plt.subplots()
@@ -228,7 +228,7 @@ def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols,
         ax2.set_ylim(1, 5)
         fig2.savefig(os.path.join(save_path, f"{col}_mean_by_cluster"))
         plt.close(fig2)
-        df_model.loc[:, [dep_col, col]].to_csv(os.path.join(save_path, f"{col}_cluster_distribution.csv"))
+        df_model.loc[:, [dep_col, col]].to_csv(os.path.join(save_path, f"{save_prefix}_{col}_cluster_distribution.csv"))
 
     """
     SHAP (SHapley Additive exPlanations) analysis is a method for interpreting the predictions of machine learning 
@@ -272,7 +272,11 @@ def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols,
 
     # Save mean absolute SHAP values
     mean_abs_shap = np.mean(np.abs(shap_values_to_plot), axis=0).flatten()
-    mean_abs_shap.to_csv(os.path.join(save_path, f"{save_prefix}_shap_importances_{scoring_method}.csv"), index=False)
+    mean_abs_shap_df = pd.DataFrame(mean_abs_shap)
+    mean_abs_shap_df.to_csv(os.path.join(save_path, f"{save_prefix}_shap_importances_{scoring_method}.csv"), index=False)
+
+    feature_names = best_model.named_steps['preprocessor'].get_feature_names_out()
+    pd.DataFrame({'Feature': feature_names}).to_csv(os.path.join(save_path, f"{save_prefix}_shap_feature_names_{scoring_method}.csv"), index=False)
 
     # summary
     result = {
