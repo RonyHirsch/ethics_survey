@@ -634,8 +634,20 @@ def plot_null_hist(observed_alpha, null_alphas, parameter_name_xlabel, save_path
     return
 
 
-def plot_histogram(df, category_col, data_col, save_path, save_name, format="svg", color_palette="Greens_d", color=None,
-                   x_label="", y_label=""):
+def plot_histogram(df, category_col, data_col, save_path, save_name,
+                   format="svg", colors=None, x_label="", y_label="", ytick_interval=10):
+    """
+    Plot histogram data, given a df with categories (histogram groups), data (counts)
+    :param df: df
+    :param category_col: the bin column
+    :param data_col: the count / proportion column
+    :param save_path: where to save the data to
+    :param save_name: how should it be called
+    :param format: format of image to be saved
+    :param colors: list of expected colors, if None will just be in a default color
+    :param x_label: label of X axis
+    :param y_label: label of Y axis
+    """
 
     sns.set_style("ticks")
     sns.despine(right=True, top=True)
@@ -643,18 +655,17 @@ def plot_histogram(df, category_col, data_col, save_path, save_name, format="svg
 
     plt.figure(figsize=(20, 12))
 
-    if color is None:  # use our default palette
-        pal = sns.color_palette(color_palette, len(df))
-        data = df.to_numpy()
-        rank = data[:, 1].argsort().argsort()
-        colors = np.array(pal)[rank]
-        sns.barplot(x=data[:, 0], y=data[:, 1], palette=colors)
-    else:  # use color
-        sns.barplot(data=df, x=category_col, y=data_col, color=color)
+    if colors is not None:
+        sns.barplot(data=df, x=category_col, y=data_col, palette=colors)
+    else:
+        sns.barplot(data=df, x=category_col, y=data_col, color="#FFE8C2")
 
     plt.xticks(fontsize=20)
     plt.xlabel(x_label, fontsize=25)
-    plt.yticks(fontsize=22)
+
+    max_value = df[data_col].max()
+    y_max = int(math.ceil(max_value / ytick_interval)) * ytick_interval
+    plt.yticks(np.arange(0, y_max + 1, ytick_interval), fontsize=22)
     plt.ylabel(y_label, fontsize=25)
 
     ax = plt.gca()  # get current axis
@@ -801,7 +812,7 @@ def plot_categorical_bars_hued(categories_prop_df, x_col, category_col, data_col
 def plot_categorical_bars(categories_prop_df, category_col, data_col, categories_colors,
                           save_path, save_name, fmt="svg", y_min=0, y_max=100, y_skip=10, delete_y=True,
                           inch_w=15, inch_h=12, add_pcnt=True, order=None, text_wrap_width=13,
-                          x_label="", y_fontsize=28):
+                          x_label="", y_fontsize=28, title_text=""):
 
     plt.figure(figsize=(8, 6))
     sns.set_style("ticks")
@@ -846,6 +857,9 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
     ax = plt.gca()  # get current axis
     ax.spines["right"].set_visible(False)
     ax.spines["top"].set_visible(False)
+
+    # title
+    plt.title(f"{title_text}", fontsize=30)
 
     # save plot
     figure = plt.gcf()  # get current figure

@@ -60,14 +60,24 @@ def identify_auto_qs(sub_df, prolific_age_mismatch, save_path):
         # if we have people who gave the same ms rating AND the same c rating to everything, we suspect they skimmed it
         # did they also lie about their age?
         if prolific_age_mismatch is not None:  # not nan, paid sample
-            intersection_age = intersection[intersection["response_id"].isin(prolific_age_mismatch["response_id"].unique().tolist())]
+            intersection_age = intersection[intersection[COL_ID].isin(prolific_age_mismatch[COL_ID].unique().tolist())]
             if not(intersection_age.empty):
                 print(f"** SUSPECTED cheating partipants: N={intersection_age.shape[0]}; filtered out")
-                sub_df = sub_df[~sub_df["response_id"].isin(intersection_age["response_id"].tolist())]
+                sub_df = sub_df[~sub_df[COL_ID].isin(intersection_age[COL_ID].tolist())]
     return sub_df
 
 
 def bot_filter(sub_df, save_path, age_mismatch=None):
+    """
+    Filter out automatic responses or any response that doesn't feel like a genuine person actually responded to the
+    survey.
+    :param sub_df: the df with the responses to the survey
+    :param save_path: path to save data to
+    :param age_mismatch: whether to exclude based on mismatch between Prolific age (paid sample) and demographics
+    collected during the survey
+    :return: the filtered df
+    """
+
     shape_before = sub_df.shape[0]
     print(f"Before filtering: {shape_before} subjects in sample")
     # all those with a reCaptcha score that isn't perfect
@@ -113,6 +123,12 @@ def bot_filter(sub_df, save_path, age_mismatch=None):
 
 
 def analysis_prep(sub_df):
+    """
+    Prepare the sample df for analysis - create a dictionary for each question-block (as defined in survey_mapping) for
+    easier analysis.
+    :param sub_df: the sample df
+    :return:
+    """
     print(f"ANALYZED SAMPLE: N = {sub_df.shape[0]}")
     analysis_dict = dict()
     blocks = survey_mapping.question_blocks
@@ -129,35 +145,26 @@ def analysis_prep(sub_df):
 
 def process_values(sub_df):
     """
-    CORRECT FOR TECHNICAL GLITCHES
+    CORRECT FOR TECHNICAL GLITCHES:
+    This function corrects the actual response data to make sure it's unified and doesn't contain any weird things
+    that will prevent it from being processed.
     """
 
     """
-    When asked to rate how much they think a creature has moral status / consciousness, options were:
-    1 = "Does not have",
-    2 = "Probably doesn't have",
-    3 = "Probably has",
-    4 = "Has"
-    However, Qualtrics allowed them to also select "0". Therefore, we will code "0" as "1": does not have".
+    Ordinal scales started with "1" and ended with "4"/"5". However, in qualtrics, the lowest level could have also 
+    been not-marked (i.e., 0 or nan), which is why we need to correct for that in the following columns.
     """
     other_creature_cols = [col for col in sub_df.columns for item in survey_mapping.other_creatures_general if item in col]
-    additional_cols = ["If two creatures/systems are conscious, they are equally conscious"]
-    cols = other_creature_cols + additional_cols
+    exp_cols = [survey_mapping.Q_AI_EXP, survey_mapping.Q_ANIMAL_EXP, survey_mapping.Q_CONSC_EXP,survey_mapping.Q_ETHICS_EXP]
+    additional_cols = [survey_mapping.Q_GRADED_EQUAL, survey_mapping.Q_GRADED_UNEQUAL]
+    cols = other_creature_cols + exp_cols + additional_cols
+    sub_df[cols] = sub_df[cols].replace(np.nan, 1)
     sub_df[cols] = sub_df[cols].replace(0, 1)
-
-    """
-    When asked about their experience level on a scale from 1 to 5, the options were:
-    1 = "No experience, 2, 3, 4, 5
-    """
-    exp_cols = [survey_mapping.Q_AI_EXP, survey_mapping.Q_ANIMAL_EXP, survey_mapping.Q_CONSC_EXP, survey_mapping.Q_ETHICS_EXP]
-    for col in exp_cols:
-        sub_df[col] = sub_df[col].replace(np.nan, 1)
-        sub_df[col] = sub_df[col].replace(0, 1)
 
 
     """
     When asked about employment, some responded "Other" but then in the specifics, they wrote something that 
-    DOES appear in the options
+    DOES appear in the options. Let's convert that
     """
     curr_job_col = "Current primary employment domain"
     job_other = "employment_Other: please specify"
@@ -230,12 +237,22 @@ def process_values(sub_df):
 
 
 def process_survey(sub_df, save_path, age_mismatch=None):
+    """
+    Both the processing of the free and of the paid sample call this method, which takes a df of the survey results
+    and processes it.
+    :param sub_df: the df to be processed
+    :param save_path: where to save the results
+    :param age_mismatch: whether to exclude paid participants where the age doesn't match between their Prolific id
+    and their reported age
+    :return: the processed df
+    """
     # filter out participants who did not provide consent - they are not counted as participants in the study:
     sub_df = sub_df[sub_df[COL_CONSENT] == CONSENT_YES].reset_index(inplace=False, drop=True)  # in the free sample all of them consented (0 dropouts)
-    # filter out bots:
+    # filter out bots and any auto-response we suspect:
     print(f"Overall {sub_df.shape[0]} people participated in the study")
     sub_df = bot_filter(sub_df=sub_df, age_mismatch=age_mismatch, save_path=save_path)
     print(f"After filtering out suspected bots: {sub_df.shape[0]} participants")
+    # correct for technical glitches
     sub_df = process_values(sub_df)
     return sub_df
 
@@ -340,6 +357,10 @@ def processed_free_sample(subject_data_path, free_save_path):
 
 
 def calculate_proportions(df, categorical_cols, ordinal_cols):
+    """
+    In a given df, calculate the proportions of different response types in categorical_cols and ordinal_cols
+    :return: proportions
+    """
     proportions = {}
     for col in categorical_cols:
         proportions[col] = (df[col].value_counts(normalize=True) * 100).to_dict()
@@ -350,6 +371,13 @@ def calculate_proportions(df, categorical_cols, ordinal_cols):
 
 
 def compare_proportions(df1, df1_name, df2, df2_name, df3, df3_name):
+    """
+    Given three dataframes (full sample, exploratory, replication), calculate how similar the proportions of responses
+    are across them. This is used in order to check that the exploratory-replication split of the full sample
+    preserves the relationships of different response types in the columns which were defined as relevant
+
+    :return: a df containing the comparison
+    """
     diff_df1_df2 = (df1 - df2).abs()
     diff_df1_df3 = (df1 - df3).abs()
     diff_df2_df3 = (df2 - df3).abs()
@@ -373,6 +401,20 @@ def compare_proportions(df1, df1_name, df2, df2_name, df3, df3_name):
 
 
 def define_exploratory_replication_pops(sub_df, sub_dict, categorical_cols, ordinal_cols, replication_prop):
+    """
+    The method that actually does the splitting between exploratory and replication data given the full sample, and
+    the things that needs to be balanced across samples.
+    To do the actual splitting, we will use iterative stratification: https://pypi.org/project/iterative-stratification/
+    Specifically, MultilabelStratifiedShuffleSplit: https://github.com/trent-b/iterative-stratification
+
+    :param sub_df: the full sample dataframe with all the answers to the survey
+    :param sub_dict: the dict dividing the survey responses into blocks
+    :param categorical_cols: the categorical columns we need to balance
+    :param ordinal_cols: the ordinal columns we need to balance
+    :param replication_prop: the proportion of the replication sample out of the full sample between 0-1 (i.e., 0.5 is
+    50% so the split will be half exploratory, half replication)
+    :return:the df and analysis dicts of the exploratory and replication samples.
+    """
 
     # Convert ordinal variables to numeric, filling NaNs with the median
     for col in ordinal_cols:
@@ -400,13 +442,40 @@ def define_exploratory_replication_pops(sub_df, sub_dict, categorical_cols, ordi
     retest_df = sub_df.iloc[test_idx].reset_index(inplace=False, drop=True)
 
     # Now create the corresponding exploratory and retests dicts
-    exploratory_dict = {key: df[df["response_id"].isin(exploratory_df["response_id"])].reset_index(inplace=False, drop=True) for key, df in sub_dict.items()}
-    retest_dict = {key: df[df["response_id"].isin(retest_df["response_id"])].reset_index(inplace=False, drop=True) for key, df in sub_dict.items()}
+    exploratory_dict = {key: df[df[COL_ID].isin(exploratory_df[COL_ID])].reset_index(inplace=False, drop=True) for key, df in sub_dict.items()}
+    retest_dict = {key: df[df[COL_ID].isin(retest_df[COL_ID])].reset_index(inplace=False, drop=True) for key, df in sub_dict.items()}
 
     return exploratory_df, exploratory_dict, retest_df, retest_dict
 
 
 def manage_processing(prolific_data_path, free_data_path, all_save_path, load=False, exclude_age_mismatch=False):
+    """
+    This method manages the entire pre-processing pipeline of the full sample, including splitting it to exploratory
+    and replication samples. Notably, if we do not want the split to be re-done, do not run this function.
+
+    - Preprocess the samples (processed_paid_sample, processed_free_sample) and unify them
+    - Decide which columns are important for balancing between samples
+    - Make sure to convert and process them accordingly (e.g., age group)
+    - Split the sample into exploratory and replication, with a ratio of 30%-70%
+    (see call for define_exploratory_replication_pops)
+    - Test the result and report it so we know we're good
+
+    :param prolific_data_path: the path to the folder in which the prolific data is. This parameter is
+    expected to be a folder path, in which there is a folder named "raw", and in the "raw" we have 2 important csv
+    files: one with the demographics information from prolific (export), and one with the labels (answers export from
+    prolific).
+    :param free_data_path: he path to the folder in which the free data is. In there, we only have the csv of the
+    responses, as the demographics are collected solely from the qualtrics responses.
+    :param all_save_path: the path to a folder where we will keep all the data, after preprocessing it and splitting
+    it into exploratory and replication samples.
+    :param load: if True, loads the processed data AND RE-DOES THE EXPLOTAROTY-REPLICATION SPLIT.
+    *** If we do not want to re-do the split, there is NO NEED TO RUN THIS METHOD at all, see "manage_analysis" function
+    instead.
+    :param exclude_age_mismatch: a parameter that is transferred to "processed_paid_sample", where we have information
+    about age from two sources - the prolific profile informaiton, and the survey. If True, then participants with a
+    mismatch in ages are excluded; otherwise, they are kept in the sample.
+    :return:
+    """
     if load:
         # load paid
         with open(os.path.join(prolific_data_path, r"processed\processed_data.pkl"), "rb") as f:
@@ -448,30 +517,34 @@ def manage_processing(prolific_data_path, free_data_path, all_save_path, load=Fa
     # so first of all, we need to define the types of data we care about (want to balance)
     categorical_columns = [
         "source",
-        "Current primary employment domain",
-        "What is your education background?",
-        "In what topic?",  # might contain NaNs
-        "In which country do you currently reside?",
-        "How do you describe yourself?",
+        survey_mapping.Q_EMPLOYMENT,  # current primary employment domain
+        survey_mapping.Q_EDU,  # education level
+        survey_mapping.Q_EDU_FIELD,  # might contain NaNs
+        survey_mapping.Q_COUNTRY,  # country of residence
+        survey_mapping.Q_GENDER,  # gender
         "Do you have a pet?"
     ]
-    ordinal_columns = [
-        "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in ethics and morality?",
-        "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in the science of consciousness?",
-        "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your level of interaction or experience with animals?",
-        "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in artificial intelligence (AI) systems?"
+    ordinal_columns = [  # experience columns
+        survey_mapping.Q_ETHICS_EXP,
+        survey_mapping.Q_CONSC_EXP,
+        survey_mapping.Q_ANIMAL_EXP,
+        survey_mapping.Q_AI_EXP
     ]
 
-    age_col = "How old are you?"
-    # age is numeric, but what we want to balance is actually age-bins and not actual age-numbers
-    age_bins = [18, 25, 35, 45, 55, 65, 75, 120]
-    age_labels = ["18-25", "26-35", "36-45", "46-55", "56-65", "66-75", "76+"]
+    age_col = survey_mapping.Q_AGE
+    # age is numeric, but what we want to balance is actually age-bins and not actual age-numbers - let's balance based on what we later report
+    age_bins = analyze_survey.AGE_BINS
+    age_labels = analyze_survey.AGE_LABELS
     # now, make a categorical column, and that's what we will balance
     total_df["age_group"] = pd.cut(total_df[age_col], bins=age_bins, labels=age_labels, include_lowest=True).astype(str)
     categorical_columns.append("age_group")  # now this is a categorical column we want to balance with the rest
     total_df.to_csv(os.path.join(all_save_path, "processed_data.csv"), index=False)  # re-save with this column
 
-    # Now, define the exploratory and replication populations based on these columns
+    """
+    Based on the demographic columns of interest (categorical_columns and ordinal_columns), split the data into
+    exploratory and replication samples, balancing the proportions of columns so that they will be similar to the 
+    overall sample. 
+    """
     exploratory_df, exploratory_dict, replication_df, replication_dict = define_exploratory_replication_pops(sub_df=total_df,
                                                                                                              sub_dict=total_dict,
                                                                                                              categorical_cols=categorical_columns,
@@ -479,7 +552,9 @@ def manage_processing(prolific_data_path, free_data_path, all_save_path, load=Fa
                                                                                                              replication_prop=0.7)
 
     """
-    Calculate the proportions in the relevant columns to make sure we're good
+    Calculate the proportions in the relevant columns to make sure we're good: 
+    do that by calculating the proportions of different responses in all columns of interest in each df (full sample, 
+    exploratory, replication), and then comparing them (with compare_proportions)
     """
     total_proportions = calculate_proportions(total_df, categorical_columns, ordinal_columns)
     total_proportions.to_csv(os.path.join(all_save_path, f"sample_balance_total.csv"), index=True)
@@ -511,22 +586,22 @@ def manage_processing(prolific_data_path, free_data_path, all_save_path, load=Fa
 
 def manage_analysis(all_save_path, sample="exploratory"):
     """
-
-    :param all_save_path:
-    :param sample: exploratory, replication
-    :return:
+    Given the sample that we want to analyze (sample), send it to analysis, with the save path provided
+    :param all_save_path: the path where all samples are saved, where we need to find the right one
+    :param sample: exploratory, replication (folders under 'all_save_path')
     """
 
     # load the right sample:
-    sub_df = pd.read_csv(os.path.join(all_save_path, f"{sample}_df.csv"))
+    sub_df = pd.read_csv(os.path.join(all_save_path, f"{sample}_df.csv"))  # the df of all the responses
     with open(os.path.join(all_save_path, rf"{sample}_dict.pkl"), "rb") as f:
-        sub_dict = pickle.load(f)
+        sub_dict = pickle.load(f)  # the analysis dict containing dfs per blocks of questions
 
     # define the folder to save the results
     sample_save_path = os.path.join(all_save_path, f"{sample}")
     if not os.path.exists(sample_save_path):
         os.makedirs(sample_save_path)
 
+    # call the analysis manager
     analyze_survey.analyze_survey(sub_df=sub_df, analysis_dict=sub_dict, save_path=sample_save_path)
     return
 

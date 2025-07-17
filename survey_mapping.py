@@ -475,14 +475,20 @@ Q_EXP_DICT = {Q_CONSC_EXP: "exp_consciousness",
               Q_AI_EXP: "exp_ai"}
 
 # demographics
+Q_AGE = "How old are you?"
+Q_GENDER = "How do you describe yourself?"
+Q_EDU = "What is your education background?"
+Q_EDU_FIELD = "In what topic?"
+Q_EMPLOYMENT = "Current primary employment domain"
+Q_COUNTRY = "In which country do you currently reside?"
 demographics = {
-    "age": "How old are you?",
-    "gender": "How do you describe yourself?",
-    "country": "In which country do you currently reside?",
-    "education": "What is your education background?",
-    "field": "In what topic?",
+    "age": Q_AGE,
+    "gender": Q_GENDER,
+    "country": Q_COUNTRY,
+    "education": Q_EDU,
+    "field": Q_EDU_FIELD,
     "field_other": "education_Other: please specify",
-    "employment": "Current primary employment domain",
+    "employment": Q_EMPLOYMENT,
     "employment_other": "employment_Other: please specify",
     "RecordedDate": "date",
     "StartDate": "date_start",
@@ -491,7 +497,7 @@ demographics = {
     "ResponseId": "response_id",
     "UserLanguage": "language"
 }
-Q_AGE = "How old are you?"
+
 
 # education_options
 EDU_NONE = "No formal education"
@@ -499,7 +505,7 @@ EDU_PRIM = "Primary education"
 EDU_SECD = "Secondary education (hold a high-school diploma or equivalent)"
 EDU_POSTSEC = "Post-secondary education (hold a bachelor's or associate degree)"
 EDU_GRAD = "Graduate education (hold a master's degree or doctoral degree)"
-
+EDU_ORDER = [EDU_NONE, EDU_PRIM, EDU_SECD,EDU_POSTSEC, EDU_GRAD]
 EDU_MAP = {EDU_NONE: 1,
            EDU_PRIM: 2,
            EDU_SECD: 3,
