@@ -2,61 +2,34 @@ import os
 import re
 import logging
 import shap
-import pandas as pd
-import numpy as np
 import string
-from collections import Counter
 from itertools import combinations
+from collections import Counter
 from sklearn.decomposition import PCA
 from sklearn.mixture import GaussianMixture
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score, pairwise_distances
 from sklearn.preprocessing import StandardScaler
-import transformers
-import spacy
 from bertopic import BERTopic
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sentence_transformers import SentenceTransformer
 from skbio.stats.distance import permanova
 from skbio.stats.distance import DistanceMatrix
-from skbio.stats.ordination import pcoa
-from kmodes.kprototypes import KPrototypes
 import scipy.stats as stats
-from scipy.stats import chi2_contingency, mannwhitneyu, ttest_ind, ttest_1samp, ttest_rel, f_oneway, kruskal, shapiro, levene
+from scipy.stats import chi2_contingency, mannwhitneyu, ttest_ind, ttest_1samp, ttest_rel, f_oneway, kruskal, shapiro, levene, norm
 from scipy.spatial.distance import cdist
-from sklearn.utils import shuffle
-from statsmodels.stats.proportion import proportions_ztest
-from statsmodels.stats.multitest import multipletests
+from statsmodels.stats.proportion import proportions_ztest, confint_proportions_2indep
+import statsmodels.api as sm
 import statsmodels.formula.api as smf
-from statsmodels.stats.anova import anova_lm
-from statsmodels.multivariate.manova import MANOVA
 from tqdm import tqdm
-import time
 from gensim.models import LdaModel
 from gensim.corpora import Dictionary
 from gensim.models.coherencemodel import CoherenceModel
-from sklearn.base import BaseEstimator, TransformerMixin
-from scipy.stats import norm
-import statsmodels.api as sm
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.impute import SimpleImputer
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
-from sklearn.utils import resample
-from sklearn.metrics import classification_report
-from sklearn.model_selection import GridSearchCV, cross_val_score, StratifiedKFold
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.impute import SimpleImputer
-from sklearn.compose import ColumnTransformer
-from sklearn.utils import resample
+from sklearn.model_selection import GridSearchCV, cross_val_score
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics import accuracy_score
-from sklearn.metrics import make_scorer, f1_score, roc_auc_score
+from sklearn.metrics import f1_score
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -580,8 +553,60 @@ def permanova_on_pairwise_distances(data, columns, group_col, dist_metric="eucli
     return result_df, anova_df.reset_index(inplace=False, drop=True), descriptives_df
 
 
-def chi_squared_test(contingency_table, include_expected=False):
+def chi_squared_test(contingency_table, include_expected=False, ci_cols=None):
+    """
+    Performs chi square test of independence,
+    calling: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.chi2_contingency.html
+    """
     chi2, p, dof, expected = chi2_contingency(contingency_table)
+
+    if ci_cols:  # if we want to calculate the 95% CI of the proportion difference
+        """
+        Notably, as the chi squared test of independence just checks to see if the first categorical and the second 
+        categorical variable are independent, there is no confidence interval for a chi-square test.
+        To get it, we can calculate a confidence interval for the difference in proportions. 
+        For that, we need that at least ONE of the grouping variables will be binary (two groups only), 
+        so if we get ci_cols = these are the VALUES of the BINARY grouping parameter, 
+        which are expected to be the COLUMNS in the contingency_table
+        """
+
+        """
+        The norm.ppf function gives the percent point function (inverse of the cumulative distribution function) 
+        for a normal distribution. For a 95% confidence interval, we are looking for the range that captures the 
+        central 95% of the normal distribution. That leaves 2.5% in each tail (5% total, split into two tails).
+        Lower tail: 2.5%, upper tail: 97.5%, so to compute the z-value that captures the upper bound of the central 
+        95% (i.e., 1.96 standard deviations away from the mean), we compute:norm.ppf(0.975) ~ z=1.96
+        This gives us the critical value for constructing a two-tailed 95% confidence interval.
+        """
+        z = norm.ppf(0.975)
+        results = []
+
+        # now let's calculate CI
+        for group, row in contingency_table.iterrows():  # we assume rows have several groups >= 2
+            count_0 = row[ci_cols[0]]  # but only 2 groups in the other grouping col
+            count_1 = row[ci_cols[1]]
+            n = count_0 + count_1
+
+            p0 = count_0 / n
+            p1 = count_1 / n
+            diff = p1 - p0  # a negative difference means ci_cols[1] is less frequent than ci_cols[0] in this group
+
+            # standard error for difference in proportions within the group
+            se = np.sqrt((p0 * (1 - p0) + p1 * (1 - p1)) / n)
+            ci_low = diff - z * se
+            ci_high = diff + z * se
+
+            results.append({
+                "group": group,
+                f"proportion_{ci_cols[0]}": p0,
+                f"proportion_{ci_cols[1]}": p1,
+                f"difference ({ci_cols[1]} - {ci_cols[0]})": diff,
+                "95% CI lower": ci_low,
+                "95% CI upper": ci_high
+            })
+            # TODO: unsure what to do with CIs, consult Matan
+
+
     result_df = pd.DataFrame({
         "test": ["chi squared"],
         "statistic": [chi2],
@@ -591,6 +616,18 @@ def chi_squared_test(contingency_table, include_expected=False):
     if include_expected:
         expected_df = pd.DataFrame(expected, index=contingency_table.index, columns=contingency_table.columns)
         return result_df, expected_df
+    return result_df
+
+
+def kruskal_wallis_test(merged_df, group_col, ordinal_col):
+    grouped = merged_df.groupby(group_col)[ordinal_col].apply(list)
+    ks_stat, p_value = kruskal(*grouped)
+    result_df = pd.DataFrame({
+        "test": ["kruskal-wallis"],
+        "statistic": [ks_stat],
+        "p": [p_value],
+        "df": [len(grouped) - 1]  # dof in kruskal wallis is k-1 where k is the number of indpendent groups
+    })
     return result_df
 
 

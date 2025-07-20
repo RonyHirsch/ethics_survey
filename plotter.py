@@ -278,9 +278,11 @@ def plot_raincloud(df, id_col, data_col_names, data_col_colors, save_path, save_
 
 def plot_pie(categories_names, categories_counts, title, save_path, save_name,
              fmt="svg", pie_direction=180, categories_colors=None, categories_labels=None,
-             annot_groups=True, annot_group_selection=None, annot_props=True,
+             annot_groups=True, annot_group_selection=None, annot_props=True, prop_fmt=".1f",
              legend=False, legend_order=None, legend_vertical=True,
-             edge_color="white", rotate_labels=True, label_dist=1.01, props_in_legend=False):
+             edge_color="white", rotate_labels=True, label_dist=1.01, props_in_legend=False, text_prop_size=22,
+             label_inside=False, label_fontsize=25, label_fontcolor="white",
+             prop_fontsize=25, prop_fontcolor="white", font_title_size=25):
 
     sns.set_style("ticks")
     sns.despine(right=True, top=True)
@@ -310,29 +312,51 @@ def plot_pie(categories_names, categories_counts, title, save_path, save_name,
     # pie plot
     fig, ax = plt.subplots(figsize=(20, 10))
 
-    # proportions on top of each pie piece
-    if annot_props:
-        pctgs = "%1.0f%%"
-    else:
-        pctgs = ""
+    total_count = sum(categories_counts)
+    proportions = [f"{(count / total_count) * 100:{prop_fmt}}%" for count in categories_counts]
 
-    # labels next to each pie piece
-    if annot_groups:
-        if annot_group_selection is None:
-            label = categories_labels_list
+    if label_inside:
+        pie_labels = [None] * len(categories_counts)
+        pctgs = None
+    else:
+        if annot_groups:
+            if annot_group_selection is None:
+                pie_labels = categories_labels_list
+            else:
+                pie_labels = [l if l in annot_group_selection else None for l in categories_labels_list]
         else:
-            label = [l if l in annot_group_selection else None for l in categories_labels_list]
+            pie_labels = [None] * len(categories_counts)
+
+        pctgs = f"%{prop_fmt}%%" if annot_props else ""
+
+        # create plot
+    fig, ax = plt.subplots(figsize=(20, 10))
+
+    # plot pie with correct unpacking
+    pie_args = dict(labels=pie_labels, autopct=pctgs, colors=categories_colors_list, rotatelabels=rotate_labels,
+                    labeldistance=label_dist, startangle=startangle,
+                    textprops={"fontsize": label_fontsize, "color": label_fontcolor},
+                    wedgeprops={"edgecolor": edge_color})
+
+    if pctgs is not None:
+        wedges, texts, autotexts = ax.pie(categories_counts, **pie_args)
     else:
-        label = [None] * len(categories_counts)
+        wedges, texts = ax.pie(categories_counts, **pie_args)
 
-    # plot
-    wedges, texts, autotexts = ax.pie(categories_counts, labels=label, autopct=pctgs,
-                                      colors=categories_colors_list, rotatelabels=rotate_labels,
-                                      labeldistance=label_dist, startangle=startangle, textprops={"fontsize": 18},
-                                      wedgeprops={"edgecolor": edge_color})
+    if label_inside:
+        angles = np.cumsum([0] + [360.0 * count / total_count for count in categories_counts])
+        for i, (wedge, label, prop) in enumerate(zip(wedges, categories_labels_list, proportions)):
+            angle = (angles[i] + angles[i + 1]) / 2 + startangle
+            x = 0.7 * np.cos(np.deg2rad(angle))
+            y = 0.7 * np.sin(np.deg2rad(angle))
 
-    # add a title and subtitle
-    ax.set_title(title.title(), fontsize=20, fontweight="normal")
+            ax.text(x, y + 0.05, label, ha='center', va='center',
+                    fontsize=label_fontsize, color=label_fontcolor)
+            if annot_props:
+                ax.text(x, y - 0.05, prop, ha='center', va='center',
+                        fontsize=prop_fontsize, color=prop_fontcolor)
+
+    ax.set_title(title.title(), fontsize=font_title_size, fontweight="normal")
 
     # legend
     if legend:
@@ -345,30 +369,28 @@ def plot_pie(categories_names, categories_counts, title, save_path, save_name,
             anchor = (0.5, -0.1)
             n_col = len(categories_labels_list)
 
-        total_count = sum(categories_counts)
-        proportions = [f"{(count / total_count) * 100:.1f}%" for count in categories_counts]
-
         if props_in_legend:
-            categories_labels_with_props = [f"{label} ({prop})" for label, prop in zip(categories_labels_list, proportions)]
+            categories_labels_with_props = [f"{label} ({prop})" for label, prop in
+                                            zip(categories_labels_list, proportions)]
         else:
             categories_labels_with_props = categories_labels_list
 
         if legend_order is None:
-            ax.legend(wedges, categories_labels_with_props, loc=location, bbox_to_anchor=anchor, ncol=n_col, fontsize=18,
-                      frameon=False)
+            ax.legend(wedges, categories_labels_with_props, loc=location,
+                      bbox_to_anchor=anchor, ncol=n_col, fontsize=18, frameon=False)
         else:
-            label_to_wedge_color = {label: (wedge, color, prop) for label, wedge, color, prop in
-                                    zip(categories_labels_list, wedges, categories_colors_list, proportions)}
+            label_to_info = {label: (wedge, prop) for label, wedge, prop in
+                             zip(categories_labels_list, wedges, proportions)}
 
-            ordered_wedges = [label_to_wedge_color[label][0] for label in legend_order if label in label_to_wedge_color]
+            ordered_wedges = [label_to_info[label][0] for label in legend_order if label in label_to_info]
             if props_in_legend:
-                ordered_labels = [f"{label} ({label_to_wedge_color[label][2]})" for label in legend_order if
-                                  label in label_to_wedge_color]
+                ordered_labels = [f"{label} ({label_to_info[label][1]})" for label in legend_order if
+                                  label in label_to_info]
             else:
-                ordered_labels = [label for label in legend_order if label in label_to_wedge_color]
+                ordered_labels = [label for label in legend_order if label in label_to_info]
 
-            ax.legend(ordered_wedges, ordered_labels, loc=location, bbox_to_anchor=anchor, ncol=n_col, fontsize=17,
-                      frameon=False)
+            ax.legend(ordered_wedges, ordered_labels, loc=location,
+                      bbox_to_anchor=anchor, ncol=n_col, fontsize=17, frameon=False)
 
     # save
     figure = plt.gcf()  # get current figure
@@ -660,13 +682,13 @@ def plot_histogram(df, category_col, data_col, save_path, save_name,
     else:
         sns.barplot(data=df, x=category_col, y=data_col, color="#FFE8C2")
 
-    plt.xticks(fontsize=20)
-    plt.xlabel(x_label, fontsize=25)
+    plt.xticks(fontsize=25)
+    plt.xlabel(x_label.title(), fontsize=30)
 
     max_value = df[data_col].max()
     y_max = int(math.ceil(max_value / ytick_interval)) * ytick_interval
     plt.yticks(np.arange(0, y_max + 1, ytick_interval), fontsize=22)
-    plt.ylabel(y_label, fontsize=25)
+    plt.ylabel(y_label.title(), fontsize=25)
 
     ax = plt.gca()  # get current axis
     ax.spines["right"].set_visible(False)
@@ -812,7 +834,7 @@ def plot_categorical_bars_hued(categories_prop_df, x_col, category_col, data_col
 def plot_categorical_bars(categories_prop_df, category_col, data_col, categories_colors,
                           save_path, save_name, fmt="svg", y_min=0, y_max=100, y_skip=10, delete_y=True,
                           inch_w=15, inch_h=12, add_pcnt=True, order=None, text_wrap_width=13,
-                          x_label="", y_fontsize=28, title_text=""):
+                          x_label="", y_fontsize=28, title_text="", name_map=None):
 
     plt.figure(figsize=(8, 6))
     sns.set_style("ticks")
@@ -820,14 +842,16 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
 
     # Determine the order of categories
     if order is None:
-        categories = categories_prop_df[category_col].unique().tolist()
-    else:
-        categories = order
+        order = categories_prop_df[category_col].unique().tolist()
+
+    categories_prop_df = categories_prop_df.set_index(category_col).loc[order].reset_index()
+    display_labels = [name_map[cat] if name_map and cat in name_map else cat for cat in order]
 
     if categories_colors is None:
-        barplot = sns.barplot(x=category_col, y=data_col, data=categories_prop_df)
+        barplot = sns.barplot(x=category_col, y=data_col, data=categories_prop_df, order=order)
     else:
-        barplot = sns.barplot(x=category_col, y=data_col, data=categories_prop_df, palette=categories_colors)
+        barplot = sns.barplot(x=category_col, y=data_col, data=categories_prop_df,
+                              palette=categories_colors, order=order)
 
     # add percentages on top of each bar
     if add_pcnt:
@@ -851,7 +875,7 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
         plt.ylabel("Proportion", fontsize=y_fontsize)
 
     # X axis and label
-    wrapped_labels = [textwrap.fill(str(label), width=text_wrap_width) for label in categories]
+    wrapped_labels = [textwrap.fill(label, width=text_wrap_width) for label in display_labels]
     plt.xticks(ticks=np.arange(len(wrapped_labels)), labels=wrapped_labels, fontsize=28)
     plt.xlabel(x_label, fontsize=28)
     ax = plt.gca()  # get current axis
@@ -874,7 +898,8 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
 
 def plot_expertise_proportion_bars(df, x_axis_exp_col_name, x_label, cols, cols_colors, y_ticks,
                                    save_name, save_path, plt_title="", fmt="svg", x_map=None,
-                                   plot_mean=False, stats_df=None, annotate_bar=False, annot_font_color="white"):
+                                   plot_mean=False, stats_df=None, annotate_bar=False, annot_font_color="white",
+                                   annot_bar_size=20, x_tick_fontsize=20, y_tick_fontsize=20, axis_label_fontsize=22):
     sns.set_style("ticks")
     sns.despine(right=True, top=True)
     plt.rcParams['font.family'] = "Calibri"
@@ -884,7 +909,7 @@ def plot_expertise_proportion_bars(df, x_axis_exp_col_name, x_label, cols, cols_
     if x_map is not None:
         # group and reorder according to x_map
         grouped = df.groupby(x_axis_exp_col_name).sum().reindex(x_map.keys())
-        x_vals = [x_map[key] for key in grouped.index]
+        x_vals = list(x_map.keys())
         bottom = np.zeros(len(grouped))
         for label in cols:
             values = grouped[label]
@@ -892,11 +917,11 @@ def plot_expertise_proportion_bars(df, x_axis_exp_col_name, x_label, cols, cols_
             if annotate_bar:
                 for idx, (x, val, bot) in enumerate(zip(x_vals, values, bottom)):
                     if val > 0:
-                        ax.text(x, bot + val / 2, f"{val:.1f}%", ha='center', va='center', fontsize=12,
+                        ax.text(x, bot + val / 2, f"{val:.1f}%", ha='center', va='center', fontsize=annot_bar_size,
                                 color=annot_font_color)
             bottom += values
-        ax.set_xticks(list(x_map.values()))
-        ax.set_xticklabels(list(x_map.keys()))
+        ax.set_xticks(x_vals)
+        ax.set_xticklabels([x_map[k] for k in x_vals], fontsize=x_tick_fontsize)
     else:
         # assume df[x] is numeric
         x_vals = df[x_axis_exp_col_name]
@@ -910,7 +935,7 @@ def plot_expertise_proportion_bars(df, x_axis_exp_col_name, x_label, cols, cols_
                         ax.text(x, bot + val / 2, f"{val:.1f}%", ha='center', va='center', fontsize=10,
                                 color=annot_font_color)
             bottom += values
-        ax.set_xticks(sorted(x_vals.unique()))
+        ax.set_xticks(sorted(x_vals.unique()), fontsize=x_tick_fontsize)
 
     if plot_mean:
         if x_map is not None:
@@ -925,9 +950,9 @@ def plot_expertise_proportion_bars(df, x_axis_exp_col_name, x_label, cols, cols_
 
     # labels and styling
     ax.set_yticks(y_ticks)
-    ax.set_yticklabels(y_ticks)
-    ax.set_ylabel("Proportion")
-    ax.set_xlabel(x_label)
+    ax.set_yticklabels(y_ticks, fontsize=y_tick_fontsize)
+    ax.set_ylabel("Proportion", fontsize=axis_label_fontsize)
+    ax.set_xlabel(x_label, fontsize=axis_label_fontsize)
     ax.legend(title=plt_title)
     plt.title(plt_title)
 
@@ -990,6 +1015,153 @@ def plot_categorical_proportion_bar(categories_prop_df, category_col, data_col, 
     return
 
 
+def plot_stacked_proportion_bars(plot_data=None, df=None, rating_col=None, item_cols=None, colors=None, num_ratings=None,
+                                 save_path=".", save_name="stacked_bar", title="", legend_labels=None, show_mean=False,
+                                 sem_line=False, ytick_visible=True, y_title=None, default_ticks=True,
+                                 text_width=30, fmt="svg",
+                                 annotate_bar=True, annot_font_color="white", annot_font_size=20, annot_font_colors=None,
+                                 split=False, relative=True, bar_relative=True, bar_range_min=1, bar_range_max=4,
+                                 inches_w=18, inches_h=12,
+                                 yes_all_proportion=None, no_all_proportion=None, punishment_alpha=0.6):
+    """
+    Flexible function to plot *** HORIZONTAL *** stacked proportion bars.
+    Accepts either precomputed 'plot_data' or raw DataFrame + rating columns ('df', 'rating_col', 'item_cols').
+    plot_data is a dict, containing proportions, mean ratings, standard deviations, and N (# of people)
+
+    split: whether to split the responses based on people who were not sensitive to the manipulation, e.g.,
+    in all bars (=questions), the same response_id had the same answer (e.g., '1'). In this case, if split is True,
+    we would want to present these people as discounted (in a different alpha).
+    """
+
+    sns.set_style("ticks")
+    plt.rcParams['font.family'] = "Calibri"
+
+    # If DataFrame is provided, convert to plot_data
+    if df is not None and rating_col is not None and item_cols is not None:
+        plot_data = []
+        for col in item_cols:
+            col_counts = df.groupby(rating_col)[col].sum()
+            total = col_counts.sum()
+            proportions = {k: 100 * v / total for k, v in col_counts.items()}
+            mean = np.average(list(col_counts.index), weights=list(col_counts.values))
+            std = np.sqrt(np.average((np.array(list(col_counts.index)) - mean) ** 2, weights=list(col_counts.values)))
+            n = int(total)
+            plot_data.append((col, {
+                "Proportion": proportions,
+                "Mean": mean,
+                "Std Dev": std,
+                "N": n
+            }))
+
+    if plot_data is None:
+        raise ValueError("Either 'plot_data' or ('df', 'rating_col', 'item_cols') must be provided.")
+
+    num_plots = len(plot_data)
+
+    fig, axs = plt.subplots(num_plots, 1, figsize=(inches_w, (num_ratings + 1) * num_plots), sharex=True)
+    axs = [axs] if num_plots == 1 else axs
+
+    # plot each column as a separate bar
+    for i, (col, data) in enumerate(plot_data):
+        proportions = data["Proportion"]
+        mean_rating = data["Mean"]
+        std_dev = data["Std Dev"]
+        n = data["N"]
+
+        a = axs[i]
+
+        # ensure proportions sum to ~100
+        if abs(sum(proportions.values()) - 100) > 1e-6:
+            raise ValueError(f"Proportions for {col} do not sum to 100%: {sum(proportions.values()):.2f}%")
+
+        bottom = 0   # left is bottom, as all bars will actually be horizontal
+
+        if split:
+            no_to_all = int(no_all_proportion * n)   # absolute number of people who answered 'No' to all
+            yes_to_all = int(yes_all_proportion * n)  # absolute number of people who answered 'Yes' to all
+            no_to_this = int(proportions[0] * (n / 100) - no_to_all)  # subtract the fixed "No to all" portion
+            yes_to_this = int(proportions[1] * (n / 100) - yes_to_all)
+
+            sorted_proportions = [
+                ("No to all", 100 * no_to_all / n, colors[0], punishment_alpha),  # "No to all" with reduced alpha
+                ("No", 100 * no_to_this / n, colors[0], 1.0),
+                ("Yes", 100 * yes_to_this / n, colors[1], 1.0),
+                ("Yes to all", 100 * yes_to_all / n, colors[1], punishment_alpha)
+            ]
+        else:
+            sorted_proportions = []
+            keys = sorted(proportions.keys())
+            for idx, k in enumerate(keys):
+                label = legend_labels[k] if legend_labels else str(k)
+                color = colors[k] if colors else f"C{k}"
+                alpha = 1.0
+                sorted_proportions.append((label, proportions[k], color, alpha))
+
+        # plot segments
+        for j, (label, proportion, color, alpha_value) in enumerate(sorted_proportions):
+            a.barh(col, proportion, color=color, label=label, edgecolor='none', left=bottom, alpha=alpha_value)
+            if annotate_bar:  # annotate the bar with the proportion value
+                annot_color = annot_font_colors[j] if annot_font_colors else annot_font_color
+                a.text(bottom + proportion / 2, 0, f"{proportion:.2f}%", ha='center', va='center',
+                       fontsize=annot_font_size, color=annot_color)
+            bottom += proportion
+
+        if show_mean:  # plot the mean rating as a dot
+            mean_position = (mean_rating / num_ratings) * 100 if relative else \
+                bar_range_min + (mean_rating - 1) / (bar_range_max - bar_range_min) * 100
+            a.plot(mean_position, 0, markersize=5, color="#333333")
+            # annotate the mean rating
+            a.text(mean_position + 0.6, 0, f"{mean_rating:.2f}", fontdict={"fontsize": 16}, ha="left", va="center")
+
+        if sem_line:  # add standard error line
+            sem_position = (std_dev / np.sqrt(n)) * 100
+            a.errorbar(mean_position, 0, xerr=sem_position, fmt='o', color="#333333", ecolor="#333333",
+                       elinewidth=1, capsize=4, capthick=1)
+
+        # customize the subplots
+        a.tick_params(axis='x', labelsize=18)
+        if ytick_visible:
+            wrapped_label = textwrap.fill(str(col), width=text_width)  # limit the text line width
+            yticks = a.get_yticks()  # current y-tick positions
+            if default_ticks:
+                a.set_yticks(yticks)  # explicitly set them to satisfy FixedLocator
+                a.set_yticklabels([wrapped_label] * len(yticks), fontsize=25)
+            else:
+                a.set_yticks([0])
+                a.set_yticklabels([wrapped_label], fontsize=25)
+        else:
+            a.set_yticklabels("")
+            a.spines["left"].set_visible(False)
+        a.set_xticks([0, 25, 50, 75, 100])
+        a.set_xlim(0, 100)
+        a.spines["right"].set_visible(False)
+        a.spines["top"].set_visible(False)
+
+    # final layout
+    fig.text(0.5, 0.06, "Proportion of Responses (%)", ha="center", fontsize=25)
+    fig.suptitle(title, fontsize=30, y=0.94)
+
+    if y_title:
+        fig.text(0.06, 0.5, y_title, ha="center", va="center", rotation="vertical", fontsize=25)
+
+    # legend
+    if legend_labels:
+        handles = [plt.Line2D([0], [0], color=colors[i], lw=10) for i in range(len(legend_labels))]
+        fig.legend(handles=handles, labels=legend_labels, loc="upper center", bbox_to_anchor=(0.5, 0.925),
+                   ncol=len(handles), frameon=False, fontsize=18)
+
+    # save
+    figure = plt.gcf()
+    figure.set_size_inches(inches_w, inches_h)
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches='tight',
+                pad_inches=0.01)
+    del figure
+    plt.clf()
+    plt.close()
+    return
+
+
+# DEPRECATED - DELETE
 def plot_stacked_proportion_bars_in_a_batch(df, rating_col, item_cols, color_map, save_path, save_name, alpha_value=1.0,
                                             rating_label="", plot_title="", annotate=True,
                                             annot_font_size=15, annot_font_colors=None,
@@ -1062,7 +1234,8 @@ def plot_stacked_proportion_bars_in_a_batch(df, rating_col, item_cols, color_map
     return
 
 
-def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save_path, save_name, title,
+# DEPRECATED - DELETE
+def plot_stacked_proportion_bars_old(plot_data, num_plots, colors, num_ratings, save_path, save_name, title,
                                  legend_labels=None, show_mean=True, sem_line=True, ytick_visible=True, y_title=None,
                                  default_ticks=True, text_width=max_text_width, fmt="png", annotate_bar=False,
                                  annot_font_color="white", split=False, relative=True,
@@ -1122,15 +1295,14 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
                     ("Yes", proportions[1], colors[1], 1.0)
                 ]
             else:
-                sorted_proportions = [(legend_labels[i], proportions[i + 1], colors[i], 1.0) for i in
-                                      range(num_ratings)]
+                sorted_proportions = [(legend_labels[i], proportions[i + 1], colors[i], 1.0) for i in range(num_ratings)]
 
         if relative:
             for j, (label, proportion, color, alpha_value) in enumerate(sorted_proportions):
                 a.barh(col, proportion, color=color, label=label, edgecolor='none', left=bottom, alpha=alpha_value)
                 # annotate the bar with the proportion value
                 if annotate_bar:
-                    a.text(bottom + proportion / 2, 0, f"{proportion:.2f}%", ha='center', va='center', fontsize=21,
+                    a.text(bottom + proportion / 2, 0, f"{proportion:.2f}%", ha='center', va='center', fontsize=25,
                            color=annot_font_color)
                 bottom += proportion
         else:
@@ -1138,7 +1310,7 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
                 a.barh(0, proportion, color=color, label=label, edgecolor='none', left=bottom, alpha=alpha_value)
                 # annotate the bar with the proportion value
                 if annotate_bar:
-                    a.text(bottom + proportion / 2, 0, f"{proportion:.2f}%", ha='center', va='center', fontsize=21,
+                    a.text(bottom + proportion / 2, 0, f"{proportion:.2f}%", ha='center', va='center', fontsize=25,
                            color=annot_font_color)
                 bottom += proportion
 
@@ -1154,7 +1326,7 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
             a.text(
                 mean_position + 0.6, 0,
                 f"{mean_rating:.2f}",
-                fontdict={"family": "sans-serif", "fontname": "Verdana", "fontsize": 16, "color": "black"},
+                fontdict={"family": "sans-serif", "fontname": "Calibri", "fontsize": 16, "color": "black"},
                 ha="left",  # Horizontal alignment
                 va="center"  # Vertical alignment
             )
@@ -1175,10 +1347,10 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
             yticks = a.get_yticks()  # current y-tick positions
             if default_ticks:
                 a.set_yticks(yticks)  # explicitly set them to satisfy FixedLocator
-                a.set_yticklabels([wrapped_col_name] * len(yticks), fontsize=18)
+                a.set_yticklabels([wrapped_col_name] * len(yticks), fontsize=25)
             else:
                 a.set_yticks(np.array([0]))
-                a.set_yticklabels([wrapped_col_name], fontsize=18)
+                a.set_yticklabels([wrapped_col_name], fontsize=25)
         else:
             a.set_yticklabels("")
             a.spines["left"].set_visible(False)
@@ -1189,11 +1361,11 @@ def plot_stacked_proportion_bars(plot_data, num_plots, colors, num_ratings, save
         a.spines["top"].set_visible(False)
 
     # finalize figure
-    fig.text(0.5, 0.06, "Proportion of Responses (%)", ha="center", fontsize=18)
-    fig.suptitle(f"{title}", fontsize=25, y=0.94)
+    fig.text(0.5, 0.06, "Proportion of Responses (%)", ha="center", fontsize=25)
+    fig.suptitle(f"{title}", fontsize=30, y=0.94)
     # y axis
     if y_title is not None:
-        fig.text(0.06, 0.5, y_title, ha="center", va="center", rotation="vertical", fontsize=18)
+        fig.text(0.06, 0.5, y_title, ha="center", va="center", rotation="vertical", fontsize=25)
 
     # legend
     if legend_labels is not None:

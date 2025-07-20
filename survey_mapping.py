@@ -393,8 +393,9 @@ MS_RATINGS = {"ms_You": {"ms_You": 1, "": 4},
              "ms_An ant": {"ms_ant": 1, "": 4}}
 
 # consciousness and intellect
+Q_INTELLIGENCE = "Do you think consciousness and intelligence are related?"
 con_intellect = {
-    "con_intellect": "Do you think consciousness and intelligence are related?",
+    "con_intellect": Q_INTELLIGENCE,
     "con_intellect_yes": "How?",
     "con_intellect_yes_fu": "What is the common denominator?"
 }
@@ -473,6 +474,11 @@ Q_EXP_DICT = {Q_CONSC_EXP: "exp_consciousness",
               Q_ETHICS_EXP: "exp_ethics",
               Q_ANIMAL_EXP: "exp_animals",
               Q_AI_EXP: "exp_ai"}
+
+Q_EXP_NAME_DICT = {Q_CONSC_EXP: "Consciousness",
+              Q_ETHICS_EXP: "Ethics",
+              Q_ANIMAL_EXP: "Animals",
+              Q_AI_EXP: "AI"}
 
 # demographics
 Q_AGE = "How old are you?"
