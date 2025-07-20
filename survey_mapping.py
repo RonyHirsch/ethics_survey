@@ -511,7 +511,7 @@ EDU_PRIM = "Primary education"
 EDU_SECD = "Secondary education (hold a high-school diploma or equivalent)"
 EDU_POSTSEC = "Post-secondary education (hold a bachelor's or associate degree)"
 EDU_GRAD = "Graduate education (hold a master's degree or doctoral degree)"
-EDU_ORDER = [EDU_NONE, EDU_PRIM, EDU_SECD,EDU_POSTSEC, EDU_GRAD]
+EDU_ORDER = [EDU_NONE, EDU_PRIM, EDU_SECD, EDU_POSTSEC, EDU_GRAD]
 EDU_MAP = {EDU_NONE: 1,
            EDU_PRIM: 2,
            EDU_SECD: 3,

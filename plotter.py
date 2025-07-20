@@ -396,6 +396,7 @@ def plot_pie(categories_names, categories_counts, title, save_path, save_name,
     figure = plt.gcf()  # get current figure
     plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
+    del figure
     plt.clf()
     plt.close()
     return

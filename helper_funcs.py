@@ -11,8 +11,8 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score, pairwise_distances
 from sklearn.preprocessing import StandardScaler
 from bertopic import BERTopic
-from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+from sklearn.inspection import permutation_importance
 from sentence_transformers import SentenceTransformer
 from skbio.stats.distance import permanova
 from skbio.stats.distance import DistanceMatrix
@@ -26,14 +26,13 @@ from tqdm import tqdm
 from gensim.models import LdaModel
 from gensim.corpora import Dictionary
 from gensim.models.coherencemodel import CoherenceModel
-from sklearn.model_selection import GridSearchCV, cross_val_score
+from sklearn.model_selection import GridSearchCV, cross_val_score, train_test_split, StratifiedKFold
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import f1_score
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.model_selection import StratifiedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
@@ -86,14 +85,14 @@ class RareCategoryMerger(BaseEstimator, TransformerMixin):
 
 def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols, save_path, save_prefix="",
                                rare_class_threshold=5, n_permutations=1000, scoring_method="accuracy",
-                               cv_folds=10):
+                               cv_folds=10, split_test_size=0.3, random_state=42, n_repeats=50, shap_plot=True):
 
     print("starting RF pipeline")
     # dep_col is assumed to be binary
     df = dataframe.copy()
     df_model = df[categorical_cols + order_cols + [dep_col]].dropna(subset=[dep_col])
 
-    # Merge rare categories
+    # merge rare categories
     for col in categorical_cols:
         df_model[col] = df_model[col].astype(str)
     print("merging rare categories")
@@ -108,7 +107,12 @@ def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols,
     X = df_model[categorical_cols + order_cols]
     y = df_model[dep_col]
 
-    # Preprocessing
+    # train/test split (before any modeling)
+    print("splitting data into train and test")
+    X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, test_size=split_test_size,
+                                                        random_state=random_state)
+
+    # setting up preprocessing pipelines
     print("setting up preprocessing and model pipeline")
     categorical_transformer = Pipeline(steps=[
         ("imputer", SimpleImputer(strategy="most_frequent")),
@@ -122,13 +126,14 @@ def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols,
         ("num", numerical_transformer, order_cols)
     ])
 
-    # Full pipeline
+    # full pipeline
     rf_pipeline = Pipeline(steps=[
         ("preprocessor", preprocessor),
-        ("classifier", RandomForestClassifier(class_weight='balanced', random_state=42))  # "balanced" = to deal with having a majority/minority class
+        ("classifier", RandomForestClassifier(class_weight='balanced', random_state=random_state))  # "balanced" = to deal with having a majority/minority class
     ])
 
-    # Grid search for hyperparameter tuning
+    # grid search on training data for hyperparameter tuning
+    print("grid search for hyperparameter tuning")
     param_grid = {
         'classifier__n_estimators': [100, 200, 300],
         'classifier__max_depth': [None, 10, 20],
@@ -136,144 +141,154 @@ def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols,
         'classifier__min_samples_leaf': [1, 2, 4],
         'classifier__max_features': ['sqrt', 'log2']
     }
-    print("grid search for hyperparameter tuning")
+    # the best model is selected using cross validation using the training set alone
     grid_search = GridSearchCV(rf_pipeline, param_grid, cv=cv_folds, scoring=scoring_method, n_jobs=-1)
-    grid_search.fit(X, y)
-
-    # Cross-validation with best estimator
+    grid_search.fit(X_train, y_train)
     best_model = grid_search.best_estimator_
-    print(f"Grid search complete. Best params: {grid_search.best_params_}")
+    print(f"Grid search complete. Best hyperparameters: {grid_search.best_params_}")
 
-    print("cross-validation with best model")
-    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=42)
-    scores = cross_val_score(best_model, X, y, cv=cv, scoring=scoring_method)
-    mean_scores = scores.mean()
-    print(f"mean {scoring_method}: {mean_scores:.4f}")
+    # cross-validate best model on training set
+    print("cross-validating best model on training data")
+    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+    train_cv_scores = cross_val_score(best_model, X_train, y_train, cv=cv, scoring=scoring_method)
+    mean_train_cv_score = np.mean(train_cv_scores)
+    print(f"Mean train CV {scoring_method}: {mean_train_cv_score:.4f}")
 
-    # Permutation test
-    print(f"permutation test with {n_permutations} iterations")
-    perm_accuracies = []
-    for i in tqdm(range(n_permutations), desc="Running permutation test"):
-        y_permuted = shuffle(y, random_state=i).reset_index(drop=True)
-        perm_scores = []
-        for train_idx, test_idx in cv.split(X, y_permuted):
-            best_model.fit(X.iloc[train_idx], y_permuted.iloc[train_idx])
-            preds = best_model.predict(X.iloc[test_idx])
-            if scoring_method == "accuracy":
-                perm_scores.append(accuracy_score(y_permuted.iloc[test_idx], preds))
-            elif scoring_method == "f1":
-                perm_scores.append(f1_score(y_permuted.iloc[test_idx], preds))
-        perm_accuracies.append(np.mean(perm_scores))
+    # refit the best model on full training set
+    best_model.fit(X_train, y_train)
 
-    p_value = np.mean([acc >= mean_scores for acc in perm_accuracies])
-    print(f"permutation test complete. p-value: {p_value:.4f}")
+    # evaluation on the test set
+    print("evaluating on test set")
+    test_preds = best_model.predict(X_test)
+    if scoring_method == "accuracy":
+        test_score = accuracy_score(y_test, test_preds)
+    elif scoring_method == "f1":
+        test_score = f1_score(y_test, test_preds)
+    print(f"Test {scoring_method}: {test_score:.4f}")
 
-    df_model.to_csv(os.path.join(save_path, f"{save_prefix}_df_model.csv"), index=False)
-
-    # Feature importances
-    print("extracting feature importances")
-    best_model.fit(X, y)
-    feature_names = best_model.named_steps['preprocessor'].get_feature_names_out()
-    importances = best_model.named_steps['classifier'].feature_importances_
-    importances_df = pd.DataFrame({'Feature': feature_names, 'Importance': importances}).sort_values(by='Importance',
-                                                                                                     ascending=False)
+    # permutation test on test set
+    print(f"running permutation test with {n_permutations} iterations")
+    perm_scores = []
+    for i in tqdm(range(n_permutations), desc="Permutation test"):
+        y_test_permuted = shuffle(y_test, random_state=i).reset_index(drop=True)
+        preds = best_model.predict(X_test)
+        if scoring_method == "accuracy":
+            perm_scores.append(accuracy_score(y_test_permuted, preds))
+        elif scoring_method == "f1":
+            perm_scores.append(f1_score(y_test_permuted, preds))
+    p_value = np.mean([s >= test_score for s in perm_scores])
+    print(f"Permutation test p-value: {p_value:.4f}")
 
     """
-    Plot directionality
-    """
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    for col in order_cols:
-        # Stacked bar: cluster distribution by experience rating
-        ct = pd.crosstab(df_model[col], df_model[dep_col], normalize='index')
-        fig1 = ct.plot(kind='bar', stacked=True, colormap='tab10').get_figure()
-        plt.title(f"Cluster Proportion by '{col}' Rating")
-        plt.xlabel(col)
-        plt.ylabel("Proportion in Each Cluster")
-        fig1.savefig(os.path.join(save_path, f"{save_prefix}_{col}_cluster_distribution"))
-        plt.close(fig1)
-        ct.to_csv(os.path.join(save_path, f"{save_prefix}_{col}_cluster_distribution.csv"))
-
-        # Mean experience by cluster
-        fig2, ax2 = plt.subplots()
-        sns.pointplot(data=df_model, x=dep_col, y=col, ci='sd', ax=ax2)
-        ax2.set_title(f"Mean '{col}' by Cluster")
-        ax2.set_ylim(1, 5)
-        fig2.savefig(os.path.join(save_path, f"{col}_mean_by_cluster"))
-        plt.close(fig2)
-        df_model.loc[:, [dep_col, col]].to_csv(os.path.join(save_path, f"{save_prefix}_{col}_cluster_distribution.csv"))
-
-    """
+    Feature importances - two types:
+    (1) Gini importance: used internally by scikit-learn's RF when calling "model.feature_importances_"
+     has no direction, and not based on test data. 
+    (2) permutation_importance: checks impact of features on prediction performance (reflects actual test performance)
+    
+    Then, we will also use SHAP to understand the directionality of each feature.  
     SHAP (SHapley Additive exPlanations) analysis is a method for interpreting the predictions of machine learning 
     models by explaining how each feature contributes to the model's output.
     https://shap.readthedocs.io/en/latest/
     """
-    import matplotlib.pyplot as plt
-
-    print("running SHAP analysis")
-    X_transformed = best_model.named_steps['preprocessor'].transform(X)
-
-    # convert sparse matrix to dense if needed
-    if hasattr(X_transformed, "toarray"):
-        X_transformed = X_transformed.toarray()
+    print("extracting feature importances")
+    X_test_preprocessed = best_model.named_steps['preprocessor'].transform(X_test)
     feature_names = best_model.named_steps['preprocessor'].get_feature_names_out()
-    feature_names = np.array(feature_names).flatten()
+    model = best_model.named_steps['classifier']
 
-    explainer = shap.TreeExplainer(best_model.named_steps['classifier'])
-    shap_values = explainer.shap_values(X_transformed)
-    shap_values_to_plot = shap_values[1] if isinstance(shap_values, list) and len(shap_values) == 2 else shap_values
-    assert shap_values_to_plot.shape[1] == len(feature_names), (
-        f"SHAP feature count ({shap_values_to_plot.shape[1]}) does not match "
-        f"feature_names length ({len(feature_names)})"
+    # gini importances
+    gini_importances = model.feature_importances_
+
+    # permutation importances
+    if hasattr(X_test_preprocessed, "toarray"):  # create a dense version for permutation_importance ONLY
+        X_test_preprocessed_dense = X_test_preprocessed.toarray()
+    else:
+        X_test_preprocessed_dense = X_test_preprocessed
+
+    perm_result = permutation_importance(
+        model,
+        X_test_preprocessed_dense,
+        y_test,
+        n_repeats=n_repeats,  # permutation importance stability, the standard is 30; Empirical studies (including from scikit-learn authors) show that 30–50 repeats  is usually enough to estimate permutation importance reliably and with low variance.
+        random_state=random_state,
+        scoring=scoring_method
     )
 
+    # SHAP values with directionality
+    explainer = shap.TreeExplainer(model, model_output="raw")
+    if hasattr(X_test_preprocessed, "toarray"):
+        X_shap = X_test_preprocessed.toarray().astype(float)
+    else:
+        X_shap = X_test_preprocessed.astype(float)
 
-    """
-    SHAP summary plot
-    Each dot = one observation
-    X-axis = SHAP value: How much that feature pushed the prediction toward one class or the other.
-    Negative SHAP = push toward class 0
-    Positive SHAP = push toward class 1
-    Color = feature value (red = high, blue = low)
-    Y-axis = features ranked by importance (from top to bottom)
-    """
-    shap.summary_plot(shap_values_to_plot, X_transformed, feature_names=feature_names, show=False)
-    shap_plot_path = os.path.join(save_path, f"{save_prefix}_shap_summary_plot_{scoring_method}.png")
-    plt.tight_layout()
-    plt.savefig(shap_plot_path)
-    plt.close()
+    shap_values = explainer.shap_values(X_shap)
+    if isinstance(shap_values, np.ndarray) and shap_values.ndim == 3:
+        # shape: (n_samples, n_features, n_classes)
+        shap_vals = shap_values[:, :, 1]  # class 1
+    elif isinstance(shap_values, list) and len(shap_values) == 2:
+        # older style: list of arrays for each class
+        shap_vals = shap_values[1]
+    else:
+        raise ValueError(f"Unrecognized SHAP output shape: {type(shap_values)} {getattr(shap_values, 'shape', None)}")
+    mean_shap_values = shap_vals.mean(axis=0)  # how much, on average, this feature pushes predictions toward or away from class 1 (positive: increase likelihood of 1)
 
-    # Save mean absolute SHAP values
-    mean_abs_shap = np.mean(np.abs(shap_values_to_plot), axis=0).flatten()
-    mean_abs_shap_df = pd.DataFrame(mean_abs_shap)
-    mean_abs_shap_df.to_csv(os.path.join(save_path, f"{save_prefix}_shap_importances_{scoring_method}.csv"), index=False)
+    # importances df with SHAP values
+    importances_df = pd.DataFrame({
+        'Feature': feature_names,
+        'Gini_Importance': gini_importances,
+        'Perm_Importance_Mean': perm_result.importances_mean,
+        'Perm_Importance_Std': perm_result.importances_std,
+        'SHAP_Mean': mean_shap_values}).sort_values(by='Perm_Importance_Mean', ascending=False)
 
-    feature_names = best_model.named_steps['preprocessor'].get_feature_names_out()
-    pd.DataFrame({'Feature': feature_names}).to_csv(os.path.join(save_path, f"{save_prefix}_shap_feature_names_{scoring_method}.csv"), index=False)
-
-    # summary
-    result = {
-        'best_params': grid_search.best_params_,
-        'cv_scores': scores,
-        f"mean_{scoring_method}": mean_scores,
-        'p_value': p_value,
-        'dropped_categories': rare_merger.dropped_categories_,
-        'importances_df': importances_df
-    }
+    # save outputs
+    df_model.to_csv(os.path.join(save_path, f"{save_prefix}random_forest_df_model.csv"), index=False)
+    importances_df.to_csv(os.path.join(save_path, f"{save_prefix}random_forest_feature_importances.csv"), index=False)
 
     summary_data = {
-        'best_params': str(result['best_params']),
-        f"mean_{scoring_method}": result[f"mean_{scoring_method}"],
-        'p_value': result['p_value'],
-        'cv_scores': ', '.join([f"{s:.3f}" for s in result['cv_scores']]),
-        'dropped_categories': str(result['dropped_categories'])
+        #'best_model': best_model,
+        'best_params': str(grid_search.best_params_),
+        f"test_{scoring_method}_score": test_score,
+        f"mean_train_cv_{scoring_method}": mean_train_cv_score,
+        'train_cv_scores': ', '.join([f"{s:.3f}" for s in train_cv_scores]),
+        'p_value': p_value,
+        'dropped_categories': str(rare_merger.dropped_categories_)
     }
-
     summary_df = pd.DataFrame(list(summary_data.items()), columns=["Metric", "Value"])
-    summary_df.to_csv(os.path.join(save_path, f"{save_prefix}_random_forest_summary_{scoring_method}.csv"), index=False)
-    result['importances_df'].to_csv(os.path.join(save_path, f"{save_prefix}_random_forest_importances_{scoring_method}.csv"), index=False)
+    summary_df.to_csv(os.path.join(save_path, f"{save_prefix}random_forest_summary.csv"), index=False)
 
-    return result
+    if shap_plot:
+        """
+        SHAP summary plot
+        Each dot = one observation
+        X-axis = SHAP value: How much that feature pushed the prediction toward one class or the other.
+        Negative SHAP = push toward class 0
+        Positive SHAP = push toward class 1
+        Color = feature value (red = high, blue = low)
+        Y-axis = features ranked by importance (from top to bottom)
+        """
+        import matplotlib.pyplot as plt
+        from matplotlib import cm
+        print("generating SHAP summary plot")
+
+        custom_cmap = cm.get_cmap("coolwarm")
+        plt.figure(figsize=(10, 6))
+        shap.summary_plot(
+            shap_vals,
+            X_shap,
+            feature_names=feature_names,
+            color=custom_cmap,
+            plot_type="dot",  # or BAR
+            show=False
+        )
+        plt.xlabel("SHAP value (impact on class '1' in model output)", fontsize=20)
+        plt.ylabel("Feature", fontsize=20)
+        plt.xticks(fontsize=15)
+        plt.yticks(fontsize=15)
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_path, f"{save_prefix}random_forest_shap_summary_plot.svg"),
+                    format="svg", dpi=1000)
+        plt.close()
+
+    return best_model
 
 
 def run_group_mann_whitney(df, comparison_cols, group_col, group_col_name, group1_val, group1_name,

@@ -142,7 +142,7 @@ def demographics_age(demographics_df, save_path):
                            format="svg",
                            colors=age_color_order)
 
-    return
+    return demographics_df.loc[:, [process_survey.COL_ID, "age_group"]]
 
 
 def demographics_gender(demographics_df, save_path):
@@ -184,7 +184,7 @@ def demographics_gender(demographics_df, save_path):
                      props_in_legend=True, annot_props=True, annot_groups=False,
                      legend=True, legend_order=gender_order, legend_vertical=True)
 
-    return
+    return demographics_df.loc[:, [process_survey.COL_ID, gender_col]]
 
 
 def demographics_education(demographics_df, save_path):
@@ -255,7 +255,8 @@ def demographics_education(demographics_df, save_path):
     field_df = field_df.sort_values(by=PROP, ascending=False).reset_index(drop=True)  # descending proportion
     field_df.to_csv(os.path.join(save_path, "education_topic.csv"), index=False)
 
-    return
+    demographics_df["education_level"] = demographics_df[education_col].map(survey_mapping.EDU_MAP)
+    return demographics_df.loc[:, [process_survey.COL_ID, education_col, "education_level"]]
 
 
 def demographics_employment(demographics_df, save_path):
@@ -281,7 +282,7 @@ def demographics_employment(demographics_df, save_path):
     employment_df = employment_df.sort_values(by=PROP, ascending=False).reset_index(drop=True)
     employment_df.to_csv(os.path.join(save_path, "employment.csv"), index=False)
 
-    return
+    return demographics_df.loc[:, [process_survey.COL_ID, employment_col]]
 
 
 def demographics_country(demographics_df, save_path):
@@ -312,7 +313,7 @@ def demographics_country(demographics_df, save_path):
     """
     plotter.plot_world_map_proportion(country_proportions_df=country_df, data_column=country_col,
                                       save_path=save_path, save_name="country_map", fmt="svg")
-    return
+    return  demographics_df.loc[:, [process_survey.COL_ID, country_col]]
 
 
 def demographics_descriptives(analysis_dict, save_path):
@@ -335,29 +336,32 @@ def demographics_descriptives(analysis_dict, save_path):
     """
     Age
     """
-    demographics_age(demographics_df=con_demo, save_path=result_path)
+    df_age = demographics_age(demographics_df=con_demo, save_path=result_path)
 
     """ 
     Gender
     """
-    demographics_gender(demographics_df=con_demo, save_path=result_path)
+    df_gender = demographics_gender(demographics_df=con_demo, save_path=result_path)
 
     """ 
     Education
     """
-    demographics_education(demographics_df=con_demo, save_path=result_path)
+    df_edu = demographics_education(demographics_df=con_demo, save_path=result_path)
 
     """
     Employment
     """
-    demographics_employment(demographics_df=con_demo, save_path=result_path)
+    df_employment = demographics_employment(demographics_df=con_demo, save_path=result_path)
 
     """
     Country of Residence
     """
-    demographics_country(demographics_df=con_demo, save_path=result_path)
+    df_country = demographics_country(demographics_df=con_demo, save_path=result_path)
 
-    return
+    all_dfs = [df_age, df_gender, df_edu, df_employment, df_country]
+    merged_demo_df = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID], how="outer"), all_dfs)
+
+    return merged_demo_df
 
 
 def experience_descriptives(analysis_dict, save_path):
@@ -793,6 +797,46 @@ def consc_intell_descriptives(analysis_dict, save_path):
     df_counts[f"{PROP}_out_of_{survey_mapping.ANS_YES}"] = df_counts.apply(
         lambda row: 100 * (row[COUNT] / yes_total) if row.name != survey_mapping.ANS_NO else None, axis=1)
     df_counts.to_csv(os.path.join(result_path, f"{question.replace('?', '').replace('/', '-')}_how.csv"), index=True)
+    return con_intellect, result_path
+
+
+def consc_intell_RF(df_demographics, df_experience, df_con_intell, save_path):
+    # create dataframe to pass to a RF classifier
+    experience_cols_binary = [x for x in df_experience.columns if "_expert" in x]
+    df_experience_binary = df_experience.loc[:, [process_survey.COL_ID] + experience_cols_binary]
+    df_c_i_relevant = df_con_intell.loc[:, [process_survey.COL_ID, survey_mapping.Q_INTELLIGENCE]]
+    df_demo_relevant = df_demographics.loc[:, [process_survey.COL_ID, "age_group", "education_level",
+                                               survey_mapping.Q_GENDER, survey_mapping.Q_EMPLOYMENT,
+                                               survey_mapping.Q_COUNTRY]]
+    merged_df = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID], how='outer'),
+                       [df_experience_binary, df_demo_relevant, df_c_i_relevant])
+
+    """
+    Process columns to fit RF classifier
+    """
+    # turn 'age_group' into an ordinal variable (Categorical will turn groups into ints according do the order we have)
+    merged_df["age_group_order"] = pd.Categorical(merged_df["age_group"], categories=AGE_LABELS, ordered=True).codes
+
+    # binarize the predicted column
+    merged_df["con_intel_related_binary"] = merged_df[survey_mapping.Q_INTELLIGENCE].str.strip().map(survey_mapping.ANS_YESNO_MAP)
+    merged_df.to_csv(os.path.join(save_path, "random_forest_dataframe_original.csv"), index=False)
+
+    # define cols:
+    categorical_cols = [
+        survey_mapping.Q_GENDER,
+        survey_mapping.Q_EMPLOYMENT,
+        survey_mapping.Q_COUNTRY
+    ]
+    order_cols = experience_cols_binary + ["education_level", "age_group_order"]
+    dep_col = "con_intel_related_binary"
+    df = merged_df.loc[:, [process_survey.COL_ID] + categorical_cols + order_cols + [dep_col]]
+    df.to_csv(os.path.join(save_path, "random_forest_dataframe_coded.csv"), index=False)
+    helper_funcs.run_random_forest_pipeline(dataframe=df, dep_col=dep_col, categorical_cols=categorical_cols,
+                                            order_cols=order_cols, save_path=save_path, save_prefix="",
+                                            rare_class_threshold=5, n_permutations=1000, scoring_method="accuracy",
+                                            cv_folds=10, split_test_size=0.3, random_state=42, n_repeats=50,
+                                            shap_plot=True)
+
     return
 
 
@@ -810,14 +854,14 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Step 1: Basic demographics
     Get what we need to report the standard things we do
     """
-    #demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_demo = demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 2: Expertise
     We collected self-reported expertise levels with various topics. Get what we need to report about that
     returns: the df with all subjects and just the rating columns of 4 experience types(not the 'other' responses etc)
     """
-    #df_exp_ratings, exp_path = experience_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_exp_ratings, exp_path = experience_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 3: Can consciousness be separated from intentions/valence? 
@@ -849,12 +893,13 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     Step 5: Relationship between consciousness and intelligence
     """
-    consc_intell_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_c_i, c_i_path = consc_intell_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
-    
+    Step 6: Does the perceived relationship between consciousness and intelligence depend on demographic factors
+    (e.g., age) or expertise (e.g., with AI or with animals?) 
     """
-
+    consc_intell_RF(df_demographics=df_demo, df_experience=df_exp_ratings, df_con_intell=df_c_i, save_path=c_i_path)
 
     if load:  # load the earth-in-danger things
         df_earth_clusters = pd.read_csv(os.path.join(save_path, "earth_danger", f"earth_danger_clusters.csv"))
