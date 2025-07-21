@@ -691,7 +691,10 @@ def ics_descriptives(analysis_dict, save_path):
     df_c_groups = calculate_ics_proportions(df_ics=df_ics, save_path=result_path)
     df_c_groups.to_csv(os.path.join(result_path, "ics_with_c_groups.csv"), index=False)
 
-    return df_c_groups, result_path
+    ics_questions = list(survey_mapping.ICS_Q_NAME_MAP.keys())
+    df_ics_with_groups = pd.merge(df_ics.loc[:, [process_survey.COL_ID] + ics_questions], df_c_groups.loc[:, [process_survey.COL_ID, "group"]], on=process_survey.COL_ID)
+
+    return df_c_groups, df_ics_with_groups, result_path
 
 
 def perform_chi_square(df1, col1, df2, col2, id_col, save_path, save_name, save_expected=False,
@@ -717,6 +720,10 @@ def perform_chi_square(df1, col1, df2, col2, id_col, save_path, save_name, save_
                                                                    include_expected=True, ci_cols=grp2_vals)
     chisquare_result["question1"] = col1
     chisquare_result["question2"] = col2
+
+    chisquare_result["question1_counts"] = str(contingency_table.sum(axis=1).to_dict())
+    chisquare_result["question2_counts"] = str(contingency_table.sum(axis=0).to_dict())
+
     chisquare_result.to_csv(os.path.join(save_path, f"{save_name}_chisquared.csv"), index=False)
     if save_expected:
         expected_df.to_csv(os.path.join(save_path, f"{save_name}_chisquared_expected.csv"), index=False)
@@ -740,7 +747,7 @@ def perform_chi_square(df1, col1, df2, col2, id_col, save_path, save_name, save_
                                            save_path=save_path, plt_title=f"", plot_mean=False,
                                            stats_df=None,
                                            annotate_bar=True, annot_font_color="white")
-    return
+    return chisquare_result
 
 
 def perform_kruskal_wallis(df_ordinal, ordinal_col, df_group, group_col, id_col, save_path, save_name):
@@ -1010,7 +1017,7 @@ def kpt_descriptives(analysis_dict, save_path):
     return df_test, result_path
 
 
-def kpt_per_entity(kpt_df, save_path):
+def kpt_per_entity(kpt_df, cgroups_df, save_path):
     """
     Transform the kill-to-pass-test dataframe so that it could be modeled per entity in the follwoing way:
     model <- glmer(kill ~ Consciousness * Intentions * Sensations + (1| response_id), data = data, family = binomial())
@@ -1043,7 +1050,80 @@ def kpt_per_entity(kpt_df, save_path):
             transformed_data.append([response_id, entity_id, consciousness, intentions, sensations, kill])
     transformed_df = pd.DataFrame(transformed_data, columns=[process_survey.COL_ID, "entity", "Consciousness",
                                                              "Intentions", "Sensations", "kill"])
+
+    transformed_df = pd.merge(transformed_df, cgroups_df.loc[:, [process_survey.COL_ID, "group"]], on=process_survey.COL_ID)
     transformed_df.to_csv(os.path.join(save_path, f"kill_to_pass_coded_per_entity.csv"), index=False)
+
+    return kpt_df
+
+
+def kpt_per_ics(kpt_df, df_ics_groups, save_path):
+    """
+    This function connects between the block where we asked people about the possibility of having consciousness /
+    sensations / intentions without the others (ICS), and the scenarios where they had a chance to kill a creature
+    to pass an important test, with the creatures changing based on these dimensions (KPT).
+    Note that the logic relies heavily on survey_mapping.scenario_mapping.
+    The idea is the following:
+    The ICS asks:
+    1. Do you think someone can have C without I?
+    2. Do you think someone can have C without S?
+    3. Do you think someone can have I without C?
+    4. Do you think someone can have S without C?
+    So we have two pairs of questions: C-I relationship (1&3), and C-S relationship (2&4).
+
+    The KPT asks: would you kill a creature that
+    1. has C, without I or S → relevant: can C exist without I / without S?
+    2. has I, without C or S → relevant: can I exist without C?
+    3. has S, without C or I → relevant: can S exist without C?
+    4. has C & I, without S → relevant: can C exist without S?
+    5. has C & S, without I → relevant: can C exist without I?
+    6. has I & S, without C → relevant: can I exist without C / can S exist without C?
+    So for each scenario, we have a subset of questions (one or two) that are relevant.
+
+    For each killing scenario, we will split people into two groups:
+    (1) conceptually possible (answers to the RELEVANT ICS questions imply that this creature CAN exist);
+    (2) conceptually impossible group (think that at least one of the RELEVANT ICS questions is NOT POSSIBLE).
+
+    Then, we will perform a chi square, for each KPT scenario, asking whether killing behavior varies between people
+    who think the creature is possible and those who don't.
+
+    :param kpt_df: df containing the id col and the six killing scenarios we presented, with the results (yes/no)
+    already binarized (1/0)
+    :param df_ics_groups: df containing the id col and the four questions about the possibility of having
+    consciousness / sensations / intentions without the others, already binarized (1/0)
+    :param save_path: path to save the data to
+    """
+    ics_cols = list(survey_mapping.ICS_Q_NAME_MAP.keys())
+    # binarize ICS responses
+    df_ics_groups[ics_cols] = df_ics_groups[ics_cols].replace(survey_mapping.ANS_YESNO_MAP)
+    # unify for saving
+    unified_df = pd.merge(kpt_df, df_ics_groups.loc[:, [process_survey.COL_ID] + ics_cols], on=process_survey.COL_ID)
+    unified_df.to_csv(os.path.join(save_path, "kpt_with_ics.csv"), index=False)
+    # killing dict
+    kill_dict = {1: "Kill", 0: "Won't Kill"}
+
+    results = list()
+    for kill_col, poss_cols in survey_mapping.scenario_mapping.items():
+        # subset relevant columns for KILLING responses (KPT)
+        df1 = unified_df[[process_survey.COL_ID, kill_col]].copy()
+        # kill, no kill: for interpretation
+        df1[kill_col] = df1[kill_col].map(kill_dict)
+        # subset relevant columns for possibility responses (ICS)
+        df2 = unified_df[[process_survey.COL_ID] + poss_cols].copy()
+        # create a new column classifying participants as thinking the ICS scenario is "possible" or "not possible"
+        df2["is_scenario_possible"] = df2[poss_cols].apply(lambda row: "Possible" if all(row == 1) else "Impossible", axis=1)
+
+        result = perform_chi_square(df1=df1, col1=kill_col, grp1_vals=["Won't Kill", "Kill"],
+                                    grp1_color_dict={"Won't Kill": YES_NO_COLORS[survey_mapping.ANS_NO],
+                                                     "Kill": YES_NO_COLORS[survey_mapping.ANS_YES]},
+                                    df2=df2, col2="is_scenario_possible", grp2_vals=["Impossible", "Possible"],
+                                    col2_name=f"{kill_col}", # this is not a mistake, it's so that the X axis will describe the case
+                                    id_col=process_survey.COL_ID, save_path=save_path,
+                                    save_name=f"kpt_{kill_col}_by_ics",
+                                    save_expected=False)
+        results.append(result)
+    result_df = pd.concat(results)
+    result_df.to_csv(os.path.join(save_path, f"kpt_by_ics_chisquared_all.csv"), index=False)
 
     return
 
@@ -1077,7 +1157,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     df_c_groups contains a row per subject and focuses on answers to the Consciousness-wo-... questions, contraining
     the answers (y/n) to both (c wo intentions, c wo valence), and the group tagging based on that
     """
-    #df_c_groups, ics_path = ics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_c_groups, df_ics_with_groups, ics_path = ics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 4: Do the groups of people from the ics_descriptives differ based on experience with consciousness?
@@ -1152,17 +1232,24 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Step 11: Kill to Pass Test (KPT). A moral dilemma of 6 entities with I/C/S (ics), whether you'd kill them or not. 
     Descriptives
     """
-    #df_kpt, kpt_path = kpt_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_kpt, kpt_path = kpt_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
+    * Prepare data for modelling in R * 
     Step 12: Does the likelihood to kill a creature in the KPT scenarios change depending of its specific features? 
     (having I/C/S)?
     Prepare data for modelling (in R): Kill ~ Consciousness * Intentions * Sensations + (1|participant)
+    
+    Step 13: Does the likelihood to kill a creature in the KPT scenarios change depending on the conception of 
+    consciousness? (ics group: df_c_groups)
+    Prepare data for modelling (in R): Kill ~ Group + (1|participant) + (1|entity)
     """
-    #kpt_per_entity(kpt_df=df_kpt, save_path=kpt_path)
+    df_kpt_clean = kpt_per_entity(kpt_df=df_kpt, cgroups_df=df_c_groups, save_path=kpt_path)
 
-
-
+    """
+    Step 14: Is the KPT killing behavior affected by thinking that this creature is even possible? 
+    """
+    kpt_per_ics(kpt_df=df_kpt_clean, df_ics_groups=df_ics_with_groups, save_path=kpt_path)
 
 
     exit()

@@ -251,6 +251,35 @@ ANS_ALLNOS_KILL = "Because I wouldn't kill any creature regardless of their inte
 ANS_OTHER = "Other"
 ANS_ALLNOS_LIST = [ANS_ALLNOS_KILL, ANS_ALLNOS_IMMORAL, ANS_ALLNOS_INTERESTS, ANS_OTHER]
 
+
+# crossing between KPT and ICS:
+scenario_mapping = {
+    Q_CONSCIOUSNESS: [
+        ICS_Q_CONS_WO_SENS,
+        ICS_Q_CONS_WO_INT
+    ],
+    Q_INTENTIONS: [
+        ICS_Q_INT_WO_CONS
+    ],
+    Q_SENSATIONS: [
+        ICS_Q_SENS_WO_CONS
+    ],
+    Q_VULCAN: [
+        ICS_Q_CONS_WO_SENS
+    ],
+    Q_CONSCIOUSNESS_SENSATIONS: [
+        ICS_Q_CONS_WO_INT
+    ],
+    Q_SENSATIONS_INTENTIONS: [
+        ICS_Q_INT_WO_CONS,
+        ICS_Q_SENS_WO_CONS
+    ]
+}
+
+
+
+
+
 # pill for no phenomenology; would you take it
 Q_ZOMBIE = "Would you take the pill?"
 zombification_pill = {
