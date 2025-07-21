@@ -951,6 +951,7 @@ def kpt_descriptives(analysis_dict, save_path):
     final_df = pd.concat([creature_stats, summary_stats], ignore_index=True)
     final_df[[f"kill_{COUNT}", f"no_kill_{COUNT}"]] = final_df[[f"kill_{COUNT}", f"no_kill_{COUNT}"]].fillna(0).astype(int)
     final_df[[f"kill_{PROP}", f"no_kill_{PROP}"]] = final_df[[f"kill_{PROP}", f"no_kill_{PROP}"]].fillna(0)
+    final_df.to_csv(os.path.join(result_path, "kill_to_pass_descriptives.csv"), index=False)
 
     """
     Plot
@@ -979,15 +980,14 @@ def kpt_descriptives(analysis_dict, save_path):
                                          annot_font_color="#e0e1dd", save_path=result_path,
                                          save_name="kill_to_pass_discounted", fmt="svg", split=True,
                                          yes_all_proportion=yes_all_proportion, no_all_proportion=no_all_proportion)
+    df_result = pd.DataFrame(sorted_plot_data)
+    df_result.to_csv(os.path.join(result_path, f"kill_to_pass_discounted.csv"))
 
     """
     Follow up question on those who replied all 'No's (wouldn't kill any creature)
     """
     df_test_allnos = df_test[~df_test[survey_mapping.Q_NO_KILL_WHY].isna()]
-
-
     # plot
-
     for item in survey_mapping.ANS_ALLNOS_LIST:
         df_test_allnos[item] = df_test_allnos[survey_mapping.Q_NO_KILL_WHY].apply(lambda x: int(item in x))
 
@@ -1007,6 +1007,44 @@ def kpt_descriptives(analysis_dict, save_path):
                                   y_fontsize=30, title_text=f"{survey_mapping.Q_NO_KILL_WHY}", flip=True, alpha=0.6,
                                   add_pcnt=True, pcnt_position="middle", pcnt_color="white", pcnt_size=30,
                                   y_tick_fontsize=25)
+    return df_test, result_path
+
+
+def kpt_per_entity(kpt_df, save_path):
+    """
+    Transform the kill-to-pass-test dataframe so that it could be modeled per entity in the follwoing way:
+    model <- glmer(kill ~ Consciousness * Intentions * Sensations + (1| response_id), data = data, family = binomial())
+    The idea is to be able to test how the presence or absence of each property  (intentions, sensations, consciousness)
+    affects the likelihood that its killed. For that, we need to transform our data.
+    :param kpt_df: The responses to this block of questions
+    :param save_path: The path to save the transformed data to
+    """
+
+    # preprocess: binarize responses
+    kpt_df = kpt_df.rename(columns=survey_mapping.important_test_kill_tokens)
+    all_feature_cols = list(survey_mapping.important_test_kill_tokens.values())
+    kpt_df[all_feature_cols] = kpt_df[all_feature_cols].replace({
+        survey_mapping.ANS_KILL: survey_mapping.ANS_YES,
+        survey_mapping.ANS_NOKILL: survey_mapping.ANS_NO})
+    kpt_df[all_feature_cols] = kpt_df[all_feature_cols].replace(survey_mapping.ANS_YESNO_MAP)
+
+    # leave only the relevant columns, and transform
+    relevant_columns = [process_survey.COL_ID] + all_feature_cols
+    kpt_df = kpt_df[relevant_columns]
+    transformed_data = list()
+    for index, row in kpt_df.iterrows():
+        response_id = row[process_survey.COL_ID]
+        for entity_index, entity_column in enumerate(all_feature_cols, start=1):
+            entity_id = f"{entity_column}"
+            consciousness = survey_mapping.Q_ENTITY_MAP[entity_column]["Consciousness"]
+            intentions = survey_mapping.Q_ENTITY_MAP[entity_column]["Intentions"]
+            sensations = survey_mapping.Q_ENTITY_MAP[entity_column]["Sensations"]
+            kill = 1 if row[entity_column] == 1 else 0
+            transformed_data.append([response_id, entity_id, consciousness, intentions, sensations, kill])
+    transformed_df = pd.DataFrame(transformed_data, columns=[process_survey.COL_ID, "entity", "Consciousness",
+                                                             "Intentions", "Sensations", "kill"])
+    transformed_df.to_csv(os.path.join(save_path, f"kill_to_pass_coded_per_entity.csv"), index=False)
+
     return
 
 
@@ -1114,7 +1152,15 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Step 11: Kill to Pass Test (KPT). A moral dilemma of 6 entities with I/C/S (ics), whether you'd kill them or not. 
     Descriptives
     """
-    df_kpt, kpt_path = kpt_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    #df_kpt, kpt_path = kpt_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+
+    """
+    Step 12: Does the likelihood to kill a creature in the KPT scenarios change depending of its specific features? 
+    (having I/C/S)?
+    Prepare data for modelling (in R): Kill ~ Consciousness * Intentions * Sensations + (1|participant)
+    """
+    #kpt_per_entity(kpt_df=df_kpt, save_path=kpt_path)
+
 
 
 

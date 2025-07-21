@@ -204,6 +204,7 @@ ANS_NO = "No"
 ANS_YESNO_MAP = {ANS_YES: 1, ANS_NO: 0}
 
 # important test (kill a creature/system for success)
+Q_NO_KILL_WHY = "You wouldn't eliminate any of the creatures; why?"
 important_test_kill = {
     "creature_sensations": "A creature/system that can only feel positive/negative sensations (pleasure/pain), but is not conscious (not experiencing) and does not have plans/goals or intentions (for example, can't plan to avoid something that causes pain)",
     "creature_intentions": "A creature/system that only has plans/goals and intentions (can plan to perform certain actions in the future), but is not conscious (not experiencing) and cannot feel positive/negative sensations (pleasure/pain)",
@@ -211,7 +212,7 @@ important_test_kill = {
     "creature_vulcan": "A creature/system that is both conscious (has experiences) and has plans/goals and intentions (can plan to perform certain actions in the future), but cannot feel positive/negative sensations (pleasure/pain)",
     "creature_conSense": "A creature/system that is both conscious (has experiences) and can feel positive/negative sensations (pleasure/pain), but does not have plans/goals or intentions (for example, can't plan to avoid something that causes pain)",
     "creature_sensePlan": "A creature/system that can feel positive/negative sensations (pleasure/pain) and also has plans/goals and intentions (can plan to perform certain actions in the future), but is not conscious (not experiencing)",
-    "all_nos": "You wouldn't eliminate any of the creatures; why?",
+    "all_nos": Q_NO_KILL_WHY,
     "all_nos_other": "noKill_Other: please specify"
 }
 
@@ -247,10 +248,13 @@ ANS_KILLING_MAP = {ANS_KILL: 1, ANS_NOKILL: 0}
 ANS_ALLNOS_IMMORAL = "Because I think it would be immoral"
 ANS_ALLNOS_INTERESTS = "Because I think all of them have interests of their own"
 ANS_ALLNOS_KILL = "Because I wouldn't kill any creature regardless of their interests or capacities"
+ANS_OTHER = "Other"
+ANS_ALLNOS_LIST = [ANS_ALLNOS_KILL, ANS_ALLNOS_IMMORAL, ANS_ALLNOS_INTERESTS, ANS_OTHER]
 
 # pill for no phenomenology; would you take it
+Q_ZOMBIE = "Would you take the pill?"
 zombification_pill = {
-    "take_the_pill": "Would you take the pill?"
+    "take_the_pill": Q_ZOMBIE
 }
 # answers: ANS_YES, ANS_NO
 
@@ -270,7 +274,6 @@ ANS_PLAN = "Planning, goals"
 ANS_SELF = "Self-awareness"
 ANS_PHENOMENOLOGY = "Something it is like to be that creature/system"
 ANS_THINK = "Thinking"
-ANS_OTHER = "Other"
 ALL_FEATURES = [ANS_LANG, ANS_SENS, ANS_SENTIENCE, ANS_PLAN, ANS_SELF, ANS_PHENOMENOLOGY, ANS_THINK, ANS_OTHER]
 
 PRIOS_Q_NONCONS = "Do you think non-conscious creatures/systems should be taken into account in moral decisions?"
