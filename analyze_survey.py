@@ -29,6 +29,8 @@ EXP_COLORS = {1: "#e63946",
 ICS_GROUP_COLOR_LIST = ["#B53B03", "#ee9b00", "#005f73", "#3B4E58"]
 ICS_GROUP_ORDER_LIST = ["multidimensional", "cognitive-agential", "experiential", "other"]
 
+NO_KILL_COLOR_LIST = [YES_NO_COLORS[survey_mapping.ANS_NO] for i in range(len(survey_mapping.ANS_ALLNOS_LIST))]
+
 
 def earth_in_danger_clustering(analysis_dict, save_path, cluster_num=2, cluster_colors=None):
     """
@@ -706,7 +708,11 @@ def perform_chi_square(df1, col1, df2, col2, id_col, save_path, save_name, save_
     of that grouping variable (e.g., [0, 1], ['no', 'yes'], etc), for the calculation of the CI.
     """
 
-    contingency_table = pd.crosstab(df1[col1], df2[col2])
+    # ensure we're on the same playing field - unify based on id_column
+    merged = pd.merge(df1[[id_col, col1]], df2[[id_col, col2]], on=id_col)
+    merged.to_csv(os.path.join(save_path, f"{save_name}_chisquared_data.csv"), index=False)
+    # create the contingency table
+    contingency_table = pd.crosstab(merged[col1], merged[col2])
     chisquare_result, expected_df = helper_funcs.chi_squared_test(contingency_table=contingency_table,
                                                                    include_expected=True, ci_cols=grp2_vals)
     chisquare_result["question1"] = col1
@@ -716,14 +722,13 @@ def perform_chi_square(df1, col1, df2, col2, id_col, save_path, save_name, save_
         expected_df.to_csv(os.path.join(save_path, f"{save_name}_chisquared_expected.csv"), index=False)
 
     # plot
-    merged = pd.merge(df1[[id_col, col1]], df2[[id_col, col2]], on=id_col)
     counts = merged.groupby([col2, col1]).size().unstack(fill_value=0)
     grouped_props = counts.div(counts.sum(axis=1), axis=0) * 100
     plot_ready_df = grouped_props.reset_index()
     if not y_tick_list:
         y_tick_list = [0, 25, 50, 75, 100]
     if not grp2_map:
-        grp2_map = grp2_vals
+        grp2_map = {grp2_vals[i]: grp2_vals[i] for i in range(len(grp2_vals))}
     if not col2_name:
         col2_name = col2
     plotter.plot_expertise_proportion_bars(df=plot_ready_df,
@@ -840,6 +845,171 @@ def consc_intell_RF(df_demographics, df_experience, df_con_intell, save_path):
     return
 
 
+def ics_group_from_cons_intell(df_con_intell, df_ics_groups, save_path):
+    """
+    Perform multinomial logistic regression to check whether the perceived relationship between consciousness
+    and intelligence predict belonging to a specific group of cconsciousness-conception?
+    :param df_con_intell: df containing the answer to the question about whehter consciousness and intelligence
+    are related
+    :param df_ics_groups: df containing the groups of consciousness conception
+    :param save_path: path to save the data to
+    """
+
+    merged_df = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID], how='outer'),
+                       [df_con_intell, df_ics_groups])
+    merged_df["con_intel_related_binary"] = merged_df[survey_mapping.Q_INTELLIGENCE].str.strip().map(survey_mapping.ANS_YESNO_MAP)
+    merged_df["group"] = pd.Categorical(merged_df["group"], categories=ICS_GROUP_ORDER_LIST, ordered=False)  # they have no order meaning
+
+    """
+    Perform multinomial logistic regression: the dependent variable is categorical with more than 2 unordered levels
+    (the ics groups). The independent variable is binary (intelligence and consciousness are related). 
+    multinomial logistic regression models the log-odds of being in each of the outcome groups relative to a 
+    reference group, telling us tell you how the binary factor affects the probability of being in one group vs another.
+    """
+
+    helper_funcs.multinom_logistic_regression(df=merged_df, categorical_dep_col="group", id_col=process_survey.COL_ID,
+                                              binary_feature_col="con_intel_related_binary", save_path=save_path,
+                                              save_name="ics_per_conIntel", use_class_weights=True,
+                                              reference_category="cognitive-agential")
+
+    return
+
+
+def zombie_pill_descriptives(analysis_dict, save_path):
+    # save path
+    result_path = os.path.join(save_path, "zombie_pill")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    # load relevant data
+    df_zombie = analysis_dict["zombification_pill"].copy()
+    zombie_q = survey_mapping.Q_ZOMBIE
+
+    # plot pie chart
+    category_counts = df_zombie[zombie_q].value_counts()
+    category_props = df_zombie[zombie_q].value_counts(normalize=True)
+    category_df = pd.DataFrame({
+        zombie_q: category_counts.index,
+        COUNT: category_counts.values,
+        PROP: category_props.values * 100  # convert to percentage
+    })
+    category_df.to_csv(os.path.join(result_path, f"take_the_pill_{PROP}.csv"), index=False)
+
+    """
+    Plot
+    """
+    plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
+                     categories_colors=YES_NO_COLORS, title=f"{zombie_q}", pie_direction=180, edge_color="none",
+                     save_path=result_path, save_name=f"take_the_pill_{PROP}", fmt="svg",
+                     props_in_legend=True, annot_props=True, label_inside=True, annot_groups=True,
+                     legend=False, legend_order=None, legend_vertical=True)
+
+    return df_zombie.loc[:, [process_survey.COL_ID, zombie_q]], result_path
+
+
+def kpt_descriptives(analysis_dict, save_path):
+    # save path
+    result_path = os.path.join(save_path, "kill_for_test")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    df_test = analysis_dict["important_test_kill"].copy()
+
+    # pre-processing: extract and rename the binary kill/no kill questions
+    kill_questions = list(survey_mapping.important_test_kill_tokens.keys())
+    kill_questions_values = list(survey_mapping.important_test_kill_tokens.values())
+    df_processed = df_test[kill_questions].replace({survey_mapping.ANS_KILL: survey_mapping.ANS_YES,
+                                                    survey_mapping.ANS_NOKILL: survey_mapping.ANS_NO})
+    # rename columns
+    df_processed.columns = [survey_mapping.important_test_kill_tokens[q] for q in df_processed.columns]
+    total_respondents = df_processed.shape[0]
+    # binarize yes/no column
+    df_binary = df_processed[kill_questions_values].replace(survey_mapping.ANS_YESNO_MAP)
+
+    # kill per scenario
+    creature_stats = df_binary.apply(lambda col: pd.Series({
+        f"kill_{COUNT}": int(col.sum()),
+        f"no_kill_{COUNT}": int(total_respondents - col.sum()),
+        f"kill_{PROP}": col.mean() * 100,
+        f"no_kill_{PROP}": (1 - col.mean()) * 100
+    }))
+    creature_stats = creature_stats.reset_index().rename(columns={'index': 'Creature/System'})
+
+    # behavior across entities
+    all_kill = df_binary[df_binary.eq(1).all(axis=1)]
+    all_no_kill = df_binary[df_binary.eq(0).all(axis=1)]
+    rest = df_binary[~df_binary.index.isin(all_kill.index.union(all_no_kill.index))]
+    summary_stats = pd.DataFrame({
+        "Creature/System": ["All Kill", "All No-Kill", "Rest"],
+        f"kill_{COUNT}": [all_kill.shape[0], all_no_kill.shape[0], rest.shape[0]],
+        f"kill_{PROP}": [100 * all_kill.shape[0] / total_respondents,
+                         100 * all_no_kill.shape[0] / total_respondents,
+                         100 * rest.shape[0] / total_respondents]})
+    summary_stats[f"no_kill_{COUNT}"] = total_respondents - summary_stats[f"kill_{COUNT}"]
+    summary_stats[f"no_kill_{PROP}"] = 100 - summary_stats[f"kill_{PROP}"]
+
+    final_df = pd.concat([creature_stats, summary_stats], ignore_index=True)
+    final_df[[f"kill_{COUNT}", f"no_kill_{COUNT}"]] = final_df[[f"kill_{COUNT}", f"no_kill_{COUNT}"]].fillna(0).astype(int)
+    final_df[[f"kill_{PROP}", f"no_kill_{PROP}"]] = final_df[[f"kill_{PROP}", f"no_kill_{PROP}"]].fillna(0)
+
+    """
+    Plot
+    """
+    stats = {qname: helper_funcs.compute_stats(df_binary[qname], possible_values=[0, 1]) for qname in df_binary.columns}
+    plot_data = {
+        qname: {
+            "Proportion": stat[0],
+            "Mean": stat[1],
+            "Std Dev": stat[2],
+            "N": stat[3]
+        }
+        for qname, stat in stats.items()
+    }
+    sorted_plot_data = sorted(plot_data.items(), key=lambda x: x[1]["Mean"], reverse=True)
+    df_yes_all = df_binary.apply(lambda row: all(row == 1), axis=1)
+    yes_all_proportion = df_yes_all.sum() / total_respondents
+    df_no_all = df_binary.apply(lambda row: all(row == 0), axis=1)
+    no_all_proportion = df_no_all.sum() / total_respondents
+
+    rating_labels = [survey_mapping.ANS_NO, survey_mapping.ANS_YES]
+    rating_colors = [YES_NO_COLORS[survey_mapping.ANS_NO], YES_NO_COLORS[survey_mapping.ANS_YES]]
+    plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, legend_labels=rating_labels, ytick_visible=True,
+                                         text_width=39, title="Would you kill to pass the test?", show_mean=False,
+                                         sem_line=False, colors=rating_colors, num_ratings=2, annotate_bar=True,
+                                         annot_font_color="#e0e1dd", save_path=result_path,
+                                         save_name="kill_to_pass_discounted", fmt="svg", split=True,
+                                         yes_all_proportion=yes_all_proportion, no_all_proportion=no_all_proportion)
+
+    """
+    Follow up question on those who replied all 'No's (wouldn't kill any creature)
+    """
+    df_test_allnos = df_test[~df_test[survey_mapping.Q_NO_KILL_WHY].isna()]
+
+
+    # plot
+
+    for item in survey_mapping.ANS_ALLNOS_LIST:
+        df_test_allnos[item] = df_test_allnos[survey_mapping.Q_NO_KILL_WHY].apply(lambda x: int(item in x))
+
+    df_test_allnos.to_csv(os.path.join(result_path, "all_nos_why_data.csv"), index=False)
+    reason_cols = survey_mapping.ANS_ALLNOS_LIST
+
+    category_counts = df_test_allnos[reason_cols].sum().reset_index()
+    category_counts.columns = ["Answer", COUNT]
+    category_counts[PROP] = 100 * category_counts[COUNT] / len(df_test_allnos)
+    category_counts.to_csv(os.path.join(result_path, "all_nos_why.csv"), index=False)
+
+    colors = {survey_mapping.ANS_ALLNOS_LIST[i]: NO_KILL_COLOR_LIST[i] for i in range(len(NO_KILL_COLOR_LIST))}
+    plotter.plot_categorical_bars(categories_prop_df=category_counts, category_col="Answer", data_col=f"{PROP}",
+                                  categories_colors=colors, save_path=result_path, save_name="all_nos_why", fmt="svg",
+                                  y_min=0, y_max=100, y_skip=10, delete_y=False, inch_w=12, inch_h=15,
+                                  order=survey_mapping.ANS_ALLNOS_LIST, text_wrap_width=15, x_label="Reason",
+                                  y_fontsize=30, title_text=f"{survey_mapping.Q_NO_KILL_WHY}", flip=True, alpha=0.6,
+                                  add_pcnt=True, pcnt_position="middle", pcnt_color="white", pcnt_size=30,
+                                  y_tick_fontsize=25)
+    return
+
+
 def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     The method which manages all the processing of specific survey data for analyses.
@@ -854,14 +1024,14 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Step 1: Basic demographics
     Get what we need to report the standard things we do
     """
-    df_demo = demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    #df_demo = demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 2: Expertise
     We collected self-reported expertise levels with various topics. Get what we need to report about that
     returns: the df with all subjects and just the rating columns of 4 experience types(not the 'other' responses etc)
     """
-    df_exp_ratings, exp_path = experience_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    #df_exp_ratings, exp_path = experience_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 3: Can consciousness be separated from intentions/valence? 
@@ -869,7 +1039,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     df_c_groups contains a row per subject and focuses on answers to the Consciousness-wo-... questions, contraining
     the answers (y/n) to both (c wo intentions, c wo valence), and the group tagging based on that
     """
-    df_c_groups, ics_path = ics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    #df_c_groups, ics_path = ics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 4: Do the groups of people from the ics_descriptives differ based on experience with consciousness?
@@ -893,13 +1063,63 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     Step 5: Relationship between consciousness and intelligence
     """
-    df_c_i, c_i_path = consc_intell_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    #df_c_i, c_i_path = consc_intell_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 6: Does the perceived relationship between consciousness and intelligence depend on demographic factors
     (e.g., age) or expertise (e.g., with AI or with animals?) 
     """
-    consc_intell_RF(df_demographics=df_demo, df_experience=df_exp_ratings, df_con_intell=df_c_i, save_path=c_i_path)
+    #consc_intell_RF(df_demographics=df_demo, df_experience=df_exp_ratings, df_con_intell=df_c_i, save_path=c_i_path)
+
+    """
+    Step 7: Does the perceived relationship between consciousness and intelligence PREDICT a conception of consciousness
+    as it is evident from the ics groups? (ics_descriptives)
+    """
+    #ics_group_from_cons_intell(df_con_intell=df_c_i, df_ics_groups=df_c_groups, save_path=c_i_path)
+
+
+    """
+    Step 8: Zombie pill dilemma. A variation of Siewert's pheno-ectomy thought experiment. 
+    Descriptives
+    """
+    #df_pill, pill_path = zombie_pill_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+
+    """
+    Step 9: Do consciousness experts answer the Zombie pill question differently than non-experts?
+    Logic is similar to step #4
+    """
+    # Consciousness_expert is a binary column where 0 = people who rated themselves < EXPERTISE and 1 otherwise
+    #perform_chi_square(df1=df_pill, col1=survey_mapping.Q_ZOMBIE,
+    #                   df2=df_exp_ratings, col2="Consciousness_expert", col2_name="Consciousness Expertise",
+    #                   id_col=process_survey.COL_ID,
+    #                   save_path=pill_path, save_name="consciousness_exp", save_expected=False,
+    #                   grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
+    #                   grp2_vals=[0, 1], grp2_map={0: "Non Expert", 1: "Expert"},
+    #                   grp1_color_dict=YES_NO_COLORS)
+
+    """
+    Step 10: Do the different ICS groups answer the Zombie pill question differently from each other?
+    Logic is similar to steps #4 and #9
+    Zombie = binary (yes/no), consciousness group = 4 groups (df_c_groups)
+    """
+    #perform_chi_square(df1=df_pill, col1=survey_mapping.Q_ZOMBIE,
+    #                   df2=df_c_groups, col2="group", col2_name="Conception of Consciousness",
+    #                   id_col=process_survey.COL_ID,
+    #                   save_path=pill_path, save_name="ics_group", save_expected=False,
+    #                   grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
+    #                   grp2_vals=ICS_GROUP_ORDER_LIST, grp2_map=None,
+    #                   grp1_color_dict=YES_NO_COLORS)
+
+    """
+    Step 11: Kill to Pass Test (KPT). A moral dilemma of 6 entities with I/C/S (ics), whether you'd kill them or not. 
+    Descriptives
+    """
+    df_kpt, kpt_path = kpt_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+
+
+
+
+    exit()
 
     if load:  # load the earth-in-danger things
         df_earth_clusters = pd.read_csv(os.path.join(save_path, "earth_danger", f"earth_danger_clusters.csv"))

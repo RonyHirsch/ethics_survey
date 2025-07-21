@@ -832,10 +832,11 @@ def plot_categorical_bars_hued(categories_prop_df, x_col, category_col, data_col
     return
 
 
-def plot_categorical_bars(categories_prop_df, category_col, data_col, categories_colors,
-                          save_path, save_name, fmt="svg", y_min=0, y_max=100, y_skip=10, delete_y=True,
-                          inch_w=15, inch_h=12, add_pcnt=True, order=None, text_wrap_width=13,
-                          x_label="", y_fontsize=28, title_text="", name_map=None):
+def plot_categorical_bars(categories_prop_df, category_col, data_col, categories_colors, save_path, save_name,
+                          fmt="svg", y_min=0, y_max=100, y_skip=10, delete_y=True, y_tick_fontsize=30,
+                          y_label="Proportion of Responses (%)", order=None, text_wrap_width=13, title_fontsize=30,
+                          inch_w=15, inch_h=12, add_pcnt=True, pcnt_position="top", pcnt_color="black", pcnt_size=28,
+                          x_label="", y_fontsize=28, title_text="", name_map=None, flip=False, alpha=1.0):
 
     plt.figure(figsize=(8, 6))
     sns.set_style("ticks")
@@ -849,42 +850,91 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
     display_labels = [name_map[cat] if name_map and cat in name_map else cat for cat in order]
 
     if categories_colors is None:
-        barplot = sns.barplot(x=category_col, y=data_col, data=categories_prop_df, order=order)
+        barplot = sns.barplot(
+            x=category_col if not flip else data_col,
+            y=data_col if not flip else category_col,
+            data=categories_prop_df,
+            order=order, alpha=alpha
+        )
     else:
-        barplot = sns.barplot(x=category_col, y=data_col, data=categories_prop_df,
-                              palette=categories_colors, order=order)
+        barplot = sns.barplot(
+            x=category_col if not flip else data_col,
+            y=data_col if not flip else category_col,
+            data=categories_prop_df,
+            palette=categories_colors,
+            order=order, alpha=alpha
+        )
 
     # add percentages on top of each bar
     if add_pcnt:
         for index, row in categories_prop_df.iterrows():
-            barplot.text(
-                index,  # X-coordinate (position of the bar)
-                row[data_col] + 1,  # Y-coordinate (slightly above the bar)
-                f"{row[data_col]:.0f}%",  # The text (percentage value)
-                color="black",  # Text color
-                ha="center",  # Horizontal alignment
-                fontsize=28  # Font size
-            )
+            value = row[data_col]
+            label = f"{value:.0f}%"
+
+            if flip:
+                if pcnt_position == "middle":
+                    x = value / 2
+                    ha = "center"
+                else:  # "top"
+                    x = value + 1
+                    ha = "left"
+                barplot.text(
+                    x,
+                    index,
+                    label,
+                    color=pcnt_color,
+                    va="center",
+                    ha=ha,
+                    fontsize=pcnt_size
+                )
+            else:
+                if pcnt_position == "middle":
+                    y = value / 2
+                    va = "center"
+                else:  # "top"
+                    y = value + 1  # Y-coordinate (slightly above the bar)
+                    va = "bottom"
+                barplot.text(
+                    index,
+                    y,
+                    label,
+                    color=pcnt_color,
+                    ha="center",
+                    va=va,
+                    fontsize=pcnt_size
+                )
 
     # now delete y-axis
-    if delete_y:
+    if delete_y and not flip:
         sns.despine(right=True, top=True, left=True)
         plt.ylabel("")
         plt.yticks([])
+    elif delete_y and flip:
+        sns.despine(right=True, top=True, bottom=True)
+        plt.xlabel("")
+        plt.xticks([])
     else:
-        plt.yticks([y for y in np.arange(y_min, y_max, y_skip)], fontsize=y_fontsize)
-        plt.ylabel("Proportion", fontsize=y_fontsize)
+        if not flip:
+            plt.yticks([y for y in np.arange(y_min, y_max, y_skip)], fontsize=y_tick_fontsize)
+            plt.ylabel(y_label, fontsize=y_fontsize)
 
     # X axis and label
     wrapped_labels = [textwrap.fill(label, width=text_wrap_width) for label in display_labels]
-    plt.xticks(ticks=np.arange(len(wrapped_labels)), labels=wrapped_labels, fontsize=28)
-    plt.xlabel(x_label, fontsize=28)
+    if not flip:
+        plt.xticks(ticks=np.arange(len(wrapped_labels)), labels=wrapped_labels, fontsize=y_fontsize)
+        plt.xlabel(x_label, fontsize=y_fontsize)
+    else:
+        plt.yticks(ticks=np.arange(len(wrapped_labels)), labels=wrapped_labels, fontsize=y_fontsize)
+        plt.ylabel(x_label, fontsize=y_fontsize)
+        plt.xticks(fontsize=y_fontsize)
+        plt.xlabel(y_label, fontsize=y_fontsize)
+
     ax = plt.gca()  # get current axis
     ax.spines["right"].set_visible(False)
     ax.spines["top"].set_visible(False)
 
     # title
-    plt.title(f"{title_text}", fontsize=30)
+    plt.title(f"{title_text}", fontsize=title_fontsize)
 
     # save plot
     figure = plt.gcf()  # get current figure

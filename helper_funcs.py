@@ -1486,4 +1486,162 @@ def krippendorff_alpha(data, metric=interval_metric, convert_items=float):
     return 1. - Do / De if (Do and De) else 1.
 
 
+def multinom_logistic_regression(df, id_col, categorical_dep_col, binary_feature_col, save_path, save_name,
+                                 reference_category=None, use_class_weights=True):
+
+    multinom_df = df.copy()
+    multinom_df = multinom_df.loc[:, [id_col, binary_feature_col, categorical_dep_col]]
+    multinom_df.to_csv(os.path.join(save_path, f"{save_name}_multinom_df.csv"), index=False)
+
+    # set reference category if specified
+    if reference_category is not None:
+        if not isinstance(multinom_df[categorical_dep_col].dtype, pd.CategoricalDtype):
+            multinom_df[categorical_dep_col] = multinom_df[categorical_dep_col].astype('category')
+        if not multinom_df[categorical_dep_col].cat.ordered:
+            multinom_df[categorical_dep_col] = multinom_df[categorical_dep_col].cat.as_ordered()
+        if reference_category not in multinom_df[categorical_dep_col].cat.categories:
+            raise ValueError(f"Reference category '{reference_category}' not found in '{categorical_dep_col}'")
+        multinom_df[categorical_dep_col] = multinom_df[categorical_dep_col].cat.reorder_categories(
+            [reference_category] + [cat for cat in multinom_df[categorical_dep_col].cat.categories if
+                                    cat != reference_category],
+            ordered=True
+        )
+
+    # prepare X (predictor) and y (dep)
+    """
+    Preparing the X: adding an intercept term (a constant column of 1s). This is necessary because regression models
+    include an intercept term by default, and statsmodels expects you to add it explicitly. 
+    If you don’t add the constant, the model will assume the intercept is 0, which usually leads to a misfit model 
+    unless you're modeling something that naturally goes through the origin (which is rare).
+    """
+    X = sm.add_constant(multinom_df[binary_feature_col])  # adds a column of 1s as an intercept.
+    y = multinom_df[categorical_dep_col]
+
+    """
+    If we want to use class weighting because we want to infer relationships, not to classify future observations
+    And we do, because we are checking if the binary feature predicts class 
+    """
+    weights = None
+    if use_class_weights:
+        class_counts = multinom_df[categorical_dep_col].value_counts()
+        total = class_counts.sum()
+        weights = multinom_df[categorical_dep_col].map(lambda c: total / class_counts[c])
+
+    # fit model
+    model = sm.MNLogit(y, X)
+    result = model.fit(disp=False, weights=weights)  # disp=False: don't present the iterations
+
+    # predicted class
+    predicted_probs = result.predict(X)
+    predicted_class = predicted_probs.idxmax(axis=1)
+    """
+    Accuracy score: if 0 then it means the model learns nothing useful from the binary feature, 
+    predicts the same group (reference) every time, and non of those predictions match the actual labels. 
+    """
+    accuracy = accuracy_score(y, predicted_class)
+
+    # confidence intervals
+    conf_int = result.conf_int()
+    conf_int.columns = ['ci_lower', 'ci_upper']
+    conf_int_odds = np.exp(conf_int)
+
+    """
+    Likelihood Ratio Test (LRT): compare this model to the null model, to test whether the binary predictor provides 
+    useful explanatory power beyond random guessing or the base rates of categories.
+    """
+    # fit null model (intercept only)
+    X_null = pd.DataFrame({'const': 1}, index=multinom_df.index)
+    null_model = sm.MNLogit(y, X_null)
+    null_result = null_model.fit(disp=False, weights=weights)  # use the same weights in the null model
+    # calculate LRT
+    lr_stat = 2 * (result.llf - null_result.llf)
+    df_diff = result.df_model - null_result.df_model
+    p_value_lr = stats.chi2.sf(lr_stat, df_diff)
+
+    with open(os.path.join(save_path, f"{save_name}_multinom_logistic_regression_summary.txt"), "w") as f:
+        print("=== Multinomial Logistic Regression Summary ===\n", file=f)
+        print(result.summary(), file=f)
+        print(f"\nReference category: {y.cat.categories[0]}", file=f)
+
+        print("\n=== Odds Ratios ===\n", file=f)
+        print(np.exp(result.params), file=f)
+
+        print("\n=== P-values ===\n", file=f)
+        print(result.pvalues, file=f)
+
+        print("\n=== 95% Confidence Intervals (Beta Coefficients) ===\n", file=f)
+        print(conf_int, file=f)
+
+        print("\n=== 95% Confidence Intervals (Odds Ratios) ===\n", file=f)
+        print(conf_int_odds, file=f)
+
+        print(f"\n=== Classification Accuracy ===\n{accuracy:.4f}", file=f)
+
+        print("\n=== Likelihood Ratio Test vs Null Model ===\n", file=f)
+        print(f"LR statistic: {lr_stat:.4f}", file=f)
+        print(f"Degrees of freedom: {df_diff}", file=f)
+        print(f"P-value: {p_value_lr:.4g}", file=f)
+
+        if use_class_weights:
+            print("\nClass weighting was applied to correct for imbalance.", file=f)
+        else:
+            print("\nClass weighting was NOT applied.", file=f)
+
+    # summary df
+    params = result.params
+    odds_ratios = np.exp(params)
+    p_values = result.pvalues
+    category_labels = y.cat.categories[1:]  # excludes reference
+    summary_table = pd.DataFrame({
+        f"category (vs. {y.cat.categories[0]})": category_labels,
+        "estimate (beta)": params.xs(binary_feature_col, axis=0),
+        "odds_ratio": odds_ratios.xs(binary_feature_col, axis=0),
+        "p_value": p_values.xs(binary_feature_col, axis=0)
+    })
+
+    model_stats = pd.DataFrame({
+        f"category (vs. {y.cat.categories[0]})": ["---"],
+        "estimate (beta)": [np.nan],
+        "odds_ratio": [np.nan],
+        "p_value": [np.nan]
+    })
+
+    model_stats_extra = pd.DataFrame({
+        f"category (vs. {y.cat.categories[0]})": [
+            "Classification Accuracy",
+            "LR stat vs Null Model",
+            "LR p-value",
+            "Class weighting applied"
+        ],
+        "estimate (beta)": [accuracy, lr_stat, p_value_lr, int(use_class_weights)],
+        "odds_ratio": [np.nan] * 4,
+        "p_value": [np.nan] * 4
+    })
+
+    full_summary = pd.concat([summary_table, model_stats, model_stats_extra], ignore_index=True)
+    full_summary.to_csv(os.path.join(save_path, f"{save_name}_multinom_logistic_regression_summary.csv"), index=False)
+
+    clean_summary = pd.DataFrame({
+        "Outcome Group": category_labels,
+        "Coef (beta)": params.xs(binary_feature_col, axis=0).round(3),
+        "p-value": p_values.xs(binary_feature_col, axis=0).round(3),
+        "95% CI (beta)": [
+            f"[{lo:.3f}, {hi:.3f}]"
+            for lo, hi in zip(conf_int.xs(binary_feature_col, level=1)['ci_lower'],
+                              conf_int.xs(binary_feature_col, level=1)['ci_upper'])
+        ],
+        "Odds Ratio": odds_ratios.xs(binary_feature_col, axis=0).round(3),
+        "95% CI (OR)": [
+            f"[{lo:.3f}, {hi:.3f}]"
+            for lo, hi in zip(conf_int_odds.xs(binary_feature_col, level=1)['ci_lower'],
+                              conf_int_odds.xs(binary_feature_col, level=1)['ci_upper'])
+        ],
+    })
+
+    clean_summary.sort_values("p-value", inplace=True)
+    clean_summary.to_csv(os.path.join(save_path, f"{save_name}_multinom_logistic_regression_feature_summary.csv"), index=False)
+
+    return
+
+
 
