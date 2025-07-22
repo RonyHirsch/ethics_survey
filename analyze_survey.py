@@ -40,6 +40,11 @@ EARTH_DANGER_COLOR_MAP = {survey_mapping.ANS_PERSON: "#264653",
                           survey_mapping.ANS_FLY: "#cb997e",
                           survey_mapping.ANS_AI: "#355070"}
 
+C_V_MS_COLORS = {survey_mapping.ANS_C_MS_1: "#DB5461",
+                 survey_mapping.ANS_C_MS_2: "#fb9a99",
+                 survey_mapping.ANS_C_MS_3: "#70a0a4",
+                 survey_mapping.ANS_C_MS_4: "#26818B"}
+
 
 def earth_in_danger_clustering(analysis_dict, save_path, cluster_num=2, cluster_colors=None):
     """
@@ -868,36 +873,6 @@ def consc_intell_RF(df_demographics, df_experience, df_con_intell, save_path):
     return
 
 
-def ics_group_from_cons_intell(df_con_intell, df_ics_groups, save_path):
-    """
-    Perform multinomial logistic regression to check whether the perceived relationship between consciousness
-    and intelligence predict belonging to a specific group of cconsciousness-conception?
-    :param df_con_intell: df containing the answer to the question about whehter consciousness and intelligence
-    are related
-    :param df_ics_groups: df containing the groups of consciousness conception
-    :param save_path: path to save the data to
-    """
-
-    merged_df = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID], how='outer'),
-                       [df_con_intell, df_ics_groups])
-    merged_df["con_intel_related_binary"] = merged_df[survey_mapping.Q_INTELLIGENCE].str.strip().map(survey_mapping.ANS_YESNO_MAP)
-    merged_df["group"] = pd.Categorical(merged_df["group"], categories=ICS_GROUP_ORDER_LIST, ordered=False)  # they have no order meaning
-
-    """
-    Perform multinomial logistic regression: the dependent variable is categorical with more than 2 unordered levels
-    (the ics groups). The independent variable is binary (intelligence and consciousness are related). 
-    multinomial logistic regression models the log-odds of being in each of the outcome groups relative to a 
-    reference group, telling us tell you how the binary factor affects the probability of being in one group vs another.
-    """
-
-    helper_funcs.multinom_logistic_regression(df=merged_df, categorical_dep_col="group", id_col=process_survey.COL_ID,
-                                              binary_feature_col="con_intel_related_binary", save_path=save_path,
-                                              save_name="ics_per_conIntel", use_class_weights=True,
-                                              reference_category="cognitive-agential")
-
-    return
-
-
 def zombie_pill_descriptives(analysis_dict, save_path):
     """
     Answers to the question about taking a pheno-ectomy pill.
@@ -1278,6 +1253,76 @@ def eid_clustering(eid_df, save_path):
     return df_pivot, kmeans, cluster_centroids
 
 
+def c_v_ms(analysis_dict, save_path):
+
+    # save path
+    result_path = os.path.join(save_path, "c_v_ms")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    # load relevant data
+    df_ms = analysis_dict["other_creatures_ms"].copy()
+    df_c = analysis_dict["other_creatures_cons"].copy()
+    # merge
+    df = pd.merge(df_c, df_ms, on=[process_survey.COL_ID])
+
+    # melt to long
+    long_data = pd.melt(df, id_vars=[process_survey.COL_ID], var_name="Item_Topic", value_name="Rating")
+    long_data[["Topic", "Item"]] = long_data["Item_Topic"].str.split('_', expand=True)
+    long_data = long_data.drop(columns=["Item_Topic"])
+    long_data["Topic"] = long_data["Topic"].map({"c": "Consciousness", "ms": "Moral Status"})
+    long_data.to_csv(os.path.join(result_path, "c_v_ms_long.csv"), index=False)
+
+    return
+
+
+def kpt_per_demographics(kpt_df, demographics_df, save_path):
+
+    # tidy a little
+    kpt_df = kpt_df.rename(columns=survey_mapping.important_test_kill_tokens)
+    all_feature_cols = list(survey_mapping.important_test_kill_tokens.values())
+    kpt_df[all_feature_cols] = kpt_df[all_feature_cols].replace({
+        survey_mapping.ANS_KILL: survey_mapping.ANS_YES,
+        survey_mapping.ANS_NOKILL: survey_mapping.ANS_NO})
+    # merge
+    df_merged = pd.merge(kpt_df.loc[:, [process_survey.COL_ID] + all_feature_cols], demographics_df,
+                         on=process_survey.COL_ID)
+    # binarize
+    df_merged.loc[:, all_feature_cols] = df_merged[all_feature_cols].replace(survey_mapping.ANS_YESNO_MAP)
+    # sum how many creatures would a person kill
+    df_merged["kill_total"] = df_merged[all_feature_cols].sum(axis=1)
+    df_merged.to_csv(os.path.join(save_path, "kpt_per_demographics.csv"), index=False)
+
+    # define the relevant demographic categories we are interested in checking
+    relevant_demo_cols = {survey_mapping.Q_GENDER: "gender", "age_group": "ageGroup"}
+    df_clean = df_merged[["kill_total"] + list(relevant_demo_cols.keys())].dropna()
+
+    for col in relevant_demo_cols.keys():
+        col_name = relevant_demo_cols[col]
+        grouped_df = [
+            group["kill_total"].dropna().values
+            for _, group in df_clean.groupby(col)
+            if not group["kill_total"].dropna().empty
+        ]
+        kruskal_df = helper_funcs.kruskal_wallis_test(grouped=grouped_df)
+        kruskal_df.to_csv(os.path.join(save_path, f"kpt_{col_name}_kruskal.csv"), index=False)
+        summary_df = (
+            df_clean.groupby(col)["kill_total"]
+            .agg([f"{COUNT}", "mean", "std", "min", "max"])
+            .assign(SE=lambda d: d["std"] / d[f"{COUNT}"] ** 0.5)
+            .reset_index()
+        )
+        summary_df["CI_95_low"] = summary_df["mean"] - 1.96 * summary_df["SE"]
+        summary_df["CI_95_high"] = summary_df["mean"] + 1.96 * summary_df["SE"]
+        summary_df.to_csv(os.path.join(save_path, f"kpt_{col_name}_summary.csv"), index=False)
+    return
+
+
+def eid_per_demographics(eid_df, demographics_df, save_path):
+    # TODO
+    return
+
+
 def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     The method which manages all the processing of specific survey data for analyses.
@@ -1292,7 +1337,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Step 1: Basic demographics
     Get what we need to report the standard things we do
     """
-    #df_demo = demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_demo = demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 2: Expertise
@@ -1340,10 +1385,16 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     #consc_intell_RF(df_demographics=df_demo, df_experience=df_exp_ratings, df_con_intell=df_c_i, save_path=c_i_path)
 
     """
-    Step 7: Does the perceived relationship between consciousness and intelligence PREDICT a conception of consciousness
-    as it is evident from the ics groups? (ics_descriptives)
+    Step 7: Examine the relationship between the conception of consciousness (from ICS groups) and the perceived 
+    relationship between consciousness and intelligence: 
+    Perform a chi square test
     """
-    #ics_group_from_cons_intell(df_con_intell=df_c_i, df_ics_groups=df_c_groups, save_path=c_i_path)
+    #perform_chi_square(df1=df_c_i, col1=survey_mapping.Q_INTELLIGENCE, grp1_color_dict=YES_NO_COLORS,
+    #                   grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
+    #                   df2=df_c_groups, col2="group", col2_name="Conception of Consciousness",
+    #                   grp2_vals=ICS_GROUP_ORDER_LIST, grp2_map=None,
+    #                   id_col=process_survey.COL_ID, y_tick_list=None,
+    #                   save_path=c_i_path, save_name=f"ics_intelligence", save_expected=False)
 
 
     """
@@ -1401,15 +1452,28 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     #kpt_per_ics(kpt_df=df_kpt_clean, df_ics_groups=df_ics_with_groups, save_path=kpt_path)
 
+
     """
-    Step 15: Lifeboat Ethics - Earth in Danger (EiD) Block. 
+    Step 15: Is the KPT killing behavior affected by demographics?
+    """
+    #kpt_per_demographics(kpt_df=df_kpt, demographics_df=df_demo, save_path=kpt_path)
+
+
+    """
+    Step 16: Lifeboat Ethics - Earth in Danger (EiD) Block. 
     In this block of questions, earth was in danger, with participants presented with dyads having to choose 
     who to save. 
     """
-    #df_eid, eid_path = eid_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_eid, eid_path = eid_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
-    Step 16: EiD clusters
+    Step 17: EiD per demographics. Is the EiD behavior affected by demographics?
+    Similar logic to Step #15
+    """
+    eid_per_demographics(eid_df=df_eid, demographics_df=df_demo, save_path=eid_path)
+
+    """
+    Step 18: EiD clusters
     can we cluster people based on their saving patterns into meaningful groups?
     use df_eid, and perform k-means clustering. 
     The function eid_clustering codes the data, prepares it for k-means, and searches for the OPTIMAL number of clusters
@@ -1420,4 +1484,11 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     #else:
     #    eid_clusters, kmeans, cluster_centroids = eid_clustering(eid_df=df_eid, save_path=eid_path)
 
+    """
+    Step 19: consciousness vs moral status. 
+    In two separate blocks, we presented people with 24 entities (same entities) and asked them about their moral 
+    status, and about their consciousness. 
+    """
+    c_v_ms(analysis_dict=analysis_dict, save_path=save_path)
     exit()
+

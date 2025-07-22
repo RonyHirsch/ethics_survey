@@ -371,8 +371,13 @@ other_creatures_cons = {
 }
 # answers are numeric in that section (rating; scale 1-4)
 
+ANS_C_MS_1 = "Does Not Have"
+ANS_C_MS_2 = "Probably Doesn't Have"
+ANS_C_MS_3 = "Probably Has"
+ANS_C_MS_4 = "Has"
 
-ANS_C_MS = {"Does not have": 1, "Has": 4}
+ANS_C_MS = {ANS_C_MS_1: 1, ANS_C_MS_4: 4}
+ANS_C_MS_LABELS = {ANS_C_MS_1: 1, ANS_C_MS_2: 2, ANS_C_MS_3: 3, ANS_C_MS_4: 4}
 
 C_RATINGS = {"c_You": {"c_You": 1, "": 4},
              "c_A large language model": {"c_LLM": 1, "": 4},

@@ -634,8 +634,11 @@ def chi_squared_test(contingency_table, include_expected=False, ci_cols=None):
     return result_df
 
 
-def kruskal_wallis_test(merged_df, group_col, ordinal_col):
-    grouped = merged_df.groupby(group_col)[ordinal_col].apply(list)
+def kruskal_wallis_test(merged_df=None, group_col=None, ordinal_col=None, grouped=None):
+    if merged_df and group_col and ordinal_col:
+        grouped = merged_df.groupby(group_col)[ordinal_col].apply(list)
+    else:  # we have "grouped" instead
+        pass
     ks_stat, p_value = kruskal(*grouped)
     result_df = pd.DataFrame({
         "test": ["kruskal-wallis"],
