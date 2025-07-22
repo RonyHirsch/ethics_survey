@@ -35,8 +35,8 @@ NO_KILL_COLOR_LIST = [YES_NO_COLORS[survey_mapping.ANS_NO] for i in range(len(su
 EARTH_DANGER_COLOR_MAP = {survey_mapping.ANS_PERSON: "#264653",
                           survey_mapping.ANS_DOG: "#f4a261",
                           survey_mapping.ANS_PET: "#e76f51",
-                          survey_mapping.ANS_DICTATOR: "#8d99ae",
-                          survey_mapping.ANS_UWS: "#006d77",
+                          survey_mapping.ANS_DICTATOR: "#006d77",
+                          survey_mapping.ANS_UWS: "#8d99ae",
                           survey_mapping.ANS_FLY: "#cb997e",
                           survey_mapping.ANS_AI: "#355070"}
 
@@ -1220,6 +1220,64 @@ def eid_descriptives(analysis_dict, save_path):
     return df_earth, result_path
 
 
+def eid_clustering(eid_df, save_path):
+
+    # relevant question columns
+    questions = eid_df.columns[eid_df.columns != process_survey.COL_ID].tolist()
+
+    # code it for the sake of clustering
+    df_earth_coded = eid_df.copy()
+    for col in questions:
+        """
+        The map should convert values into 0/1s for the Kmeans clustering. 
+        Kmeans clustering relies on distance measures like Euclidean distance to determine cluster centroids, 
+        so if using arbitrary numbers for categories, the model will interpret these numbers as having some sort of 
+        distance relationship. We don't want that (false ordinal relationship).
+
+        So we will convert everything into binary. However, in order to keep interpretability, I will choose the
+        0's and 1's myself (and not simple map each column into binary arbitrarily). 
+        """
+        col_map = survey_mapping.EARTH_DANGER_QA_MAP[col]
+        df_earth_coded[col] = df_earth_coded[col].map(col_map)
+
+    df_earth_coded.set_index([process_survey.COL_ID], inplace=True)
+
+    """
+    Perform k-means clustering: group the choices into (k) clusters based on feature similarity.
+    Each cluster is represented by a "centroid" (average position of the data points in the cluster).
+    Data points are assigned to the cluster whose centroid they are closest to.
+    """
+    #df_pivot, kmeans, cluster_centroids = helper_funcs.perform_kmeans(df_pivot=df_earth_coded, clusters=cluster_num,
+    #                                                                  save_path=save_path, save_name="items")
+    optimal_k, (df_pivot, kmeans, cluster_centroids), all_scores = helper_funcs.kmeans_optimal_k(df_pivot=df_earth_coded,
+                                                                                                 save_path=save_path,
+                                                                                                 save_name="items",
+                                                                                                 k_range=range(2, 5))
+    df_pivot.to_csv(os.path.join(save_path, f"earth_danger_clusters.csv"), index=False)
+
+
+    """
+    Plot the KMeans cluster centroids:
+    For each cluster (we have cluster_num clusters total), the centroid is the average data point for this cluster 
+    (the mean value of the features for all data points in the cluster). 
+    We use the centroids to visualize each cluster's choice in each earth-is-in-danger dyad, 
+    to interpret the differences between them.  
+    """
+
+    # Compute the cluster centroids and SEMs
+    # cluster_centroids = df_pivot.groupby("Cluster").mean()  # we get this from helper_funcs.perform_kmeans
+    cluster_sems = df_pivot.groupby("Cluster").sem()
+
+    # Plot - collapsed (all clusters together)
+    helper_funcs.plot_cluster_centroids(cluster_centroids=cluster_centroids, cluster_sems=cluster_sems,
+                                        save_path=save_path, save_name="items", fmt="svg",
+                                        label_map=survey_mapping.EARTH_DANGER_QA_MAP, binary=True,
+                                        label_names_coding=survey_mapping.EARTH_DANGER_ANS_MAP,
+                                        threshold=0, overlaid=True, cluster_colors_overlaid=["#EDAE49", "#102E4A"])
+
+    return df_pivot, kmeans, cluster_centroids
+
+
 def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     The method which manages all the processing of specific survey data for analyses.
@@ -1348,12 +1406,18 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     In this block of questions, earth was in danger, with participants presented with dyads having to choose 
     who to save. 
     """
-    df_eid, eid_path = eid_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    #df_eid, eid_path = eid_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+
+    """
+    Step 16: EiD clusters
+    can we cluster people based on their saving patterns into meaningful groups?
+    use df_eid, and perform k-means clustering. 
+    The function eid_clustering codes the data, prepares it for k-means, and searches for the OPTIMAL number of clusters
+    Once it is found, it saves it and there's no need to run again. 
+    """
+    #if load:  # we load as this takes a while
+    #    eid_clusters = pd.read_csv(os.path.join(eid_path, f"earth_danger_clusters.csv"))
+    #else:
+    #    eid_clusters, kmeans, cluster_centroids = eid_clustering(eid_df=df_eid, save_path=eid_path)
 
     exit()
-
-    if load:  # load the earth-in-danger things
-        df_earth_clusters = pd.read_csv(os.path.join(save_path, "earth_danger", f"earth_danger_clusters.csv"))
-
-    else:
-        df_earth_clusters, kmeans, cluster_centroids = earth_in_danger_clustering(analysis_dict, save_path)

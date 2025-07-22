@@ -793,6 +793,33 @@ def perform_PCA(df_pivot, save_path, save_name, components=2):
     return pca_df, loadings, explained_variance
 
 
+def kmeans_optimal_k(df_pivot, save_path, save_name, k_range=range(2, 10), normalize=False):
+    """
+    Try different values of k for perform_kmeans, and find the optimal one based on silhouette score.
+    """
+    best_score = -1
+    best_k = None
+    best_result = None
+
+    results = []
+
+    for k in k_range:
+        print(f"\n--- Trying k={k} ---")
+        df_result, kmeans_model, centroids = perform_kmeans(df_pivot=df_pivot, clusters=k, normalize=normalize,
+                                                            save_path=save_path, save_name=f"{save_name}_k{k}")
+        # silhouette score (already printed and stored inside perform_kmeans)
+        silhouette_avg = silhouette_score(df_result.drop(columns="Cluster"), df_result["Cluster"])
+        results.append((k, silhouette_avg))
+        # update optimum
+        if silhouette_avg > best_score:
+            best_score = silhouette_avg
+            best_k = k
+            best_result = (df_result, kmeans_model, centroids)
+
+    print(f"\nOptimal k: {best_k}; silhouette score: {best_score:.3f}")
+    return best_k, best_result, results
+
+
 def perform_kmeans(df_pivot, save_path, save_name, clusters=2, normalize=False):
     """
     Perform k-means clustering (scikit-learn's) to group the data into a specified number of clusters.
@@ -858,7 +885,7 @@ def perform_kmeans(df_pivot, save_path, save_name, clusters=2, normalize=False):
     chisq_df = pd.DataFrame(result)
     chisq_df.to_csv(os.path.join(save_path, f"{save_name}_cluster_centroids_chisq.csv"), index=False)
 
-    with open(os.path.join(save_path, f"{save_name}_kmeans_{clusters}_result.txt"), "w") as file:
+    with open(os.path.join(save_path, f"{save_name}_kmeans_result.txt"), "w") as file:
         for line in txt_output:
             file.write(str(line) + '\n')
 
