@@ -32,6 +32,15 @@ ICS_GROUP_ORDER_LIST = ["multidimensional", "cognitive-agential", "experiential"
 NO_KILL_COLOR_LIST = [YES_NO_COLORS[survey_mapping.ANS_NO] for i in range(len(survey_mapping.ANS_ALLNOS_LIST))]
 
 
+EARTH_DANGER_COLOR_MAP = {survey_mapping.ANS_PERSON: "#264653",
+                          survey_mapping.ANS_DOG: "#f4a261",
+                          survey_mapping.ANS_PET: "#e76f51",
+                          survey_mapping.ANS_DICTATOR: "#8d99ae",
+                          survey_mapping.ANS_UWS: "#006d77",
+                          survey_mapping.ANS_FLY: "#cb997e",
+                          survey_mapping.ANS_AI: "#355070"}
+
+
 def earth_in_danger_clustering(analysis_dict, save_path, cluster_num=2, cluster_colors=None):
     """
     Perform clustering of responses into [cluster_num] clusters based on responses to the Earth-in-Danger dilemma.
@@ -547,7 +556,7 @@ def experience_descriptives(analysis_dict, save_path):
     sorted_columns = sorted(list(plot_rating_cols), key=lambda col: target_row[col], reverse=True)
     plotter.plot_stacked_proportion_bars(df=counts_df, rating_col="rating", item_cols=sorted_columns,
                                          colors=EXP_COLORS, num_ratings=len(rating_levels),
-                                         annotate_bar=True, annot_font_size=20,
+                                         annotate_bar=True, annot_font_size=22,
                                          annot_font_colors=["#24272E", "#2D3039", "#3F4350", "#3F4350", "#BABEC9"],
                                          ytick_visible=True, text_width=30, title="Self-Reported Experience Level",
                                          save_path=result_path, save_name="experience_proportions", fmt="svg",
@@ -764,6 +773,13 @@ def perform_kruskal_wallis(df_ordinal, ordinal_col, df_group, group_col, id_col,
 
 
 def consc_intell_descriptives(analysis_dict, save_path):
+    """
+    Answers to the question about the perceived relationship between consciousness and intelligence.
+    :param analysis_dict: dictionary where key=topic, value=a dataframe containing all the columns relevant for this
+    topic/section
+    :param save_path: where the results will be saved (csvs, plots)
+    :return: the df with the data from which the descriptives were extracted, and the path where the results are saved
+    """
     result_path = os.path.join(save_path, "consciousness_intelligence")
     if not os.path.isdir(result_path):
         os.mkdir(result_path)
@@ -883,6 +899,13 @@ def ics_group_from_cons_intell(df_con_intell, df_ics_groups, save_path):
 
 
 def zombie_pill_descriptives(analysis_dict, save_path):
+    """
+    Answers to the question about taking a pheno-ectomy pill.
+    :param analysis_dict: dictionary where key=topic, value=a dataframe containing all the columns relevant for this
+    topic/section
+    :param save_path: where the results will be saved (csvs, plots)
+    :return: the df with the data from which the descriptives were extracted, and the path where the results are saved
+    """
     # save path
     result_path = os.path.join(save_path, "zombie_pill")
     if not os.path.isdir(result_path):
@@ -915,6 +938,14 @@ def zombie_pill_descriptives(analysis_dict, save_path):
 
 
 def kpt_descriptives(analysis_dict, save_path):
+    """
+    Answers to the block of questions about whether the participant would kill an entity to pass an important test,
+    with six possible entities.
+    :param analysis_dict: dictionary where key=topic, value=a dataframe containing all the columns relevant for this
+    topic/section
+    :param save_path: where the results will be saved (csvs, plots)
+    :return: the df with the data from which the descriptives were extracted, and the path where the results are saved
+    """
     # save path
     result_path = os.path.join(save_path, "kill_for_test")
     if not os.path.isdir(result_path):
@@ -994,6 +1025,7 @@ def kpt_descriptives(analysis_dict, save_path):
     Follow up question on those who replied all 'No's (wouldn't kill any creature)
     """
     df_test_allnos = df_test[~df_test[survey_mapping.Q_NO_KILL_WHY].isna()]
+
     # plot
     for item in survey_mapping.ANS_ALLNOS_LIST:
         df_test_allnos[item] = df_test_allnos[survey_mapping.Q_NO_KILL_WHY].apply(lambda x: int(item in x))
@@ -1128,6 +1160,66 @@ def kpt_per_ics(kpt_df, df_ics_groups, save_path):
     return
 
 
+def eid_descriptives(analysis_dict, save_path):
+    """
+    Answers to the block of questions about earth-in-danger (who would the participant save out of 2 options)
+    :param analysis_dict: dictionary where key=topic, value=a dataframe containing all the columns relevant for this
+    topic/section
+    :param save_path: where the results will be saved (csvs, plots)
+    :return: the df with the data from which the descriptives were extracted, and the path where the results are saved
+    """
+    # save path
+    result_path = os.path.join(save_path, "earth_danger")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    # load the relevant data
+    df_earth = analysis_dict["earth_in_danger"]
+    questions = list(survey_mapping.EARTH_DANGER_QA_MAP.keys())  # keys are the Q's, values are the A's
+    df_earth.to_csv(os.path.join(f"eid_raw.csv"), index=False)
+
+    # simple descriptives
+    counts_df = df_earth[questions].apply(lambda col: col.value_counts())
+    counts_df = counts_df.reset_index(drop=False, inplace=False).rename(columns={"index": "choice"}, inplace=False)
+    counts_df.to_csv(os.path.join(result_path, "eid_counts.csv"), index=False)
+
+    # replace options labels
+    #counts_df.loc[:, "choice"] = counts_df["choice"].replace(survey_mapping.EARTH_DANGER_ANS_MAP)
+
+    plot_data = list()
+    for scenario in questions:
+        counts = counts_df[["choice", scenario]].dropna(subset=[scenario])
+        counts = counts.set_index("choice")[scenario]
+        counts = counts.astype(float)
+        total = counts.sum()
+        proportions = {k: 100 * v / total for k, v in counts.items()}
+        # enforce_ordering
+        ordering = survey_mapping.EARTH_DANGER_QA_MAP[scenario]
+        ordered_proportions = {k: proportions[k] for k, _ in sorted(ordering.items(), key=lambda x: x[1])}
+
+        # dummy mean & std
+        mean = np.average(list(ordering.values()), weights=list(counts.values))
+        std = np.sqrt(np.average((np.array(list(ordering.values())) - mean) ** 2, weights=list(counts.values)))
+
+        plot_data.append((scenario, {
+            "Proportion": ordered_proportions,
+            "Mean": mean,  # in this context, 'mean' is the proportion of '1' (the option presented on the right)
+            "Std Dev": std,
+            "N": int(total)
+        }))
+
+    plotter.plot_stacked_proportion_bars(plot_data=plot_data, legend_labels=survey_mapping.EARTH_DANGER_ANS_MAP,
+                                         colors=EARTH_DANGER_COLOR_MAP, rating_col=None, item_cols=None,
+                                         ytick_visible=True, text_width=35, title="Who Would You Save?",
+                                         show_mean=False, sem_line=False, num_ratings=2, annotate_bar=True,
+                                         annot_font_color="white", annot_font_size=22, save_path=result_path,
+                                         save_name="eid_preferences", fmt="svg",
+                                         double_ticks=True, double_ticks_bar_titles=False,
+                                         ordering_map_dict=survey_mapping.EARTH_DANGER_QA_MAP)
+
+    return df_earth, result_path
+
+
 def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     The method which manages all the processing of specific survey data for analyses.
@@ -1157,7 +1249,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     df_c_groups contains a row per subject and focuses on answers to the Consciousness-wo-... questions, contraining
     the answers (y/n) to both (c wo intentions, c wo valence), and the group tagging based on that
     """
-    df_c_groups, df_ics_with_groups, ics_path = ics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    #df_c_groups, df_ics_with_groups, ics_path = ics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 4: Do the groups of people from the ics_descriptives differ based on experience with consciousness?
@@ -1232,7 +1324,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Step 11: Kill to Pass Test (KPT). A moral dilemma of 6 entities with I/C/S (ics), whether you'd kill them or not. 
     Descriptives
     """
-    df_kpt, kpt_path = kpt_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    #df_kpt, kpt_path = kpt_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     * Prepare data for modelling in R * 
@@ -1244,13 +1336,19 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     consciousness? (ics group: df_c_groups)
     Prepare data for modelling (in R): Kill ~ Group + (1|participant) + (1|entity)
     """
-    df_kpt_clean = kpt_per_entity(kpt_df=df_kpt, cgroups_df=df_c_groups, save_path=kpt_path)
+    #df_kpt_clean = kpt_per_entity(kpt_df=df_kpt, cgroups_df=df_c_groups, save_path=kpt_path)
 
     """
     Step 14: Is the KPT killing behavior affected by thinking that this creature is even possible? 
     """
-    kpt_per_ics(kpt_df=df_kpt_clean, df_ics_groups=df_ics_with_groups, save_path=kpt_path)
+    #kpt_per_ics(kpt_df=df_kpt_clean, df_ics_groups=df_ics_with_groups, save_path=kpt_path)
 
+    """
+    Step 15: Lifeboat Ethics - Earth in Danger (EiD) Block. 
+    In this block of questions, earth was in danger, with participants presented with dyads having to choose 
+    who to save. 
+    """
+    df_eid, eid_path = eid_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     exit()
 

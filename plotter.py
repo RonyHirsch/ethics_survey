@@ -1069,10 +1069,10 @@ def plot_categorical_proportion_bar(categories_prop_df, category_col, data_col, 
 def plot_stacked_proportion_bars(plot_data=None, df=None, rating_col=None, item_cols=None, colors=None, num_ratings=None,
                                  save_path=".", save_name="stacked_bar", title="", legend_labels=None, show_mean=False,
                                  sem_line=False, ytick_visible=True, y_title=None, default_ticks=True,
-                                 text_width=30, fmt="svg",
+                                 text_width=30, fmt="svg", ordering_map_dict=None,
                                  annotate_bar=True, annot_font_color="white", annot_font_size=20, annot_font_colors=None,
                                  split=False, relative=True, bar_relative=True, bar_range_min=1, bar_range_max=4,
-                                 inches_w=18, inches_h=12,
+                                 inches_w=18, inches_h=12, double_ticks=False, double_ticks_bar_titles=False,
                                  yes_all_proportion=None, no_all_proportion=None, punishment_alpha=0.6):
     """
     Flexible function to plot *** HORIZONTAL *** stacked proportion bars.
@@ -1141,7 +1141,12 @@ def plot_stacked_proportion_bars(plot_data=None, df=None, rating_col=None, item_
             ]
         else:
             sorted_proportions = []
-            keys = sorted(proportions.keys())
+            if ordering_map_dict and col in ordering_map_dict:  # mainly for the EiD function, where we want to set left and right and not alphabetically
+                option_order = sorted(ordering_map_dict[col].items(), key=lambda x: x[1])
+                keys = [k for k, _ in option_order]
+            else:
+                keys = sorted(proportions.keys())
+
             for idx, k in enumerate(keys):
                 label = legend_labels[k] if legend_labels else str(k)
                 color = colors[k] if colors else f"C{k}"
@@ -1171,18 +1176,38 @@ def plot_stacked_proportion_bars(plot_data=None, df=None, rating_col=None, item_
 
         # customize the subplots
         a.tick_params(axis='x', labelsize=18)
-        if ytick_visible:
-            wrapped_label = textwrap.fill(str(col), width=text_width)  # limit the text line width
-            yticks = a.get_yticks()  # current y-tick positions
-            if default_ticks:
-                a.set_yticks(yticks)  # explicitly set them to satisfy FixedLocator
-                a.set_yticklabels([wrapped_label] * len(yticks), fontsize=25)
-            else:
-                a.set_yticks([0])
-                a.set_yticklabels([wrapped_label], fontsize=25)
+        if double_ticks:
+            # get left/right labels from sorted_proportions
+            left_label = legend_labels.get(sorted_proportions[0][0], sorted_proportions[0][0])
+            right_label = legend_labels.get(sorted_proportions[1][0], sorted_proportions[1][0])
+            # left tick (original axis)
+            a.set_yticks([0])
+            a.set_yticklabels([left_label], fontsize=22, ha="right")
+            # right rick using twin axis
+            a_secondary = a.twinx()
+            a_secondary.set_ylim(a.get_ylim())  # match vertical scale
+            a_secondary.set_yticks([0])
+            a_secondary.set_yticklabels([right_label], fontsize=22, ha="left")
+            a_secondary.tick_params(axis='y', labelright=True, labelleft=False)
+            for spine in ["left", "right", "top", "bottom"]:
+                a_secondary.spines[spine].set_visible(False)
+            # add scenario text as title above the bar
+            if double_ticks_bar_titles:
+                a.set_title(textwrap.fill(str(col)), fontsize=22, pad=5)
         else:
-            a.set_yticklabels("")
-            a.spines["left"].set_visible(False)
+            if ytick_visible:
+                wrapped_label = textwrap.fill(str(col), width=text_width)
+                yticks = a.get_yticks()
+                if default_ticks:
+                    a.set_yticks(yticks)
+                    a.set_yticklabels([wrapped_label] * len(yticks), fontsize=25)
+                else:
+                    a.set_yticks([0])
+                    a.set_yticklabels([wrapped_label], fontsize=25)
+            else:
+                a.set_yticklabels("")
+                a.spines["left"].set_visible(False)
+
         a.set_xticks([0, 25, 50, 75, 100])
         a.set_xlim(0, 100)
         a.spines["right"].set_visible(False)
@@ -1196,7 +1221,9 @@ def plot_stacked_proportion_bars(plot_data=None, df=None, rating_col=None, item_
         fig.text(0.06, 0.5, y_title, ha="center", va="center", rotation="vertical", fontsize=25)
 
     # legend
-    if legend_labels:
+    if double_ticks:
+        pass  # no legend needed, the labels are the ticks
+    elif legend_labels:
         handles = [plt.Line2D([0], [0], color=colors[i], lw=10) for i in range(len(legend_labels))]
         fig.legend(handles=handles, labels=legend_labels, loc="upper center", bbox_to_anchor=(0.5, 0.925),
                    ncol=len(handles), frameon=False, fontsize=18)
