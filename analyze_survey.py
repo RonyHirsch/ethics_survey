@@ -1412,8 +1412,75 @@ def c_v_ms_expertise(c_v_ms_df, df_experience, save_path, significant_p_value=0.
     return
 
 
+def c_per_ics(c_v_ms_df, df_ics_groups, save_path):
+    """
+    We want to answer the question: does being in group A mean you attribute consciousness to X differently?
+    For that, we need to prepare the data for modelling in R.
+    The modelling will be done PER ITEM, as otherwise we'd have a model with 24 entities * 4 groups which is hundreds
+    of effects.
+
+    :param c_v_ms_df:
+    :param df_ics_groups:
+    :param save_path:
+    :return:
+    """
+    c_df = c_v_ms_df.loc[:, [process_survey.COL_ID] + [c for c in c_v_ms_df.columns if c.startswith("c_")]]  # just consciousness ratings
+    merged = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID]),
+                    [c_v_ms_df, df_ics_groups.loc[:, [process_survey.COL_ID, "group"]]])
+    merged.to_csv(os.path.join(save_path, f"c_per_ics.csv"), index=False)
+    return
+
+
 def eid_per_demographics(eid_df, demographics_df, save_path):
     # TODO
+    return
+
+
+def ms_c_prios(analysis_dict, save_path):
+    """
+    Get general counts for answers in this block of questions, specifically counts for: PRIOS_Q_NAME_MAP
+    ::param analysis_dict: dictionary where key=topic, value=a dataframe containing all the columns relevant for this
+    topic/section
+    :param save_path: where the results will be saved (csvs, plots)
+    :return:
+    """
+    # save path
+    result_path = os.path.join(save_path, "moral_consideration_prios")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    ms_prios = analysis_dict["moral_considerations_prios"].copy()
+    ms_prios.to_csv(os.path.join(result_path, "moral_decisions_prios.csv"), index=False)
+
+    """
+    General descriptives
+    """
+    for question in list(survey_mapping.PRIOS_Q_NAME_MAP.keys()):  # yes/no questions about moral status priorities
+        df_q = ms_prios.loc[:, [process_survey.COL_ID, question]]
+        category_counts = df_q[question].value_counts()
+        category_props = df_q[question].value_counts(normalize=True)
+        category_df = pd.DataFrame({
+            question: category_counts.index,
+            COUNT: category_counts.values,
+            PROP: category_props.values * 100  # convert to percentage
+        })
+        category_df.to_csv(os.path.join(result_path, f"{question.replace('?', '').replace('/', '-')}.csv"), index=False)
+        plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
+                         categories_colors=YES_NO_COLORS, title=f"{question}", pie_direction=180,
+                         edge_color="none", legend=False,
+                         save_path=result_path, save_name=f"{question.replace('?', '').replace('/', '-')}", fmt="svg",
+                         props_in_legend=True, annot_props=True, label_inside=True, annot_groups=True)
+
+
+    """
+    Follow up on reasons (the free-text examples)
+    """
+    reasons = [c for c in ms_prios.columns if c not in list(survey_mapping.PRIOS_Q_NAME_MAP.keys())]
+    for r in reasons:
+        df_r = ms_prios.loc[:, [process_survey.COL_ID, r]]
+        df_r = df_r[df_r[r].notnull()]
+        df_r.to_csv(os.path.join(result_path, f"{r.replace('?', '').replace('/', '-')}.csv"), index=False)
+
     return
 
 
@@ -1431,14 +1498,14 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Step 1: Basic demographics
     Get what we need to report the standard things we do
     """
-    df_demo = demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    #df_demo = demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 2: Expertise
     We collected self-reported expertise levels with various topics. Get what we need to report about that
     returns: the df with all subjects and just the rating columns of 4 experience types(not the 'other' responses etc)
     """
-    df_exp_ratings, exp_path = experience_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    #df_exp_ratings, exp_path = experience_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 3: Can consciousness be separated from intentions/valence? 
@@ -1558,13 +1625,13 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     In this block of questions, earth was in danger, with participants presented with dyads having to choose 
     who to save. 
     """
-    df_eid, eid_path = eid_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    #df_eid, eid_path = eid_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 17: EiD per demographics. Is the EiD behavior affected by demographics?
     Similar logic to Step #15
     """
-    eid_per_demographics(eid_df=df_eid, demographics_df=df_demo, save_path=eid_path)
+    #eid_per_demographics(eid_df=df_eid, demographics_df=df_demo, save_path=eid_path)
 
     """
     Step 18: EiD clusters
@@ -1583,13 +1650,24 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     In two separate blocks, we presented people with 24 entities (same entities) and asked them about their moral 
     status, and about their consciousness. 
     """
-    df_c_v_ms_long, df_c_v_ms, c_v_ms_path = c_v_ms(analysis_dict=analysis_dict, save_path=save_path)
+    #df_c_v_ms_long, df_c_v_ms, c_v_ms_path = c_v_ms(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 20: C v MS expertise:
     Does expertise affect consciousness / moral status ratings?
     """
     #c_v_ms_expertise(c_v_ms_df=df_c_v_ms, df_experience=df_exp_ratings, save_path=c_v_ms_path)
+
+    """
+    Step ????: C ratings - does the conception of consciousness matter?
+    """
+    #c_per_ics(c_v_ms_df=df_c_v_ms, df_ics_groups=df_ics_with_groups, save_path=c_v_ms_path)
+
+    """
+    Step 21: moral_considerations_prios: do you think non conscious creatures/systems should be taken into account 
+    in moral decisions? And also for conscious creatures. 
+    """
+    ms_c_prios(analysis_dict=analysis_dict, save_path=save_path)
 
     exit()
 
