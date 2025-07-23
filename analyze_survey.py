@@ -47,6 +47,15 @@ C_V_MS_COLORS = {survey_mapping.ANS_C_MS_1: "#DB5461",
                  survey_mapping.ANS_C_MS_3: "#70a0a4",
                  survey_mapping.ANS_C_MS_4: "#26818B"}
 
+IMPORTANT_FEATURE_COLORS = {survey_mapping.ANS_LANG: "#2A848A",
+                            survey_mapping.ANS_SENS: "#855A8A",
+                            survey_mapping.ANS_SENTIENCE: "#F47F38",
+                            survey_mapping.ANS_PLAN: "#546798",
+                            survey_mapping.ANS_SELF: "#FFBF00",
+                            survey_mapping.ANS_PHENOMENOLOGY: "#2274A5",
+                            survey_mapping.ANS_THINK: "#E83F6F",
+                            survey_mapping.ANS_OTHER: "#32936F"}
+
 
 def earth_in_danger_clustering(analysis_dict, save_path, cluster_num=2, cluster_colors=None):
     """
@@ -1436,7 +1445,7 @@ def eid_per_demographics(eid_df, demographics_df, save_path):
     return
 
 
-def ms_c_prios(analysis_dict, save_path):
+def ms_c_prios_descriptives(analysis_dict, save_path):
     """
     Get general counts for answers in this block of questions, specifically counts for: PRIOS_Q_NAME_MAP
     ::param analysis_dict: dictionary where key=topic, value=a dataframe containing all the columns relevant for this
@@ -1484,6 +1493,98 @@ def ms_c_prios(analysis_dict, save_path):
     return
 
 
+def ms_features_descriptives(analysis_dict, save_path):
+    # save path
+    result_path = os.path.join(save_path, "moral_consideration_features")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    ms_features = analysis_dict["moral_considerations_features"].copy()
+    ms_features.to_csv(os.path.join(result_path, "moral_considerations_features.csv"), index=False)
+
+    """
+    Plot: descriptives on the important and MOST important features for moral considerations
+    """
+    # create dummies for counts
+    ms_features_for_dummy = ms_features.loc[:, [process_survey.COL_ID, survey_mapping.Q_FEATURES_IMPORTANT]]
+
+    def create_feature_dummies(row):
+        return {feature: 1 if feature in row else 0 for feature in survey_mapping.ALL_FEATURES}
+    dummies_df = ms_features_for_dummy[survey_mapping.Q_FEATURES_IMPORTANT].apply(create_feature_dummies).apply(pd.Series)
+    """
+    this is the proportion of selecting each category NORMALIZED by the TOTAL NUMBER of RESPONSES (i.e., the number
+    of options all participants marked). A X% in this means that X% of all responses were [this] feature. 
+    [this basically treats subjects as making single-selections, splitting each multi-selection subject into the 
+    corresponding number of "single" dummy subjects, so that we can compare it to the "most important feature" below]
+    """
+    # proportion several = how many of all people selected a given feature
+    proportions_several = (dummies_df.mean() * 100).to_frame(name=f"{PROP}_all").reset_index(drop=False,inplace=False)
+    proportions_several = proportions_several.sort_values(f"{PROP}_all", ascending=False).reset_index(drop=True, inplace=False)
+    category_order = proportions_several["index"].tolist()
+
+    """
+    If participants selected only one to begin with, we didn't ask them to select which they think is the most important
+    see it by running this:
+    filtered_data = ms_features[ms_features[survey_mapping.Q_FEATURES_MOST_IMPORTANT].isna()]
+    """
+    ms_features.loc[:, survey_mapping.Q_FEATURES_MOST_IMPORTANT] = ms_features[survey_mapping.Q_FEATURES_MOST_IMPORTANT].fillna(ms_features[survey_mapping.Q_FEATURES_IMPORTANT])
+    # now  we have the most important
+    most_important = ms_features.loc[:, [process_survey.COL_ID, survey_mapping.Q_FEATURES_MOST_IMPORTANT]]
+
+    """
+    what the below means is counting the proportions of selecting a single feature. 
+    Note that these are amts, and we do not treat within-subject things here. 
+    """
+    # proportions_one  = how many of ALL people selected this feature as the MOST important one
+    proportions_one = (most_important[survey_mapping.Q_FEATURES_MOST_IMPORTANT].value_counts(normalize=True) * 100
+                       ).to_frame(name=f"{PROP}_one").reset_index(drop=False, inplace=False)
+    proportions_one.rename(columns={survey_mapping.Q_FEATURES_MOST_IMPORTANT: "index"}, inplace=True)
+    proportions_one["index"] = pd.Categorical(proportions_one["index"], categories=category_order, ordered=True)  # match order
+    proportions_one = proportions_one.sort_values("index").reset_index(drop=True, inplace=False)
+
+    """
+    diff = out of all the people who selected feature X as *one* of the important features,
+    how many didn't select it as *the most* important one = the bigger it is, the more people
+    who selected it did not select it as THE most important
+    """
+    df_diff = pd.DataFrame()
+    df_diff["index"] = category_order
+    df_diff[f"{PROP}_diff"] = proportions_several[f"{PROP}_all"] - proportions_one[f"{PROP}_one"]
+
+    df_unified = reduce(lambda left, right: pd.merge(left, right, on=["index"], how="outer"), [proportions_several, proportions_one, df_diff])
+    df_unified.sort_values(by=[f"{PROP}_all"], ascending=False, inplace=True)  # sort by overall proportions
+    df_unified.reset_index(drop=True, inplace=True)
+    all_people = ms_features_for_dummy.shape[0]  # total number of people this was calculated on
+    df_unified["N"] = all_people
+    df_unified.to_csv(os.path.join(result_path, f"important_features.csv"), index=False)
+
+    """
+    Now, plot
+    """
+    plotter.plot_categorical_bars(categories_prop_df=df_unified, category_col="index",data_col=f"{PROP}_one",
+                                  categories_colors=IMPORTANT_FEATURE_COLORS,
+                                  save_path=result_path, save_name=f"important_features", fmt="svg",
+                                  y_min=0, y_max=101, y_skip=10, delete_y=False, inch_w=22, inch_h=12,
+                                  layered=True, full_data_col=f"{PROP}_all", partial_data_col=f"{PROP}_one",
+                                  layered_alpha=0.4, add_pcnt=True, pcnt_color="#2C333A",pcnt_size=30,
+                                  pcnt_position="top", layered_partial_pcnt_position="middle")
+
+    return df_unified, most_important, result_path
+
+
+def ms_phenomenology_experts(df_most_important, df_experience, save_path):
+    df_most_important["is_phenomenology"] = df_most_important[survey_mapping.Q_FEATURES_MOST_IMPORTANT].apply(
+        lambda x: survey_mapping.ANS_YES if x == survey_mapping.ANS_PHENOMENOLOGY else survey_mapping.ANS_NO)
+
+    perform_chi_square(df1=df_most_important, col1="is_phenomenology",  # is phenomenology the most important feature
+                       df2=df_experience, col2="Consciousness_expert", col2_name="Consciousness Expertise",
+                       id_col=process_survey.COL_ID,
+                       save_path=save_path, save_name="phenomenology_per_consciousness_exp", save_expected=False,
+                       grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES], grp2_vals=[0, 1], grp2_map=EXP_BINARY_NAME_MAP,
+                       grp1_color_dict=YES_NO_COLORS)
+    return
+
+
 def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     The method which manages all the processing of specific survey data for analyses.
@@ -1505,7 +1606,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     We collected self-reported expertise levels with various topics. Get what we need to report about that
     returns: the df with all subjects and just the rating columns of 4 experience types(not the 'other' responses etc)
     """
-    #df_exp_ratings, exp_path = experience_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_exp_ratings, exp_path = experience_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 3: Can consciousness be separated from intentions/valence? 
@@ -1664,10 +1765,23 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     #c_per_ics(c_v_ms_df=df_c_v_ms, df_ics_groups=df_ics_with_groups, save_path=c_v_ms_path)
 
     """
-    Step 21: moral_considerations_prios: do you think non conscious creatures/systems should be taken into account 
+    Step 21: moral consideration priorities: do you think non conscious creatures/systems should be taken into account 
     in moral decisions? And also for conscious creatures. 
     """
-    ms_c_prios(analysis_dict=analysis_dict, save_path=save_path)
+    #ms_c_prios_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+
+    """
+    Step 22: moral consideration features: which features are most important for moral considerations? Descriptives
+    """
+    ms_features_df, most_important_df, ms_features_path = ms_features_descriptives(analysis_dict=analysis_dict,
+                                                                                   save_path=save_path)
+
+    """
+    Step 23: Is there a difference between consciousness experts and non-experts with respect to selecting phenomenology
+    as the most important feature for moral considerations?
+    """
+    ms_phenomenology_experts(df_most_important=most_important_df, df_experience=df_exp_ratings,
+                             save_path=ms_features_path)
 
     exit()
 

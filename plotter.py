@@ -836,7 +836,9 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
                           fmt="svg", y_min=0, y_max=100, y_skip=10, delete_y=True, y_tick_fontsize=30,
                           y_label="Proportion of Responses (%)", order=None, text_wrap_width=13, title_fontsize=30,
                           inch_w=15, inch_h=12, add_pcnt=True, pcnt_position="top", pcnt_color="black", pcnt_size=28,
-                          x_label="", y_fontsize=28, title_text="", name_map=None, flip=False, alpha=1.0):
+                          x_label="", y_fontsize=28, title_text="", name_map=None, flip=False, alpha=1.0,
+                          layered=False, full_data_col=None, partial_data_col=None, layered_alpha=0.4,
+                          layered_partial_pcnt_position="middle"):
 
     plt.figure(figsize=(8, 6))
     sns.set_style("ticks")
@@ -849,60 +851,68 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
     categories_prop_df = categories_prop_df.set_index(category_col).loc[order].reset_index()
     display_labels = [name_map[cat] if name_map and cat in name_map else cat for cat in order]
 
-    if categories_colors is None:
+    if not layered:
+        # standard single barplot
         barplot = sns.barplot(
             x=category_col if not flip else data_col,
             y=data_col if not flip else category_col,
             data=categories_prop_df,
-            order=order, alpha=alpha
+            palette=categories_colors if categories_colors is not None else None,
+            order=order,
+            alpha=alpha
         )
     else:
-        barplot = sns.barplot(
-            x=category_col if not flip else data_col,
-            y=data_col if not flip else category_col,
-            data=categories_prop_df,
-            palette=categories_colors,
-            order=order, alpha=alpha
-        )
+        # layered barplot: draw two bars per category
+        for category in order:
+            row = categories_prop_df[categories_prop_df[category_col] == category].iloc[0]
+            xpos = order.index(category)
+            # full bar (background)
+            plt.bar(xpos, row[full_data_col], color=categories_colors[category],
+                    alpha=layered_alpha, zorder=1)
+            # partial bar (foreground)
+            plt.bar(xpos, row[partial_data_col], color=categories_colors[category],
+                    alpha=1.0, zorder=2)
 
     # add percentages on top of each bar
-    if add_pcnt:
-        for index, row in categories_prop_df.iterrows():
-            value = row[data_col]
-            label = f"{value:.0f}%"
+    if add_pcnt and layered:  # reuse the same flag
+        for xpos, category in enumerate(order):
+            row = categories_prop_df[categories_prop_df[category_col] == category].iloc[0]
+            full_height = row[full_data_col]
+            partial_height = row[partial_data_col]
 
-            if flip:
-                if pcnt_position == "middle":
-                    x = value / 2
-                    ha = "center"
-                else:  # "top"
-                    x = value + 1
-                    ha = "left"
-                barplot.text(
-                    x,
-                    index,
-                    label,
-                    color=pcnt_color,
-                    va="center",
-                    ha=ha,
-                    fontsize=pcnt_size
-                )
-            else:
-                if pcnt_position == "middle":
-                    y = value / 2
-                    va = "center"
-                else:  # "top"
-                    y = value + 1  # Y-coordinate (slightly above the bar)
-                    va = "bottom"
-                barplot.text(
-                    index,
-                    y,
-                    label,
-                    color=pcnt_color,
-                    ha="center",
-                    va=va,
-                    fontsize=pcnt_size
-                )
+            # full bar annotation (reuse pcnt_position)
+            if pcnt_position == "middle":
+                full_y = full_height / 2
+                full_va = "center"
+            else:  # "top"
+                full_y = full_height + 0.5
+                full_va = "bottom"
+            plt.text(
+                xpos,
+                full_y,
+                f"{full_height:.1f}%",
+                ha='center',
+                va=full_va,
+                fontsize=pcnt_size,
+                color=pcnt_color
+            )
+
+            # Partial bar annotation (new position for partial)
+            if layered_partial_pcnt_position == "middle":
+                partial_y = partial_height / 2
+                partial_va = "center"
+            else:  # "top"
+                partial_y = partial_height + 1
+                partial_va = "bottom"
+            plt.text(
+                xpos,
+                partial_y,
+                f"{partial_height:.1f}%",
+                ha='center',
+                va=partial_va,
+                fontsize=pcnt_size,
+                color=pcnt_color
+            )
 
     # now delete y-axis
     if delete_y and not flip:

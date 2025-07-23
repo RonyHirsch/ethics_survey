@@ -287,12 +287,14 @@ zombification_pill = {
 }
 # answers: ANS_YES, ANS_NO
 
+Q_FEATURES_IMPORTANT = "What do you think is important for moral considerations?"
+Q_FEATURES_MOST_IMPORTANT = "Which do you think is the most important for moral considerations?"
 
 # important features for moral considerations
 moral_considerations_features = {
-    "m_c": "What do you think is important for moral considerations?",
+    "m_c": Q_FEATURES_IMPORTANT,
     "m_c_other": "Other: please specify",
-    "m_c_multi_prio": "Which do you think is the most important for moral considerations?",
+    "m_c_multi_prio": Q_FEATURES_MOST_IMPORTANT,
     "m_c_multi_prio_other": "moralConsiderations_Other: please specify"
 }
 # answers
