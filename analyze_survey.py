@@ -26,6 +26,8 @@ EXP_COLORS = {1: "#e63946",
               4: "#457b9d",
               5: "#344968"}
 
+EXP_BINARY_NAME_MAP = {0: "Non Expert", 1: "Expert"}
+
 ICS_GROUP_COLOR_LIST = ["#B53B03", "#ee9b00", "#005f73", "#3B4E58"]
 ICS_GROUP_ORDER_LIST = ["multidimensional", "cognitive-agential", "experiential", "other"]
 
@@ -766,6 +768,10 @@ def perform_chi_square(df1, col1, df2, col2, id_col, save_path, save_name, save_
 
 def perform_kruskal_wallis(df_ordinal, ordinal_col, df_group, group_col, id_col, save_path, save_name):
     """
+    Kruskal–Wallis Test: It's a non-parametric alternative to one-way ANOVA.
+    Compares more than 2 independent groups (in group_col), with an ordinal data (ordinal_col)
+    (Null hypothesis: all groups come from the same distribution)
+
     Ranks all the values from all groups together (from lowest to highest), compares average ranks across groups,
     and tests whether the distributions are significantly different across groups.
     """
@@ -1254,6 +1260,12 @@ def eid_clustering(eid_df, save_path):
 
 
 def c_v_ms(analysis_dict, save_path):
+    """
+    Prepare the data of consciousness ratings vs. moral status ratings for modelling in R.
+    :param analysis_dict: dictionary where key=topic, value=a dataframe containing all the columns relevant for this
+    topic/section
+    :param save_path: where the results will be saved (csvs, plots)
+    """
 
     # save path
     result_path = os.path.join(save_path, "c_v_ms")
@@ -1273,7 +1285,27 @@ def c_v_ms(analysis_dict, save_path):
     long_data["Topic"] = long_data["Topic"].map({"c": "Consciousness", "ms": "Moral Status"})
     long_data.to_csv(os.path.join(result_path, "c_v_ms_long.csv"), index=False)
 
-    return
+    """
+    Plot
+    """
+    # we do NOT want to 'fillna' this -> and there should be no nas!
+    df_pivot = long_data.pivot_table(index="Item", columns="Topic", values="Rating", aggfunc="mean").reset_index(drop=False, inplace=False)
+    # rename for plotting; get rif of "A"/"An" etc.
+    df_pivot["Item"] = df_pivot["Item"].replace(survey_mapping.other_creatures_general_names)
+
+    plotter.plot_scatter_xy(df=df_pivot, identity_col="Item", annotate_id=True,
+                            x_col="Consciousness", x_label="Consciousness",
+                            x_min=survey_mapping.ANS_C_MS[survey_mapping.ANS_C_MS_1],
+                            x_max=survey_mapping.ANS_C_MS[survey_mapping.ANS_C_MS_4], x_ticks=1,
+                            y_col="Moral Status", y_label="Moral Status",
+                            y_min=survey_mapping.ANS_C_MS[survey_mapping.ANS_C_MS_1],
+                            y_max=survey_mapping.ANS_C_MS[survey_mapping.ANS_C_MS_4], y_ticks=1,
+                            save_path=result_path, save_name=f"correlation_c_ms",
+                            palette_bounds=[C_V_MS_COLORS[survey_mapping.ANS_C_MS_1], C_V_MS_COLORS[survey_mapping.ANS_C_MS_4]],
+                            corr_line=False, diag_line=True, fmt="svg",
+                            individual_df=None, id_col=None, color_col_colors=None)
+
+    return long_data, df, result_path
 
 
 def kpt_per_demographics(kpt_df, demographics_df, save_path):
@@ -1318,6 +1350,68 @@ def kpt_per_demographics(kpt_df, demographics_df, save_path):
     return
 
 
+def c_v_ms_expertise(c_v_ms_df, df_experience, save_path, significant_p_value=0.05):
+    """
+
+    :param c_v_ms_df: dataframe with response_id and all the rating columns (c.., ms...)
+    :param df_experience: dataframe containing the experience types (ratings) and the binarized expertise columns (_expert)
+    :param save_path: path where to save the data to
+    """
+    rating_types = {"Consciousness": "c_", "Moral Status": "ms_"}
+    expertise_rating_dict = {"AI": ["A large language model", "A self-driving car"],
+                             "Animals": ["A cow", "A turtle", "An ant", "A dog",
+                                         "A cat", "A lobster", "A sea urchin", "An octopus",
+                                         "A salmon", "A bat", "A bee", "A mosquito",
+                                         "A fruit-fly", "A rat", "A pigeon", "An orangutan"]}
+
+    for expertise_domain in expertise_rating_dict:
+        expert_col = f"{expertise_domain}_expert"  # as was defined in the expert - non expert split
+        expertise_df = df_experience.loc[:, [process_survey.COL_ID, expert_col]]
+
+        rated_items = expertise_rating_dict[expertise_domain]
+        for rating_type in rating_types:
+            rating_prefix = rating_types[rating_type]
+            rated_cols = [f"{rating_prefix}{item}" for item in rated_items]
+            relevant_df = c_v_ms_df.loc[:, [process_survey.COL_ID] + rated_cols]
+            # expertise and relevant ratings
+            merged_df = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID]), [relevant_df, expertise_df])
+
+            # run Mann-Whitney U test
+            mw_results, corrected_p_col = helper_funcs.run_group_mann_whitney(
+                df=merged_df,
+                comparison_cols=rated_cols,
+                group_col=expert_col,
+                group_col_name=expertise_domain,
+                group1_val=survey_mapping.ANS_YESNO_MAP[survey_mapping.ANS_NO], group1_name="non-experts",
+                group2_val=survey_mapping.ANS_YESNO_MAP[survey_mapping.ANS_YES], group2_name="experts"
+            )
+            mw_results.to_csv(os.path.join(save_path, f"{rating_prefix}{expertise_domain}_expertise_items.csv"), index=False)
+
+            """
+            Plot
+            """
+            # identify significant items
+            significant_items = mw_results[mw_results[corrected_p_col] < significant_p_value]["Item"].tolist()
+            ratings = sorted(list(survey_mapping.ANS_C_MS_LABELS.values()))  # 1 ,2, 3, 4
+            rating_colors = {survey_mapping.ANS_C_MS_LABELS[label]: C_V_MS_COLORS[label] for label in list(survey_mapping.ANS_C_MS_LABELS.keys())}
+
+            for item in significant_items:
+                item_name = item.removeprefix(rating_prefix)  # Python 3.9+
+                count_df = merged_df.groupby([expert_col, item]).size().reset_index(name=f"{COUNT}")
+                count_df["total"] = count_df.groupby(expert_col)[f"{COUNT}"].transform("sum")
+                count_df[f"{PROP}"] = 100 * count_df[f"{COUNT}"] / count_df["total"]
+                pivot_df = count_df.pivot(index=expert_col, columns=item, values=f"{PROP}").fillna(0).reset_index()
+                pivot_df.to_csv(os.path.join(save_path, f"{expertise_domain}_expertise_{item}.csv"), index=False)
+                plotter.plot_expertise_proportion_bars(df=pivot_df, cols=ratings, cols_colors=rating_colors,
+                                                       x_axis_exp_col_name=expert_col, x_map=EXP_BINARY_NAME_MAP,
+                                                       x_label=f"Reported experience with {expertise_domain}",
+                                                       y_ticks=[0, 25, 50, 75, 100],
+                                                       save_name=f"{expertise_domain}_expertise_{item}",
+                                                       save_path=save_path, plt_title=item_name,
+                                                       annotate_bar=True, annot_font_color="white")
+    return
+
+
 def eid_per_demographics(eid_df, demographics_df, save_path):
     # TODO
     return
@@ -1344,7 +1438,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     We collected self-reported expertise levels with various topics. Get what we need to report about that
     returns: the df with all subjects and just the rating columns of 4 experience types(not the 'other' responses etc)
     """
-    #df_exp_ratings, exp_path = experience_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_exp_ratings, exp_path = experience_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 3: Can consciousness be separated from intentions/valence? 
@@ -1370,7 +1464,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     #                   df2=df_exp_ratings, col2="Consciousness_expert", col2_name="Consciousness Expertise",
     #                   id_col=process_survey.COL_ID,
     #                   save_path=ics_path, save_name="consciousness_exp", save_expected=False,
-    #                   grp1_vals=ICS_GROUP_ORDER_LIST, grp2_vals=[0, 1], grp2_map={0: "Non Expert", 1: "Expert"},
+    #                   grp1_vals=ICS_GROUP_ORDER_LIST, grp2_vals=[0, 1], grp2_map=EXP_BINARY_NAME_MAP,
     #                   grp1_color_dict={ICS_GROUP_ORDER_LIST[i]: ICS_GROUP_COLOR_LIST[i] for i in range(len(ICS_GROUP_ORDER_LIST))})
 
     """
@@ -1413,7 +1507,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     #                   id_col=process_survey.COL_ID,
     #                   save_path=pill_path, save_name="consciousness_exp", save_expected=False,
     #                   grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
-    #                   grp2_vals=[0, 1], grp2_map={0: "Non Expert", 1: "Expert"},
+    #                   grp2_vals=[0, 1], grp2_map=EXP_BINARY_NAME_MAP,
     #                   grp1_color_dict=YES_NO_COLORS)
 
     """
@@ -1485,10 +1579,17 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     #    eid_clusters, kmeans, cluster_centroids = eid_clustering(eid_df=df_eid, save_path=eid_path)
 
     """
-    Step 19: consciousness vs moral status. 
+    Step 19: consciousness vs moral status (C v MS) 
     In two separate blocks, we presented people with 24 entities (same entities) and asked them about their moral 
     status, and about their consciousness. 
     """
-    c_v_ms(analysis_dict=analysis_dict, save_path=save_path)
+    df_c_v_ms_long, df_c_v_ms, c_v_ms_path = c_v_ms(analysis_dict=analysis_dict, save_path=save_path)
+
+    """
+    Step 20: C v MS expertise:
+    Does expertise affect consciousness / moral status ratings?
+    """
+    #c_v_ms_expertise(c_v_ms_df=df_c_v_ms, df_experience=df_exp_ratings, save_path=c_v_ms_path)
+
     exit()
 

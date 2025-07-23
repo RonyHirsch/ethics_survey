@@ -986,7 +986,7 @@ def plot_expertise_proportion_bars(df, x_axis_exp_col_name, x_label, cols, cols_
                         ax.text(x, bot + val / 2, f"{val:.1f}%", ha='center', va='center', fontsize=10,
                                 color=annot_font_color)
             bottom += values
-        ax.set_xticks(sorted(x_vals.unique()), fontsize=x_tick_fontsize)
+        ax.set_xticks(sorted(x_vals.unique()))
 
     if plot_mean:
         if x_map is not None:
@@ -1005,7 +1005,8 @@ def plot_expertise_proportion_bars(df, x_axis_exp_col_name, x_label, cols, cols_
     ax.set_ylabel("Proportion", fontsize=axis_label_fontsize)
     ax.set_xlabel(x_label, fontsize=axis_label_fontsize)
     ax.legend(title=plt_title)
-    plt.title(plt_title)
+    plt.title(plt_title.title(), fontsize=axis_label_fontsize + 2)
+    plt.xticks(fontsize=x_tick_fontsize)
 
     plt.tight_layout()
     sns.despine(right=True, top=True)

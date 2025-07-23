@@ -307,9 +307,13 @@ def run_group_mann_whitney(df, comparison_cols, group_col, group_col_name, group
 
         result[f"N_{group_col_name}={group1_name}"] = len(group1)
         result[f"Mean_{group_col_name}={group1_name}"] = group1.mean()
+        result[f"SD_{group_col_name}={group1_name}"] = group1.std(ddof=1)
+        result[f"SE_{group_col_name}={group1_name}"] = group1.std(ddof=1) / np.sqrt(len(group1))
 
         result[f"N_{group_col_name}={group2_name}"] = len(group2)
         result[f"Mean_{group_col_name}={group2_name}"] = group2.mean()
+        result[f"SD_{group_col_name}={group2_name}"] = group2.std(ddof=1)
+        result[f"SE_{group_col_name}={group2_name}"] = group2.std(ddof=1) / np.sqrt(len(group2))
 
         results.append(result)
 
