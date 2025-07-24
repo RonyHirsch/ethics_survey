@@ -1322,6 +1322,55 @@ def c_v_ms(analysis_dict, save_path):
                             corr_line=False, diag_line=True, fmt="svg",
                             individual_df=None, id_col=None, color_col_colors=None)
 
+    """
+    Calculate off-diagonal differences per item (entity). 
+    Compute differences & confidence intervals for each item, mark the off-digaonal items as the ones where the 
+    entire CI does not include 0. This is basically a non-overlap with zero check - if it happens, it means that the 
+    difference between moral status and consciousness is statistically significant at approximately the 0.05 level 
+    (without explicitly computing a p-value).
+    """
+
+    # group and summarize
+    item_diff = (
+        df.groupby(["Item", "Topic"])
+        .agg(
+            mean_rating=("Rating", "mean"),
+            sd_rating=("Rating", "std"),
+            n=("Rating", "count")
+        )
+        .reset_index()
+    )
+
+    # pivot to wide format
+    item_diff = item_diff.pivot(index="Item", columns="Topic", values=["mean_rating", "sd_rating", "n"])
+    item_diff.columns = [f"{stat}_{topic}" for stat, topic in item_diff.columns]
+    item_diff = item_diff.reset_index()
+
+    # compute difference and confidence intervals
+    item_diff["diff"] = item_diff["mean_rating_MoralStatus"] - item_diff["mean_rating_Consciousness"]
+    item_diff["se_diff"] = np.sqrt(
+        (item_diff["sd_rating_MoralStatus"] ** 2 / item_diff["n_MoralStatus"]) +
+        (item_diff["sd_rating_Consciousness"] ** 2 / item_diff["n_Consciousness"])
+    )
+    item_diff["lower"] = item_diff["diff"] - 1.96 * item_diff["se_diff"]
+    item_diff["upper"] = item_diff["diff"] + 1.96 * item_diff["se_diff"]
+
+    # off-diagonal flag (CI does not cross zero)
+    item_diff["off_diagonal"] = (item_diff["lower"] > 0) | (item_diff["upper"] < 0)
+
+    # direction
+    item_diff["direction"] = np.where(item_diff["diff"] > 0, "above the diagonal", "below the diagonal")
+    item_diff.to_csv(os.path.join(result_path, f"item_off_diagonal_differences.csv"), index=False)
+
+    # plot it
+    plotter.plot_item_differences_with_annotations(df=item_diff, id_col="Item", value_col="diff",
+                                                   bool_col="off_diagonal",
+                                                   save_path=result_path, save_name="item_off_diagonal_differences",
+                                                   se=True, se_col="se_diff", alpha=0.7, annotate=True,
+                                                   bool_true_color="#2b2d42", bool_false_color="#8d99ae",
+                                                   x_label="Difference", y_label="",
+                                                   plt_title="Off Diagonal", fmt="svg")
+
     return long_data, df, result_path
 
 
@@ -1687,13 +1736,13 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     Step 5: Relationship between consciousness and intelligence
     """
-    #df_c_i, c_i_path = consc_intell_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_c_i, c_i_path = consc_intell_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 6: Does the perceived relationship between consciousness and intelligence depend on demographic factors
     (e.g., age) or expertise (e.g., with AI or with animals?) 
     """
-    #consc_intell_RF(df_demographics=df_demo, df_experience=df_exp_ratings, df_con_intell=df_c_i, save_path=c_i_path)
+    consc_intell_RF(df_demographics=df_demo, df_experience=df_exp_ratings, df_con_intell=df_c_i, save_path=c_i_path)
 
     """
     Step 7: Examine the relationship between the conception of consciousness (from ICS groups) and the perceived 
@@ -1775,13 +1824,13 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     In this block of questions, earth was in danger, with participants presented with dyads having to choose 
     who to save. 
     """
-    df_eid, eid_path = eid_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    #df_eid, eid_path = eid_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 17: EiD per demographics. Is the EiD behavior affected by demographics?
     Similar logic to Step #15
     """
-    eid_per_demographics(eid_df=df_eid, demographics_df=df_demo, experience_df=df_exp_ratings, save_path=eid_path)
+    #eid_per_demographics(eid_df=df_eid, demographics_df=df_demo, experience_df=df_exp_ratings, save_path=eid_path)
 
     """
     Step 18: EiD clusters
@@ -1800,7 +1849,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     In two separate blocks, we presented people with 24 entities (same entities) and asked them about their moral 
     status, and about their consciousness. 
     """
-    #df_c_v_ms_long, df_c_v_ms, c_v_ms_path = c_v_ms(analysis_dict=analysis_dict, save_path=save_path)
+    df_c_v_ms_long, df_c_v_ms, c_v_ms_path = c_v_ms(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 20: C v MS expertise:
@@ -1822,14 +1871,14 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     Step 22: moral consideration features: which features are most important for moral considerations? Descriptives
     """
-    ms_features_df, most_important_df, ms_features_path = ms_features_descriptives(analysis_dict=analysis_dict,
-                                                                                   save_path=save_path)
+    #ms_features_df, most_important_df, ms_features_path = ms_features_descriptives(analysis_dict=analysis_dict,
+    #                                                                               save_path=save_path)
 
     """
     Step 23: Is there a difference between consciousness experts and non-experts with respect to selecting phenomenology
     as the most important feature for moral considerations?
     """
-    ms_phenomenology_experts(df_most_important=most_important_df, df_experience=df_exp_ratings,
-                             save_path=ms_features_path)
+    #ms_phenomenology_experts(df_most_important=most_important_df, df_experience=df_exp_ratings,
+    #                         save_path=ms_features_path)
     exit()
 

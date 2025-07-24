@@ -2136,3 +2136,58 @@ def plot_density(df, x_col, x_col_name, hue_col, hue_col_name, save_name, save_p
     plt.clf()
     plt.close()
     return
+
+
+def plot_item_differences_with_annotations(df, id_col, value_col, bool_col, save_path, save_name,
+                                           se=False, se_col=None, alpha=0.7, annotate=False,
+                                           bool_true_color="red", bool_false_color="gray",
+                                           x_label="", y_label="", plt_title="", fmt="svg"):
+    """
+    Plots the difference between MoralStatus and Consciousness ratings for each item.
+    Significant differences (off_diagonal=True) are colored differently.
+    Annotates each bar with the difference value.
+    """
+
+    sns.set_style("ticks")
+    sns.despine(right=True, top=True)
+    plt.rcParams['font.family'] = "Calibri"
+
+    df_sorted = df.sort_values(value_col)
+    colors = df_sorted[bool_col].map({True: bool_true_color, False: bool_false_color})
+    plt.figure(figsize=(12, len(df_sorted) * 0.4))
+    if se:
+        bars = plt.barh(df_sorted[id_col], df_sorted[value_col], xerr=1.96 * df_sorted[se_col], color=colors, alpha=alpha)
+    else:
+        bars = plt.barh(df_sorted[id_col], df_sorted[value_col], color=colors, alpha=alpha)
+
+    # add a vertical line at 0
+    plt.axvline(0, color="black", linestyle="--", linewidth=1)
+
+    # annotate each bar with the value
+    if annotate:
+        for bar, diff in zip(bars, df_sorted[value_col]):
+            plt.text(
+                bar.get_width() + (0.05 if diff > 0 else -0.05),
+                bar.get_y() + bar.get_height() / 2,
+                f"{diff:.2f}",
+                va="center",
+                ha="left" if diff > 0 else "right",
+                fontsize=9
+            )
+
+    # labels
+    plt.xlabel(x_label, fontsize=25)
+    plt.ylabel(y_label, fontsize=25)
+    plt.title(plt_title, fontsize=25)
+
+    plt.tight_layout()
+    sns.despine(right=True, top=True)
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000,
+                bbox_inches="tight", pad_inches=0.01)
+
+    figure = plt.gcf()
+    del figure
+    plt.clf()
+    plt.close()
+
+    return
