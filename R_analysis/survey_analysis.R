@@ -138,6 +138,28 @@ print("-----------------------------fixed effects-----------------------------")
 fixef_summary <- summary(model_h1)$coefficients
 print(fixef_summary)
 
+
+print("-----------------------------odds ratios with 95% CI-----------------------------")
+# Calculate Odds Ratios for fixed effects
+odds_ratios <- exp(fixef(model_h1))
+print(odds_ratios)
+
+# Confidence intervals for Odds Ratios (Wald)
+conf_int <- exp(confint(model_h1, parm = "beta_", method = "Wald"))
+print(conf_int)
+
+print("In a neat table:")
+
+# Combine into a single data frame for clean output
+or_table <- data.frame(
+  Term = names(odds_ratios),
+  Odds_Ratio = round(odds_ratios, 3),
+  CI_lower = round(conf_int[,1], 3),
+  CI_upper = round(conf_int[,2], 3)
+)
+
+print(or_table)
+
 print("-----------------------------variability explained by the model-----------------------------")
 model_r2 <- performance::r2_nakagawa(model_h1)
 print(model_r2)
@@ -285,6 +307,64 @@ result_list <- analyze_lmm(
   txt_file_name = "lmm_ms_by_c.txt"
   
 )
+
+
+
+### Compute Off-Diagonal Difference Per Item ----------------------
+# identify off-diagonal items by extracting residuals and computing item-level deviations
+
+# Pivot wider: get mean, sd, n per Topic
+item_diff <- data %>%
+  group_by(Item, Topic) %>%
+  summarize(
+    mean_rating = mean(Rating, na.rm = TRUE),
+    sd_rating = sd(Rating, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(
+    names_from = Topic,
+    values_from = c(mean_rating, sd_rating, n)
+  )
+
+# Rename columns to safe names
+colnames(item_diff) <- c(
+  "Item",
+  "mean_Consciousness", "mean_MoralStatus",
+  "sd_Consciousness", "sd_MoralStatus",
+  "n_Consciousness", "n_MoralStatus"
+)
+
+# Compute difference and CI
+item_diff <- item_diff %>%
+  mutate(
+    diff = mean_MoralStatus - mean_Consciousness,
+    se_diff = sqrt((sd_MoralStatus^2 / n_MoralStatus) + 
+                     (sd_Consciousness^2 / n_Consciousness)),
+    lower = diff - 1.96 * se_diff,
+    upper = diff + 1.96 * se_diff,
+    off_diagonal = ifelse(lower > 0 | upper < 0, TRUE, FALSE),
+    direction = ifelse(diff > 0, "Moral > Consciousness", "Moral < Consciousness")
+  ) %>%
+  arrange(desc(abs(diff)))
+
+# Save
+write.csv(item_diff, file.path(save_dir, "item_off_diagonal_differences.csv"), row.names = FALSE)
+
+# quick plot
+library(ggplot2)
+ggplot(item_diff, aes(x = reorder(Item, diff), y = diff, fill = off_diagonal)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
+  coord_flip() +
+  labs(
+    title = "Off-Diagonal Differences (Moral Status - Consciousness)",
+    y = "Difference in Mean Ratings",
+    x = "Item"
+  ) +
+  theme_minimal()
+
+
 
 
 ## Estimated Marginal Means: compare Consciousness ratings across Items  ----------------------
