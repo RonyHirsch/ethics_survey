@@ -460,11 +460,12 @@ ANS_AI_PERSON = "Personal Interest (follower of AI advancements and development)
 
 # experience with animals
 Q_ANIMAL_EXP = "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your level of interaction or experience with animals?"
+Q_PETS = "Do you have a pet?"
 animal_exp = {
     "animals_experience_1": Q_ANIMAL_EXP,
     "animals_which": "Please specify which animals",
     "animal_other": "animalsExp_Other: please specify",
-    "pets": "Do you have a pet?"
+    "pets": Q_PETS
 }
 # answers
 ANS_PRIMATES = "Primates (including apes)"

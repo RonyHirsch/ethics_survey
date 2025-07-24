@@ -385,7 +385,15 @@ def demographics_descriptives(analysis_dict, save_path):
     """
     df_country = demographics_country(demographics_df=con_demo, save_path=result_path)
 
-    all_dfs = [df_age, df_gender, df_edu, df_employment, df_country]
+    """
+    Pets
+    """
+    df_pet = analysis_dict["animal_exp"].loc[:, [process_survey.COL_ID, survey_mapping.Q_PETS]]
+
+    """
+    Merge
+    """
+    all_dfs = [df_age, df_gender, df_edu, df_employment, df_country, df_pet]
     merged_demo_df = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID], how="outer"), all_dfs)
 
     return merged_demo_df
@@ -1440,8 +1448,49 @@ def c_per_ics(c_v_ms_df, df_ics_groups, save_path):
     return
 
 
-def eid_per_demographics(eid_df, demographics_df, save_path):
-    # TODO
+def eid_per_demographics(eid_df, demographics_df, experience_df, save_path):
+
+    expertise_relevant_item_dict = {"AI": [survey_mapping.Q_UWS_AI, survey_mapping.Q_AI_DOG]}
+                                    #"Animals": [survey_mapping.Q_PERSON_DOG, survey_mapping.Q_PERSON_PET,
+                                    #            survey_mapping.Q_DICTATOR_DOG, survey_mapping.Q_DICTATOR_PET,
+                                    #            survey_mapping.Q_UWS_DOG, survey_mapping.Q_UWS_PET,
+                                    #            survey_mapping.Q_UWS_FLY, survey_mapping.Q_AI_DOG]
+
+    demographics_relevant_item_dict = {survey_mapping.Q_PETS: [survey_mapping.Q_PERSON_PET,
+                                                               survey_mapping.Q_DICTATOR_PET,
+                                                               survey_mapping.Q_UWS_PET]}
+
+    for expertise_domain in expertise_relevant_item_dict:
+        expert_col = f"{expertise_domain}_expert"  # as was defined in the expert - non expert split
+        expertise_df = experience_df.loc[:, [process_survey.COL_ID, expert_col]]
+
+        relevant_decisions = expertise_relevant_item_dict[expertise_domain]
+        for decision in relevant_decisions:
+            question_code = [k for k, v in survey_mapping.earth_in_danger.items() if v == decision][0]
+            eid_df_relevant = eid_df.loc[:, [process_survey.COL_ID, decision]]
+            # run a chi squared test
+            perform_chi_square(df1=eid_df_relevant, col1=decision,
+                               df2=expertise_df, col2=expert_col, col2_name=f"{expertise_domain} Expertise: {decision}",
+                               grp2_vals=[0, 1], grp2_map=EXP_BINARY_NAME_MAP, id_col=process_survey.COL_ID,
+                               save_path=save_path, save_name=f"eid_expertise_{expertise_domain}_{question_code}", save_expected=False,
+                               grp1_vals=eid_df_relevant[decision].unique(),
+                               grp1_color_dict=EARTH_DANGER_COLOR_MAP)
+
+    for demo_domain in demographics_relevant_item_dict:
+        demo_df = demographics_df.loc[:, [process_survey.COL_ID, demo_domain]]
+        relevant_decisions = demographics_relevant_item_dict[demo_domain]
+        for decision in relevant_decisions:
+            question_code = [k for k, v in survey_mapping.earth_in_danger.items() if v == decision][0]
+            eid_df_relevant = eid_df.loc[:, [process_survey.COL_ID, decision]]
+            # run a chi squared test
+            perform_chi_square(df1=eid_df_relevant, col1=decision,
+                               df2=demo_df, col2=demo_domain, col2_name=f"{demo_domain}",
+                               grp2_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
+                               id_col=process_survey.COL_ID,
+                               save_path=save_path, save_name=f"eid_demographic_{demo_domain.replace('?', '').replace('/', '-')}_{question_code}", save_expected=False,
+                               grp1_vals=eid_df_relevant[decision].unique(),
+                               grp1_color_dict=EARTH_DANGER_COLOR_MAP)
+
     return
 
 
@@ -1599,7 +1648,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Step 1: Basic demographics
     Get what we need to report the standard things we do
     """
-    #df_demo = demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_demo = demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 2: Expertise
@@ -1726,13 +1775,13 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     In this block of questions, earth was in danger, with participants presented with dyads having to choose 
     who to save. 
     """
-    #df_eid, eid_path = eid_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_eid, eid_path = eid_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 17: EiD per demographics. Is the EiD behavior affected by demographics?
     Similar logic to Step #15
     """
-    #eid_per_demographics(eid_df=df_eid, demographics_df=df_demo, save_path=eid_path)
+    eid_per_demographics(eid_df=df_eid, demographics_df=df_demo, experience_df=df_exp_ratings, save_path=eid_path)
 
     """
     Step 18: EiD clusters
@@ -1782,6 +1831,5 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     ms_phenomenology_experts(df_most_important=most_important_df, df_experience=df_exp_ratings,
                              save_path=ms_features_path)
-
     exit()
 
