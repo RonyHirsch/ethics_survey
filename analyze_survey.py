@@ -1315,6 +1315,7 @@ def c_v_ms(analysis_dict, save_path):
     df_c = analysis_dict["other_creatures_cons"].copy()
     # merge
     df = pd.merge(df_c, df_ms, on=[process_survey.COL_ID])
+    df.to_csv(os.path.join(result_path, "c_v_ms_raw.csv"), index=False)
 
     # melt to long
     long_data = pd.melt(df, id_vars=[process_survey.COL_ID], var_name="Item_Topic", value_name="Rating")
@@ -1400,6 +1401,34 @@ def c_v_ms(analysis_dict, save_path):
                                                    y_ticks_label_map=survey_mapping.other_creatures_general_names,
                                                    plt_title="Off Diagonal", fmt="svg")
 
+    """
+    Analyze entities that people though have no moral status but at the same time attributed them with some
+    degree of consciousness.
+    """
+
+    entity_list = list(survey_mapping.other_creatures_general_names.keys())
+
+    ms_1_result = list()
+    for idx, row in df.iterrows():
+        for entity in entity_list:
+            c_col = f"c_{entity}"
+            ms_col = f"ms_{entity}"
+            if row[ms_col] == 1 and row[c_col] > 2:  # if they gave ms = 1 and consciousness > 2 = either "probably has" or "has" consciousness
+                ms_1_result.append({
+                    process_survey.COL_ID: row[process_survey.COL_ID],
+                    "Item": entity,
+                    "Consciousness": row[c_col]
+                })
+
+    ms_1_df = pd.DataFrame(ms_1_result)
+    # aggregate by entity (count how many people qualified)
+    entity_stats = ms_1_df.groupby("Item").agg(
+        num_people=(process_survey.COL_ID, f"{COUNT}"),
+        avg_c_value=("Consciousness", "mean")
+    ).reset_index()
+    # sort by count
+    entity_stats = entity_stats.sort_values(by="num_people", ascending=False).reset_index(drop=True)
+    entity_stats.to_csv(os.path.join(f"ms_1_with_c_3-4_summary.csv"), index=False)
     return long_data, df, result_path
 
 
@@ -1784,17 +1813,17 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Step 1: Basic demographics
     Get what we need to report the standard things we do
     """
-    df_demo = demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    #df_demo = demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 2: Expertise
     We collected self-reported expertise levels with various topics. Get what we need to report about that
     returns: the df with all subjects and just the rating columns of 4 experience types(not the 'other' responses etc)
     """
-    df_exp_ratings, exp_path = experience_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    #df_exp_ratings, exp_path = experience_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     "Extra: Experience and Demographics - all descriptives that cross these two"
-    experience_with_demographics_descriptives(df_demographics=df_demo, df_experience=df_exp_ratings, save_path=exp_path)
+    #experience_with_demographics_descriptives(df_demographics=df_demo, df_experience=df_exp_ratings, save_path=exp_path)
 
     """
     Step 3: Can consciousness be separated from intentions/valence? 
@@ -1939,7 +1968,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     In two separate blocks, we presented people with 24 entities (same entities) and asked them about their moral 
     status, and about their consciousness. 
     """
-    #df_c_v_ms_long, df_c_v_ms, c_v_ms_path = c_v_ms(analysis_dict=analysis_dict, save_path=save_path)
+    df_c_v_ms_long, df_c_v_ms, c_v_ms_path = c_v_ms(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 20: C v MS expertise:
