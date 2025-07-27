@@ -380,6 +380,7 @@ ANS_C_MS_4 = "Has"
 
 ANS_C_MS = {ANS_C_MS_1: 1, ANS_C_MS_4: 4}
 ANS_C_MS_LABELS = {ANS_C_MS_1: 1, ANS_C_MS_2: 2, ANS_C_MS_3: 3, ANS_C_MS_4: 4}
+ANS_C_MS_LABELS_REVERSED = {1: ANS_C_MS_1, 1: ANS_C_MS_2, 3: ANS_C_MS_3, 4: ANS_C_MS_4}
 
 C_RATINGS = {"c_You": {"c_You": 1, "": 4},
              "c_A large language model": {"c_LLM": 1, "": 4},
@@ -433,10 +434,11 @@ MS_RATINGS = {"ms_You": {"ms_You": 1, "": 4},
 
 # consciousness and intellect
 Q_INTELLIGENCE = "Do you think consciousness and intelligence are related?"
+Q_INTELLIGENCE_FU = "What is the common denominator?"
 con_intellect = {
     "con_intellect": Q_INTELLIGENCE,
     "con_intellect_yes": "How?",
-    "con_intellect_yes_fu": "What is the common denominator?"
+    "con_intellect_yes_fu": Q_INTELLIGENCE_FU
 }
 # answers:
 ANS_C_NECESSARY = "Consciousness is necessary for intelligence"
@@ -446,9 +448,10 @@ ANS_THIRD = "They are related to a common third feature"
 
 # experience with AI
 Q_AI_EXP = "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in artificial intelligence (AI) systems?"
+Q_AI_EXP_FOLLOW_UP = "Please specify your experience with AI"
 ai_exp = {
     "ai_exp_1": Q_AI_EXP,
-    "ai_exp_fu": "Please specify your experience with AI",
+    "ai_exp_fu": Q_AI_EXP_FOLLOW_UP,
     "ai_exp_other": "aiExp_Other: please specify"
 }
 # answers:
@@ -460,13 +463,15 @@ ANS_AI_PERSON = "Personal Interest (follower of AI advancements and development)
 
 # experience with animals
 Q_ANIMAL_EXP = "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your level of interaction or experience with animals?"
+Q_ANIMAL_EXP_FOLLOW_UP = "Please specify which animals"
 Q_PETS = "Do you have a pet?"
 animal_exp = {
     "animals_experience_1": Q_ANIMAL_EXP,
-    "animals_which": "Please specify which animals",
+    "animals_which": Q_ANIMAL_EXP_FOLLOW_UP,
     "animal_other": "animalsExp_Other: please specify",
     "pets": Q_PETS
 }
+
 # answers
 ANS_PRIMATES = "Primates (including apes)"
 ANS_FISH = "Fish"
@@ -485,9 +490,10 @@ ANS_LIVESTOCK = "Livestock"
 
 # experience with consciousness
 Q_CONSC_EXP = "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in the science of consciousness?"
+Q_CONSC_EXP_FOLLOW_UP = "Please specify your experience with this topic"
 consciousness_exp = {
     "consc_experience_1": Q_CONSC_EXP,
-    "consc_experience_fu": "Please specify your experience with this topic",
+    "consc_experience_fu": Q_CONSC_EXP_FOLLOW_UP,
     "consci_exp_other": "consciousExp_Other: please specify"
 }
 # answers
@@ -498,11 +504,13 @@ ANS_C_PERSON = "Personal Interest (reading texts about consciousness)"
 
 # experience with ethics
 Q_ETHICS_EXP = "On a scale from 1 to 5 where 1 means 'none' and 5 means 'extremely', how would you rate your experience and knowledge in ethics and morality?"
+Q_ETHICS_EXP_FOLLOW_UP = "Please specify your experience"
 ethics_exp = {
     "ethics_experience_1": Q_ETHICS_EXP,
-    "ethics_experience_fu": "Please specify your experience",
+    "ethics_experience_fu": Q_ETHICS_EXP_FOLLOW_UP,
     "ethics_exp_other": "ethicsExp_Other: please specify"
 }
+
 # answers
 ANS_E_ACADEMIA = "Academic Background (studied/researched philosophy/ethics in university)"
 ANS_E_PERSON = "Personal Interest (reading philosophical texts/participant in ethical debates)"
@@ -510,15 +518,22 @@ ANS_E_PROF = "Professional (work involving ethical decisions, law/medicine/socia
 ANS_E_VOLUN = "Volunteer Work (in organizations focused on ethical issues/moral causes)"
 ANS_E_RELIGION = "Religious/Spitirual Practice (engagement with ethical teachings)"
 
+ANS_E_ACADEMIA_PREFIX = "Academic Background"
+
 Q_EXP_DICT = {Q_CONSC_EXP: "exp_consciousness",
               Q_ETHICS_EXP: "exp_ethics",
               Q_ANIMAL_EXP: "exp_animals",
               Q_AI_EXP: "exp_ai"}
 
 Q_EXP_NAME_DICT = {Q_CONSC_EXP: "Consciousness",
-              Q_ETHICS_EXP: "Ethics",
-              Q_ANIMAL_EXP: "Animals",
-              Q_AI_EXP: "AI"}
+                   Q_ETHICS_EXP: "Ethics",
+                   Q_ANIMAL_EXP: "Animals",
+                   Q_AI_EXP: "AI"}
+
+Q_EXP_FOLLOWUP_DICT = {Q_AI_EXP_FOLLOW_UP: "AI_source",
+                       Q_CONSC_EXP_FOLLOW_UP: "Consciousness_source",
+                       Q_ETHICS_EXP_FOLLOW_UP: "Ethics_source",
+                       Q_ANIMAL_EXP_FOLLOW_UP: "Animal_source"}
 
 # demographics
 Q_AGE = "How old are you?"

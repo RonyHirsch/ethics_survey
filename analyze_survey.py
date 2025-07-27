@@ -225,8 +225,10 @@ def demographics_education(demographics_df, save_path):
     General descriptives
     """
 
+    # relevant columns
     education_col = survey_mapping.Q_EDU
-    education_order = survey_mapping.EDU_ORDER
+    education_order = survey_mapping.EDU_ORDER  # level of education (ordinal)
+    education_topic = survey_mapping.Q_EDU_FIELD  # education field
 
     category_counts = demographics_df[education_col].value_counts()
     category_props = demographics_df[education_col].value_counts(normalize=True)
@@ -235,9 +237,11 @@ def demographics_education(demographics_df, save_path):
         COUNT: category_counts.values,
         PROP: category_props.values * 100  # convert to percentage
     })
+
     # sort by education level
     category_df[education_col] = pd.Categorical(category_df[education_col], categories=education_order, ordered=True)
     category_df = category_df.sort_values(by=education_col).reset_index(drop=True)
+
     # clean labels
     education_labels = {edu: edu.replace(" education", "") for edu in education_order[1:]}
     education_labels[survey_mapping.EDU_NONE] = survey_mapping.EDU_NONE
@@ -264,18 +268,17 @@ def demographics_education(demographics_df, save_path):
     """
     Follow up on higher education - topic
     """
-    field_col = survey_mapping.Q_EDU_FIELD  # education field
     # handle multiple selections
     education_field_df = demographics_df.copy()
-    education_field_df[field_col] = education_field_df[field_col].dropna().astype(str).str.split(',')
+    education_field_df[education_topic] = education_field_df[education_topic].dropna().astype(str).str.split(',')
     # explode into one row per selected field
-    exploded_df = education_field_df.explode(field_col)
-    exploded_df[field_col] = exploded_df[field_col].str.strip()  # clean whitespace
+    exploded_df = education_field_df.explode(education_topic)
+    exploded_df[education_topic] = exploded_df[education_topic].str.strip()  # clean whitespace
     # count and proportion
-    category_counts = exploded_df[field_col].value_counts()
-    category_props = exploded_df[field_col].value_counts(normalize=True) * 100
+    category_counts = exploded_df[education_topic].value_counts()
+    category_props = exploded_df[education_topic].value_counts(normalize=True) * 100
     field_df = pd.DataFrame({
-        field_col: category_counts.index,
+        education_topic: category_counts.index,
         COUNT: category_counts.values,
         PROP: category_props.values
     }).reset_index(drop=True)
@@ -283,7 +286,7 @@ def demographics_education(demographics_df, save_path):
     field_df.to_csv(os.path.join(save_path, "education_topic.csv"), index=False)
 
     demographics_df["education_level"] = demographics_df[education_col].map(survey_mapping.EDU_MAP)
-    return demographics_df.loc[:, [process_survey.COL_ID, education_col, "education_level"]]
+    return demographics_df.loc[:, [process_survey.COL_ID, education_col, "education_level", education_topic]]
 
 
 def demographics_employment(demographics_df, save_path):
@@ -463,9 +466,19 @@ def experience_descriptives(analysis_dict, save_path):
     """
     all_experience_df = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID], how='outer'),
                                all_experience)
+    # rating columns
     rating_cols = [c for c in survey_mapping.Q_EXP_NAME_DICT.keys()]
-    df_ratings = all_experience_df[[process_survey.COL_ID] + rating_cols].dropna()
-    df_ratings = df_ratings.rename(columns=survey_mapping.Q_EXP_NAME_DICT)  # rename for ease of use
+
+    # sources of reported experience
+    source_cols = [survey_mapping.Q_CONSC_EXP_FOLLOW_UP,
+                   survey_mapping.Q_ETHICS_EXP_FOLLOW_UP,
+                   survey_mapping.Q_ANIMAL_EXP_FOLLOW_UP,  # note that the "source" of animal experience was an answer to the Q 'which animals'
+                   survey_mapping.Q_AI_EXP_FOLLOW_UP]
+
+    df_ratings = all_experience_df[[process_survey.COL_ID] + rating_cols + source_cols]
+    df_ratings = df_ratings.rename(columns=survey_mapping.Q_EXP_NAME_DICT)  # rename EXPERIENCE for ease of use
+    df_ratings = df_ratings.rename(columns=survey_mapping.Q_EXP_FOLLOWUP_DICT)  # rename EXPERIENCE SOURCE
+
     plot_rating_cols = [c for c in survey_mapping.Q_EXP_NAME_DICT.values()]
 
     # binarize ratings based on expertise:
@@ -853,6 +866,14 @@ def consc_intell_descriptives(analysis_dict, save_path):
     df_counts[f"{PROP}_out_of_{survey_mapping.ANS_YES}"] = df_counts.apply(
         lambda row: 100 * (row[COUNT] / yes_total) if row.name != survey_mapping.ANS_NO else None, axis=1)
     df_counts.to_csv(os.path.join(result_path, f"{question.replace('?', '').replace('/', '-')}_how.csv"), index=True)
+
+
+    """
+    Free reports: those who said consciousness and intelligence are related to a common third feature were asked what 
+    it was. These are their answers. 
+    """
+    con_intellect_common_denominator = con_intellect[~con_intellect[survey_mapping.Q_INTELLIGENCE_FU].isna()]
+    con_intellect_common_denominator.to_csv(os.path.join(result_path, "common_denominator.csv"), index=False)
     return con_intellect, result_path
 
 
@@ -1314,9 +1335,11 @@ def c_v_ms(analysis_dict, save_path):
                             x_col="Consciousness", x_label="Consciousness",
                             x_min=survey_mapping.ANS_C_MS[survey_mapping.ANS_C_MS_1],
                             x_max=survey_mapping.ANS_C_MS[survey_mapping.ANS_C_MS_4], x_ticks=1,
+                            #x_tick_labels=survey_mapping.ANS_C_MS_LABELS_REVERSED,
                             y_col="Moral Status", y_label="Moral Status",
                             y_min=survey_mapping.ANS_C_MS[survey_mapping.ANS_C_MS_1],
                             y_max=survey_mapping.ANS_C_MS[survey_mapping.ANS_C_MS_4], y_ticks=1,
+                            #y_tick_labels=survey_mapping.ANS_C_MS_LABELS_REVERSED,
                             save_path=result_path, save_name=f"correlation_c_ms",
                             palette_bounds=[C_V_MS_COLORS[survey_mapping.ANS_C_MS_1], C_V_MS_COLORS[survey_mapping.ANS_C_MS_4]],
                             corr_line=False, diag_line=True, fmt="svg",
@@ -1331,15 +1354,8 @@ def c_v_ms(analysis_dict, save_path):
     """
 
     # group and summarize
-    item_diff = (
-        df.groupby(["Item", "Topic"])
-        .agg(
-            mean_rating=("Rating", "mean"),
-            sd_rating=("Rating", "std"),
-            n=("Rating", "count")
-        )
-        .reset_index()
-    )
+    item_diff = long_data.groupby(["Item", "Topic"]).agg( mean_rating=("Rating", "mean"),sd_rating=("Rating", "std"),
+                                                          n=("Rating", "count")).reset_index()
 
     # pivot to wide format
     item_diff = item_diff.pivot(index="Item", columns="Topic", values=["mean_rating", "sd_rating", "n"])
@@ -1347,9 +1363,9 @@ def c_v_ms(analysis_dict, save_path):
     item_diff = item_diff.reset_index()
 
     # compute difference and confidence intervals
-    item_diff["diff"] = item_diff["mean_rating_MoralStatus"] - item_diff["mean_rating_Consciousness"]
+    item_diff["diff"] = item_diff["mean_rating_Moral Status"] - item_diff["mean_rating_Consciousness"]
     item_diff["se_diff"] = np.sqrt(
-        (item_diff["sd_rating_MoralStatus"] ** 2 / item_diff["n_MoralStatus"]) +
+        (item_diff["sd_rating_Moral Status"] ** 2 / item_diff["n_Moral Status"]) +
         (item_diff["sd_rating_Consciousness"] ** 2 / item_diff["n_Consciousness"])
     )
     item_diff["lower"] = item_diff["diff"] - 1.96 * item_diff["se_diff"]
@@ -1362,13 +1378,26 @@ def c_v_ms(analysis_dict, save_path):
     item_diff["direction"] = np.where(item_diff["diff"] > 0, "above the diagonal", "below the diagonal")
     item_diff.to_csv(os.path.join(result_path, f"item_off_diagonal_differences.csv"), index=False)
 
+    # for plotting (color)
+    item_diff["color"] = np.select(
+        [
+            (item_diff["off_diagonal"]) & (item_diff["diff"] > 0),  # significant off-diagonal & positive
+            (item_diff["off_diagonal"]) & (item_diff["diff"] < 0)  # significant off-diagonal & negative
+        ],
+        [1, -1],  # values for the conditions
+        default=0  # if neither condition matches
+    )
+
     # plot it
+    colors_dict = {0: "#e5e5e5", 1: YES_NO_COLORS[survey_mapping.ANS_YES], -1: YES_NO_COLORS[survey_mapping.ANS_NO]}
     plotter.plot_item_differences_with_annotations(df=item_diff, id_col="Item", value_col="diff",
-                                                   bool_col="off_diagonal",
+                                                   category_col="color", color_map=colors_dict,
                                                    save_path=result_path, save_name="item_off_diagonal_differences",
-                                                   se=True, se_col="se_diff", alpha=0.7, annotate=True,
-                                                   bool_true_color="#2b2d42", bool_false_color="#8d99ae",
+                                                   se=True, se_col="se_diff", alpha=1.0, annotate=False,
                                                    x_label="Difference", y_label="",
+                                                   x_tick_size=22, y_tick_size=22, annotate_fontsize=9,
+                                                   label_font_size=25,
+                                                   y_ticks_label_map=survey_mapping.other_creatures_general_names,
                                                    plt_title="Off Diagonal", fmt="svg")
 
     return long_data, df, result_path
@@ -1683,6 +1712,62 @@ def ms_phenomenology_experts(df_most_important, df_experience, save_path):
     return
 
 
+def experience_with_demographics_descriptives(df_demographics, df_experience, save_path):
+    """
+    :param df_demographics: output of  demographics_descriptives()
+    :param df_experience: output of  experience_descriptives()
+    :param save_path: path where all the analysis results are saved
+    """
+
+    """
+    Education based on reported expertise: cross self-reported expertise with education
+    Note that as we didn't collect for experience with animals the source in terms of education (just which animals), 
+    we do not check it for this experience type. 
+    """
+    education_academic = 4  # see survey_mapping.EDU_MAP: 4 and up is academic-level
+    education_highschool = 3  # see survey_mapping.EDU_MAP
+    experience_academic = survey_mapping.ANS_E_ACADEMIA_PREFIX
+
+    cols_experience = [c for c in survey_mapping.Q_EXP_NAME_DICT.values() if c != "Animals"]
+    cols_source = [c for c in df_experience.columns if "source" in c]
+
+    # take only what's relevant for this crossing
+    relevant_dfs = [df_demographics.loc[:, [process_survey.COL_ID, "education_level", survey_mapping.Q_EDU_FIELD]],
+                    df_experience.loc[:, [process_survey.COL_ID] + cols_experience + cols_source]]
+    # unify
+    edu_exp_df = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID], how="outer"), relevant_dfs)
+    edu_exp_df[cols_experience] = edu_exp_df[cols_experience].astype(int)  # to be able to check threshold
+
+    # for each expertise type, take only experts, see if their claimed experience is acadmic, and if so, see their edu
+    discrepancy_summary = list()
+    for exp in cols_experience:
+        print(f"{exp}")
+        df_exp = edu_exp_df[edu_exp_df[exp] >= EXPERTISE]  # take only experts in this topic
+        df_exp_num = df_exp.shape[0]
+        # experience is declared to come (at least in part) from academia (could be other things as well)
+        df_exp_academic = df_exp[df_exp[f"{exp}_source"].str.contains(experience_academic, case=False, na=False)]
+        df_exp_academic_num = df_exp_academic.shape[0]
+        # experience contains academia but they don't HOLD a degree already
+        suspected_discrepancies = df_exp_academic[df_exp_academic["education_level"] < education_academic]
+        suspected_discrepancies_num = suspected_discrepancies.shape[0]
+        # but it could be that they are in academia rn, just don't hold a diploma yet. doesn't mean they lied
+        # let's see how many don't hold a highschool diploma
+        discrepancies = df_exp_academic[df_exp_academic["education_level"] < education_highschool]
+        discrepancies_num = discrepancies.shape[0]
+        # aggregate
+        discrepancy_summary.append({
+            "expertise_type": exp,
+            "num_experts": df_exp_num,
+            "num_experts_academia": df_exp_academic_num,
+            "num_no_degree": suspected_discrepancies_num,
+            "num_clear_discrepancies (no highschool diploma)": discrepancies_num})
+
+    df_discrepancy_summary = pd.DataFrame(discrepancy_summary)
+    # save
+    df_discrepancy_summary.to_csv(os.path.join(save_path, f"experience_academic_against_education.csv"), index=False)
+    return
+
+
 def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     The method which manages all the processing of specific survey data for analyses.
@@ -1692,6 +1777,8 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     :param save_path: where the results will be saved (csvs, plots)
     :param load: for stuff that takes a ton of time to run every time
     """
+
+    #sub_df.to_csv(os.path.join(save_path, "sub_df.csv"), index=False)
 
     """
     Step 1: Basic demographics
@@ -1705,6 +1792,9 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     returns: the df with all subjects and just the rating columns of 4 experience types(not the 'other' responses etc)
     """
     df_exp_ratings, exp_path = experience_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+
+    "Extra: Experience and Demographics - all descriptives that cross these two"
+    experience_with_demographics_descriptives(df_demographics=df_demo, df_experience=df_exp_ratings, save_path=exp_path)
 
     """
     Step 3: Can consciousness be separated from intentions/valence? 
@@ -1736,13 +1826,13 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     Step 5: Relationship between consciousness and intelligence
     """
-    df_c_i, c_i_path = consc_intell_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    #df_c_i, c_i_path = consc_intell_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 6: Does the perceived relationship between consciousness and intelligence depend on demographic factors
     (e.g., age) or expertise (e.g., with AI or with animals?) 
     """
-    consc_intell_RF(df_demographics=df_demo, df_experience=df_exp_ratings, df_con_intell=df_c_i, save_path=c_i_path)
+    #consc_intell_RF(df_demographics=df_demo, df_experience=df_exp_ratings, df_con_intell=df_c_i, save_path=c_i_path)
 
     """
     Step 7: Examine the relationship between the conception of consciousness (from ICS groups) and the perceived 
@@ -1849,7 +1939,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     In two separate blocks, we presented people with 24 entities (same entities) and asked them about their moral 
     status, and about their consciousness. 
     """
-    df_c_v_ms_long, df_c_v_ms, c_v_ms_path = c_v_ms(analysis_dict=analysis_dict, save_path=save_path)
+    #df_c_v_ms_long, df_c_v_ms, c_v_ms_path = c_v_ms(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 20: C v MS expertise:

@@ -1823,7 +1823,7 @@ def plot_categorical_scatter_fullresponse(df, x_col, y_col, response_id_col, sav
 def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_col, y_label, y_min, y_max, y_ticks,
                     save_path, save_name, color_col=None, color_col_colors=None, palette_bounds=None, annotate_id=True,
                     title_text="", fmt="png", size=600, alpha=1, corr_line=False, diag_line=False, individual_df=None,
-                    id_col=None, vertical_jitter=0, horizontal_jitter=0):
+                    id_col=None, vertical_jitter=0, horizontal_jitter=0, x_tick_labels=None, y_tick_labels=None):
 
     plt.figure(figsize=(8, 6))
     plt.rcParams["font.family"] = "Calibri"
@@ -1903,8 +1903,16 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
     plt.ylim(y_min_jittered, y_max_jittered)
 
     # titles etc
-    plt.yticks(np.arange(y_min, y_max + (0.05 * y_ticks), y_ticks), fontsize=22)
-    plt.xticks(np.arange(x_min, x_max + (0.05 * x_ticks), x_ticks), fontsize=22)
+    if x_tick_labels is not None:
+        plt.xticks(list(x_tick_labels.keys()), list(x_tick_labels.values()), fontsize=22)
+    else:
+        plt.xticks(np.arange(x_min, x_max + (0.05 * x_ticks), x_ticks), fontsize=22)
+
+    if y_tick_labels is not None:
+        plt.yticks(list(y_tick_labels.keys()), list(y_tick_labels.values()), fontsize=22)
+    else:
+        plt.yticks(np.arange(y_min, y_max + (0.05 * y_ticks), y_ticks), fontsize=22)
+
     plt.xlim([x_min, x_max + (0.05 * y_ticks)])
     plt.ylim([y_min, y_max + (0.05 * y_ticks)])
     plt.xlabel(x_label.title(), fontsize=25)
@@ -2138,9 +2146,10 @@ def plot_density(df, x_col, x_col_name, hue_col, hue_col_name, save_name, save_p
     return
 
 
-def plot_item_differences_with_annotations(df, id_col, value_col, bool_col, save_path, save_name,
+def plot_item_differences_with_annotations(df, id_col, value_col, category_col, save_path, save_name,
                                            se=False, se_col=None, alpha=0.7, annotate=False,
-                                           bool_true_color="red", bool_false_color="gray",
+                                           color_map=None, y_ticks_label_map=None,
+                                           x_tick_size=12, y_tick_size=12, annotate_fontsize=9, label_font_size=25,
                                            x_label="", y_label="", plt_title="", fmt="svg"):
     """
     Plots the difference between MoralStatus and Consciousness ratings for each item.
@@ -2153,32 +2162,49 @@ def plot_item_differences_with_annotations(df, id_col, value_col, bool_col, save
     plt.rcParams['font.family'] = "Calibri"
 
     df_sorted = df.sort_values(value_col)
-    colors = df_sorted[bool_col].map({True: bool_true_color, False: bool_false_color})
+
+    if color_map is None:
+        unique_vals = df_sorted[category_col].unique()
+        palette = sns.color_palette("Set1", n_colors=len(unique_vals))
+        color_map = dict(zip(unique_vals, palette))
+
+    colors = df_sorted[category_col].map(color_map)
+
     plt.figure(figsize=(12, len(df_sorted) * 0.4))
+
+    bars = plt.barh(df_sorted[id_col], df_sorted[value_col], color=colors, alpha=alpha)
+
     if se:
-        bars = plt.barh(df_sorted[id_col], df_sorted[value_col], xerr=1.96 * df_sorted[se_col], color=colors, alpha=alpha)
-    else:
-        bars = plt.barh(df_sorted[id_col], df_sorted[value_col], color=colors, alpha=alpha)
+        plt.errorbar(df_sorted[value_col], range(len(df_sorted)), xerr=1.96 * df_sorted[se_col],fmt='none',
+                     ecolor='black', elinewidth=1.2, capsize=4, capthick=1.2)
 
     # add a vertical line at 0
     plt.axvline(0, color="black", linestyle="--", linewidth=1)
 
     # annotate each bar with the value
     if annotate:
-        for bar, diff in zip(bars, df_sorted[value_col]):
+        for idx, (bar, diff) in enumerate(zip(bars, df_sorted[value_col])):
+            # position annotation beyond the bar (and beyond SE whisker if exists)
+            offset = 1.96 * df_sorted[se_col].iloc[idx] + 0.05 if se else 0.05
             plt.text(
-                bar.get_width() + (0.05 if diff > 0 else -0.05),
+                bar.get_width() + (offset if diff > 0 else -offset),
                 bar.get_y() + bar.get_height() / 2,
                 f"{diff:.2f}",
                 va="center",
                 ha="left" if diff > 0 else "right",
-                fontsize=9
+                fontsize=annotate_fontsize
             )
 
     # labels
-    plt.xlabel(x_label, fontsize=25)
-    plt.ylabel(y_label, fontsize=25)
-    plt.title(plt_title, fontsize=25)
+    plt.xlabel(x_label, fontsize=label_font_size)
+    plt.ylabel(y_label, fontsize=label_font_size)
+    plt.title(plt_title, fontsize=label_font_size)
+    plt.xticks(fontsize=x_tick_size)
+    plt.yticks(fontsize=y_tick_size)
+
+    if y_ticks_label_map:
+        current_labels = [y_ticks_label_map.get(val, val) for val in df_sorted[id_col]]
+        plt.yticks(range(len(df_sorted)), current_labels, fontsize=y_tick_size)
 
     plt.tight_layout()
     sns.despine(right=True, top=True)
