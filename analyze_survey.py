@@ -1402,33 +1402,47 @@ def c_v_ms(analysis_dict, save_path):
                                                    plt_title="Off Diagonal", fmt="svg")
 
     """
-    Analyze entities that people though have no moral status but at the same time attributed them with some
+    Entities that people though have no moral status but at the same time attributed them with some
     degree of consciousness.
     """
 
     entity_list = list(survey_mapping.other_creatures_general_names.keys())
 
     ms_1_result = list()
+    c_1_result = list()
     for idx, row in df.iterrows():
         for entity in entity_list:
             c_col = f"c_{entity}"
             ms_col = f"ms_{entity}"
-            if row[ms_col] == 1 and row[c_col] > 2:  # if they gave ms = 1 and consciousness > 2 = either "probably has" or "has" consciousness
+            if row[ms_col] == 1 and row[c_col] > 2:  # if they gave ms = 1 and consciousness > 2 = either "probably has" or "has"
                 ms_1_result.append({
                     process_survey.COL_ID: row[process_survey.COL_ID],
                     "Item": entity,
                     "Consciousness": row[c_col]
                 })
+            if row[c_col] == 1 and row[ms_col] > 2:  # if they gave c = 1 and moral status > 3 = either "probably has" or "has"
+                c_1_result.append({
+                    process_survey.COL_ID: row[process_survey.COL_ID],
+                    "Item": entity,
+                    "Moral Status": row[ms_col]
+                })
 
     ms_1_df = pd.DataFrame(ms_1_result)
+    c_1_df = pd.DataFrame(c_1_result)
+
     # aggregate by entity (count how many people qualified)
-    entity_stats = ms_1_df.groupby("Item").agg(
-        num_people=(process_survey.COL_ID, f"{COUNT}"),
-        avg_c_value=("Consciousness", "mean")
-    ).reset_index()
+    ms_1_entity_stats = ms_1_df.groupby("Item").agg(num_people=(process_survey.COL_ID, f"{COUNT}"),
+                                                    avg_c_value=("Consciousness", "mean")).reset_index()
     # sort by count
-    entity_stats = entity_stats.sort_values(by="num_people", ascending=False).reset_index(drop=True)
-    entity_stats.to_csv(os.path.join(f"ms_1_with_c_3-4_summary.csv"), index=False)
+    ms_1_entity_stats = ms_1_entity_stats.sort_values(by="num_people", ascending=False).reset_index(drop=True)
+    ms_1_entity_stats.to_csv(os.path.join(result_path, f"ms_1_with_c_3-4_summary.csv"), index=False)
+
+    # same for c
+    c_1_entity_stats = c_1_df.groupby("Item").agg(num_people=(process_survey.COL_ID, f"{COUNT}"),
+                                                  avg_ms_value=("Moral Status", "mean")).reset_index()
+    c_1_entity_stats = c_1_entity_stats.sort_values(by="num_people", ascending=False).reset_index(drop=True)
+    c_1_entity_stats.to_csv(os.path.join(result_path, f"c_1_with_ms_3-4_summary.csv"), index=False)
+
     return long_data, df, result_path
 
 
