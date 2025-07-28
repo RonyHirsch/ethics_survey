@@ -745,7 +745,7 @@ def ics_descriptives(analysis_dict, save_path):
 
 def perform_chi_square(df1, col1, df2, col2, id_col, save_path, save_name, save_expected=False,
                        grp1_vals=None, grp2_vals=None, grp2_map=None,
-                       grp1_color_dict=None, y_tick_list=None, col2_name=None):
+                       grp1_color_dict=None, y_tick_list=None, col2_name=None, contingency_back=False):
     """
     Performs chi square test of independence, testing whether the proportions in one group (df1) differ significantly
     across different groups of df2.
@@ -793,6 +793,8 @@ def perform_chi_square(df1, col1, df2, col2, id_col, save_path, save_name, save_
                                            save_path=save_path, plt_title=f"", plot_mean=False,
                                            stats_df=None,
                                            annotate_bar=True, annot_font_color="white")
+    if contingency_back:
+        return chisquare_result, contingency_table
     return chisquare_result
 
 
@@ -975,15 +977,27 @@ def kpt_descriptives(analysis_dict, save_path):
     # pre-processing: extract and rename the binary kill/no kill questions
     kill_questions = list(survey_mapping.important_test_kill_tokens.keys())
     kill_questions_values = list(survey_mapping.important_test_kill_tokens.values())
-    df_processed = df_test[kill_questions].replace({survey_mapping.ANS_KILL: survey_mapping.ANS_YES,
-                                                    survey_mapping.ANS_NOKILL: survey_mapping.ANS_NO})
-    # rename columns
-    df_processed.columns = [survey_mapping.important_test_kill_tokens[q] for q in df_processed.columns]
-    total_respondents = df_processed.shape[0]
-    # binarize yes/no column
-    df_binary = df_processed[kill_questions_values].replace(survey_mapping.ANS_YESNO_MAP)
 
-    # kill per scenario
+    # apply binary conversion for the kill/no kill questions
+    df_test_binary = df_test.copy()
+    df_test_binary[kill_questions] = df_test_binary[kill_questions].replace({
+        survey_mapping.ANS_KILL: survey_mapping.ANS_YES,
+        survey_mapping.ANS_NOKILL: survey_mapping.ANS_NO})
+    # rename questions into shorter, comprehensible codes
+    df_test_binary = df_test_binary.rename(columns={q: survey_mapping.important_test_kill_tokens[q] for q in kill_questions})
+    # binarize
+    df_test_binary = df_test_binary.replace(survey_mapping.ANS_YESNO_MAP)
+
+    # filter data: identify people who were not sensitive to the manipulation (kill all, not kill all)
+    df_test_all_kill = df_test_binary[df_test_binary[kill_questions_values].eq(1).all(axis=1)]
+    df_test_all_no_kill = df_test_binary[df_test_binary[kill_questions_values].eq(0).all(axis=1)]
+    df_test_sensitive = df_test_binary[~df_test_binary.index.isin(df_test_all_kill.index.union(df_test_all_no_kill.index))]
+    df_test_sensitive = df_test_sensitive.loc[:, [process_survey.COL_ID] + kill_questions_values]
+
+    # calculate creature stats (kill vs. no kill) per scenario
+    total_respondents = df_test_binary.shape[0]
+    df_binary = df_test_binary.loc[:, kill_questions_values]  # just the question cols
+
     creature_stats = df_binary.apply(lambda col: pd.Series({
         f"kill_{COUNT}": int(col.sum()),
         f"no_kill_{COUNT}": int(total_respondents - col.sum()),
@@ -1043,7 +1057,7 @@ def kpt_descriptives(analysis_dict, save_path):
     """
     Follow up question on those who replied all 'No's (wouldn't kill any creature)
     """
-    df_test_allnos = df_test[~df_test[survey_mapping.Q_NO_KILL_WHY].isna()]
+    df_test_allnos = df_test[df_test.index.isin(all_no_kill.index)]
 
     # plot
     for item in survey_mapping.ANS_ALLNOS_LIST:
@@ -1065,30 +1079,28 @@ def kpt_descriptives(analysis_dict, save_path):
                                   y_fontsize=30, title_text=f"{survey_mapping.Q_NO_KILL_WHY}", flip=True, alpha=0.6,
                                   add_pcnt=True, pcnt_position="middle", pcnt_color="white", pcnt_size=30,
                                   y_tick_fontsize=25)
-    return df_test, result_path
+
+    return df_test, df_test_sensitive, result_path
 
 
-def kpt_per_entity(kpt_df, cgroups_df, save_path):
+def kpt_per_entity(kpt_df_sensitive, cgroups_df, save_path):
     """
+
+    ** NOTE THAT WE ARE ASSUMING THAT PEOPLE WHO ARE INSENSITIVE TO THE MANIPULATION WERE FILTERED OUT **
+
     Transform the kill-to-pass-test dataframe so that it could be modeled per entity in the follwoing way:
     model <- glmer(kill ~ Consciousness * Intentions * Sensations + (1| response_id), data = data, family = binomial())
     The idea is to be able to test how the presence or absence of each property  (intentions, sensations, consciousness)
     affects the likelihood that its killed. For that, we need to transform our data.
-    :param kpt_df: The responses to this block of questions
+    :param kpt_df_sensitive: The responses to this block of questions
     :param save_path: The path to save the transformed data to
     """
 
-    # preprocess: binarize responses
-    kpt_df = kpt_df.rename(columns=survey_mapping.important_test_kill_tokens)
-    all_feature_cols = list(survey_mapping.important_test_kill_tokens.values())
-    kpt_df[all_feature_cols] = kpt_df[all_feature_cols].replace({
-        survey_mapping.ANS_KILL: survey_mapping.ANS_YES,
-        survey_mapping.ANS_NOKILL: survey_mapping.ANS_NO})
-    kpt_df[all_feature_cols] = kpt_df[all_feature_cols].replace(survey_mapping.ANS_YESNO_MAP)
-
-    # leave only the relevant columns, and transform
+    # make sure we have only the relevant columns, and transform
+    all_feature_cols = [col for col in kpt_df_sensitive.columns if set(kpt_df_sensitive[col].unique()) <= {0, 1}]
     relevant_columns = [process_survey.COL_ID] + all_feature_cols
-    kpt_df = kpt_df[relevant_columns]
+    kpt_df = kpt_df_sensitive[relevant_columns]
+
     transformed_data = list()
     for index, row in kpt_df.iterrows():
         response_id = row[process_survey.COL_ID]
@@ -1102,13 +1114,14 @@ def kpt_per_entity(kpt_df, cgroups_df, save_path):
     transformed_df = pd.DataFrame(transformed_data, columns=[process_survey.COL_ID, "entity", "Consciousness",
                                                              "Intentions", "Sensations", "kill"])
 
+    # save: NOTE AGAIN - THESE ARE ONLY THE PEOPLE WHO WERE SENSITIVE TO THE MANIPULATION
     transformed_df = pd.merge(transformed_df, cgroups_df.loc[:, [process_survey.COL_ID, "group"]], on=process_survey.COL_ID)
-    transformed_df.to_csv(os.path.join(save_path, f"kill_to_pass_coded_per_entity.csv"), index=False)
+    transformed_df.to_csv(os.path.join(save_path, f"kill_to_pass_coded_per_entity_sensitive.csv"), index=False)
 
-    return kpt_df
+    return
 
 
-def kpt_per_ics(kpt_df, df_ics_groups, save_path):
+def kpt_per_ics(kpt_df_sensitive, df_ics_groups, save_path):
     """
     This function connects between the block where we asked people about the possibility of having consciousness /
     sensations / intentions without the others (ICS), and the scenarios where they had a chance to kill a creature
@@ -1138,18 +1151,21 @@ def kpt_per_ics(kpt_df, df_ics_groups, save_path):
     Then, we will perform a chi square, for each KPT scenario, asking whether killing behavior varies between people
     who think the creature is possible and those who don't.
 
-    :param kpt_df: df containing the id col and the six killing scenarios we presented, with the results (yes/no)
-    already binarized (1/0)
+    :param kpt_df_sensitive: df containing the id col and the six killing scenarios we presented,
+    with the results (yes/no) already binarized (1/0) *** NOTE THAT WE ASSUME THIS DF CONTAINS ONLY PEOPLE WHO WERE
+    SENSITIVE TO THE MANIPULATION ***
     :param df_ics_groups: df containing the id col and the four questions about the possibility of having
     consciousness / sensations / intentions without the others, already binarized (1/0)
     :param save_path: path to save the data to
     """
-    ics_cols = list(survey_mapping.ICS_Q_NAME_MAP.keys())
     # binarize ICS responses
+    ics_cols = list(survey_mapping.ICS_Q_NAME_MAP.keys())
     df_ics_groups[ics_cols] = df_ics_groups[ics_cols].replace(survey_mapping.ANS_YESNO_MAP)
+
     # unify for saving
-    unified_df = pd.merge(kpt_df, df_ics_groups.loc[:, [process_survey.COL_ID] + ics_cols], on=process_survey.COL_ID)
-    unified_df.to_csv(os.path.join(save_path, "kpt_with_ics.csv"), index=False)
+    unified_df = pd.merge(kpt_df_sensitive, df_ics_groups.loc[:, [process_survey.COL_ID] + ics_cols], on=process_survey.COL_ID)
+    unified_df.to_csv(os.path.join(save_path, "kpt_sensitive_with_ics.csv"), index=False)
+
     # killing dict
     kill_dict = {1: "Kill", 0: "Won't Kill"}
 
@@ -1164,17 +1180,19 @@ def kpt_per_ics(kpt_df, df_ics_groups, save_path):
         # create a new column classifying participants as thinking the ICS scenario is "possible" or "not possible"
         df2["is_scenario_possible"] = df2[poss_cols].apply(lambda row: "Possible" if all(row == 1) else "Impossible", axis=1)
 
-        result = perform_chi_square(df1=df1, col1=kill_col, grp1_vals=["Won't Kill", "Kill"],
-                                    grp1_color_dict={"Won't Kill": YES_NO_COLORS[survey_mapping.ANS_NO],
-                                                     "Kill": YES_NO_COLORS[survey_mapping.ANS_YES]},
-                                    df2=df2, col2="is_scenario_possible", grp2_vals=["Impossible", "Possible"],
-                                    col2_name=f"{kill_col}", # this is not a mistake, it's so that the X axis will describe the case
-                                    id_col=process_survey.COL_ID, save_path=save_path,
-                                    save_name=f"kpt_{kill_col}_by_ics",
-                                    save_expected=False)
+        result, contingency = perform_chi_square(df1=df1, col1=kill_col, grp1_vals=["Won't Kill", "Kill"],
+                                                 grp1_color_dict={"Won't Kill": YES_NO_COLORS[survey_mapping.ANS_NO],
+                                                                  "Kill": YES_NO_COLORS[survey_mapping.ANS_YES]},
+                                                 df2=df2, col2="is_scenario_possible", grp2_vals=["Impossible", "Possible"],
+                                                 col2_name=f"{kill_col}", # this is not a mistake, it's so that the X axis will describe the case
+                                                 id_col=process_survey.COL_ID, save_path=save_path,
+                                                 save_name=f"kpt_sensitive_{kill_col}_by_ics",
+                                                 save_expected=False, contingency_back=True)
+        contingency.to_csv(os.path.join(save_path, f"kpt_sensitive_{kill_col}_by_ics_contingency.csv"), index=True)
         results.append(result)
+
     result_df = pd.concat(results)
-    result_df.to_csv(os.path.join(save_path, f"kpt_by_ics_chisquared_all.csv"), index=False)
+    result_df.to_csv(os.path.join(save_path, f"kpt_sensitive_by_ics_chisquared_all.csv"), index=False)
 
     return
 
@@ -1446,22 +1464,19 @@ def c_v_ms(analysis_dict, save_path):
     return long_data, df, result_path
 
 
-def kpt_per_demographics(kpt_df, demographics_df, save_path):
-
-    # tidy a little
-    kpt_df = kpt_df.rename(columns=survey_mapping.important_test_kill_tokens)
-    all_feature_cols = list(survey_mapping.important_test_kill_tokens.values())
-    kpt_df[all_feature_cols] = kpt_df[all_feature_cols].replace({
-        survey_mapping.ANS_KILL: survey_mapping.ANS_YES,
-        survey_mapping.ANS_NOKILL: survey_mapping.ANS_NO})
+def kpt_per_demographics(kpt_df_sensitive, demographics_df, save_path):
+    """
+    :param kpt_df_sensitive: ASSUMING THIS DF CONTAINS ONLY PEOPLE SENSITIVE TO THE KPT MANIPULATION
+    :param demographics_df: the df block of demographic data
+    :param save_path: where the results will be saved (csvs, plots)
+    """
+    # identify the KPT questions (based on them being binary, kill/nokill)
+    all_feature_cols = [col for col in kpt_df_sensitive.columns if set(kpt_df_sensitive[col].unique()) <= {0, 1}]
     # merge
-    df_merged = pd.merge(kpt_df.loc[:, [process_survey.COL_ID] + all_feature_cols], demographics_df,
-                         on=process_survey.COL_ID)
-    # binarize
-    df_merged.loc[:, all_feature_cols] = df_merged[all_feature_cols].replace(survey_mapping.ANS_YESNO_MAP)
+    df_merged = pd.merge(kpt_df_sensitive, demographics_df, on=process_survey.COL_ID)
     # sum how many creatures would a person kill
     df_merged["kill_total"] = df_merged[all_feature_cols].sum(axis=1)
-    df_merged.to_csv(os.path.join(save_path, "kpt_per_demographics.csv"), index=False)
+    df_merged.to_csv(os.path.join(save_path, "kpt_sensitive_per_demographics.csv"), index=False)
 
     # define the relevant demographic categories we are interested in checking
     relevant_demo_cols = {survey_mapping.Q_GENDER: "gender", "age_group": "ageGroup"}
@@ -1475,7 +1490,7 @@ def kpt_per_demographics(kpt_df, demographics_df, save_path):
             if not group["kill_total"].dropna().empty
         ]
         kruskal_df = helper_funcs.kruskal_wallis_test(grouped=grouped_df)
-        kruskal_df.to_csv(os.path.join(save_path, f"kpt_{col_name}_kruskal.csv"), index=False)
+        kruskal_df.to_csv(os.path.join(save_path, f"kpt_sensitive_{col_name}_kruskal.csv"), index=False)
         summary_df = (
             df_clean.groupby(col)["kill_total"]
             .agg([f"{COUNT}", "mean", "std", "min", "max"])
@@ -1484,7 +1499,7 @@ def kpt_per_demographics(kpt_df, demographics_df, save_path):
         )
         summary_df["CI_95_low"] = summary_df["mean"] - 1.96 * summary_df["SE"]
         summary_df["CI_95_high"] = summary_df["mean"] + 1.96 * summary_df["SE"]
-        summary_df.to_csv(os.path.join(save_path, f"kpt_{col_name}_summary.csv"), index=False)
+        summary_df.to_csv(os.path.join(save_path, f"kpt_sensitive_{col_name}_summary.csv"), index=False)
     return
 
 
@@ -1827,7 +1842,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Step 1: Basic demographics
     Get what we need to report the standard things we do
     """
-    #df_demo = demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_demo = demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 2: Expertise
@@ -1845,7 +1860,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     df_c_groups contains a row per subject and focuses on answers to the Consciousness-wo-... questions, contraining
     the answers (y/n) to both (c wo intentions, c wo valence), and the group tagging based on that
     """
-    #df_c_groups, df_ics_with_groups, ics_path = ics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_c_groups, df_ics_with_groups, ics_path = ics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 4: Do the groups of people from the ics_descriptives differ based on experience with consciousness?
@@ -1925,8 +1940,10 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     Step 11: Kill to Pass Test (KPT). A moral dilemma of 6 entities with I/C/S (ics), whether you'd kill them or not. 
     Descriptives
+    *** NOTE *** df_kpt_sensitive includes ONLY PEOPLE WHO WERE SENSITIVE TO THE MANIPULATION - i.e., those who would
+    kill at least one entity, but not all of them. 
     """
-    #df_kpt, kpt_path = kpt_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_kpt, df_kpt_sensitive, kpt_path = kpt_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     * Prepare data for modelling in R * 
@@ -1937,19 +1954,25 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Step 13: Does the likelihood to kill a creature in the KPT scenarios change depending on the conception of 
     consciousness? (ics group: df_c_groups)
     Prepare data for modelling (in R): Kill ~ Group + (1|participant) + (1|entity)
+    
+    *** AGAIN, ASSUMING ONLY PEOPLE WHO WERE SENSITIVE TO THE MANIPULATION ***
     """
-    #df_kpt_clean = kpt_per_entity(kpt_df=df_kpt, cgroups_df=df_c_groups, save_path=kpt_path)
+    kpt_per_entity(kpt_df_sensitive=df_kpt_sensitive, cgroups_df=df_c_groups, save_path=kpt_path)
 
     """
     Step 14: Is the KPT killing behavior affected by thinking that this creature is even possible? 
+    
+    *** AGAIN, ASSUMING ONLY PEOPLE WHO WERE SENSITIVE TO THE MANIPULATION ***
     """
-    #kpt_per_ics(kpt_df=df_kpt_clean, df_ics_groups=df_ics_with_groups, save_path=kpt_path)
+    kpt_per_ics(kpt_df_sensitive=df_kpt_sensitive, df_ics_groups=df_ics_with_groups, save_path=kpt_path)
 
 
     """
     Step 15: Is the KPT killing behavior affected by demographics?
+    
+    *** AGAIN, ASSUMING ONLY PEOPLE WHO WERE SENSITIVE TO THE MANIPULATION ***
     """
-    #kpt_per_demographics(kpt_df=df_kpt, demographics_df=df_demo, save_path=kpt_path)
+    kpt_per_demographics(kpt_df_sensitive=df_kpt_sensitive, demographics_df=df_demo, save_path=kpt_path)
 
 
     """
@@ -1982,7 +2005,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     In two separate blocks, we presented people with 24 entities (same entities) and asked them about their moral 
     status, and about their consciousness. 
     """
-    df_c_v_ms_long, df_c_v_ms, c_v_ms_path = c_v_ms(analysis_dict=analysis_dict, save_path=save_path)
+    #df_c_v_ms_long, df_c_v_ms, c_v_ms_path = c_v_ms(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 20: C v MS expertise:

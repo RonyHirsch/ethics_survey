@@ -914,6 +914,39 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
                 color=pcnt_color
             )
 
+    elif add_pcnt and not layered:  # For the non-layered case
+        for xpos, category in enumerate(order):
+            row = categories_prop_df[categories_prop_df[category_col] == category].iloc[0]
+            height = row[data_col]
+
+            # Handle positioning of the percentage text based on flip
+            if not flip:  # if not flipped, use regular positioning
+                x_pos = xpos
+                if pcnt_position == "middle":
+                    y_pos = height / 2
+                    va = "center"
+                else:  # "top"
+                    y_pos = height + 0.5
+                    va = "bottom"
+            else:  # if flip is True, use flipped axes
+                y_pos = xpos
+                if pcnt_position == "middle":
+                    x_pos = height / 2
+                    ha = "center"
+                else:  # "top"
+                    x_pos = height + 0.5
+                    ha = "center"
+
+            plt.text(
+                x_pos,
+                y_pos,
+                f"{height:.1f}%",
+                ha= ha if flip else 'center',  # adjust horizontal alignment based on flip
+                va= va if not flip else 'center',  # adjust vertical alignment based on flip
+                fontsize=pcnt_size,
+                color=pcnt_color
+            )
+
     # now delete y-axis
     if delete_y and not flip:
         sns.despine(right=True, top=True, left=True)
