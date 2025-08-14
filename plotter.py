@@ -495,7 +495,7 @@ def plot_overlaid_preferences(all_preferences, all_sems, all_colors, labels, lab
 
     # Save the figure
     figure = plt.gcf()
-    figure.set_size_inches(15, 13)
+    figure.set_size_inches(18, 12)
     plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
     del figure

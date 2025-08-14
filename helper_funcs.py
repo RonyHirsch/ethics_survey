@@ -85,7 +85,8 @@ class RareCategoryMerger(BaseEstimator, TransformerMixin):
 
 def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols, save_path, save_prefix="",
                                rare_class_threshold=5, n_permutations=1000, scoring_method="accuracy",
-                               cv_folds=10, split_test_size=0.3, random_state=42, n_repeats=50, shap_plot=True):
+                               cv_folds=10, split_test_size=0.3, random_state=42, n_repeats=50,
+                               shap_plot=True, shap_plot_colors=None):
 
     print("starting RF pipeline")
     # dep_col is assumed to be binary
@@ -232,12 +233,67 @@ def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols,
     mean_shap_values = shap_vals.mean(axis=0)  # how much, on average, this feature pushes predictions toward or away from class 1 (positive: increase likelihood of 1)
 
     # importances df with SHAP values
-    importances_df = pd.DataFrame({
-        'Feature': feature_names,
-        'Gini_Importance': gini_importances,
-        'Perm_Importance_Mean': perm_result.importances_mean,
-        'Perm_Importance_Std': perm_result.importances_std,
-        'SHAP_Mean': mean_shap_values}).sort_values(by='Perm_Importance_Mean', ascending=False)
+    feat_idx = pd.Index(feature_names, name="Feature")
+    importances_df = pd.DataFrame({"Gini_Importance": gini_importances,
+                                   "Perm_Importance_Mean": perm_result.importances_mean,
+                                   "Perm_Importance_Std": perm_result.importances_std,
+                                   "SHAP_Mean": mean_shap_values,
+                                   }, index=feat_idx)
+
+    # add directionality stats for each feature
+    X_shap_df = pd.DataFrame(X_shap, columns=feature_names)
+    mean_shap_high_list = []
+    mean_shap_low_list = []
+    direction_list = []
+
+    X_shap_df = pd.DataFrame(X_shap, columns=feature_names)
+    for i, fname in enumerate(feature_names):
+        """
+        In vanilla SHAP analysis, we don’t usually bin features by median and then assign a “direction”, people
+        just do it from the shap plot. but I want to summarize the trend. I risk missing U-shaped relationships, 
+        but manual inspection of the SHAP plot can take care of that. 
+        When I did, she shap features looked monotonic (higher values pushed towards one cluster or the other), 
+        so Direction_Toward isn't hiding any big nonlinear effects.
+        
+        For each feature, we split the test set into two groups:
+        High values =  feature values above that feature’s median
+        Low values = feature values below or equal to the median
+        Then: 
+        Mean_SHAP_High = average SHAP value for the high-value group
+        Mean_SHAP_Low = average SHAP value for the low-value group
+        Finally:
+        If Mean_SHAP_High > Mean_SHAP_Low: Direction_Toward = Cluster 1
+        (higher values tend to push predictions toward the positive class / "cluster 1")
+        Otherwise: Direction_Toward = Cluster 0
+        (higher values tend to push predictions toward the negative class / "cluster 0")
+        """
+
+        shap_feature_values = shap_vals[:, i]
+        median_val = X_shap_df[fname].median()
+        high_mask = X_shap_df[fname] > median_val
+        low_mask = ~high_mask
+
+        mean_high = shap_feature_values[high_mask].mean()
+        mean_low = shap_feature_values[low_mask].mean()
+
+        mean_shap_high_list.append(mean_high)
+        mean_shap_low_list.append(mean_low)
+
+        direction_list.append("Cluster 1" if mean_high > mean_low else "Cluster 0")
+
+
+    direction_df = pd.DataFrame({
+        "Mean_SHAP_High": mean_shap_high_list,
+        "Mean_SHAP_Low": mean_shap_low_list,
+        "Direction_Toward": direction_list,   # which cluster the feature tends to push predictions toward when its value is ABOVE the median
+    }, index=feat_idx)
+
+    # add to importances_df
+    importances_df = importances_df.join(direction_df)
+    # and sort by importance
+    importances_df = (importances_df
+                      .sort_values("Gini_Importance", ascending=False)
+                      .reset_index())
 
     # save outputs
     df_model.to_csv(os.path.join(save_path, f"{save_prefix}random_forest_df_model.csv"), index=False)
@@ -266,16 +322,22 @@ def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols,
         Y-axis = features ranked by importance (from top to bottom)
         """
         import matplotlib.pyplot as plt
-        from matplotlib import cm
         print("generating SHAP summary plot")
 
-        custom_cmap = cm.get_cmap("coolwarm")
+        if shap_plot_colors is not None:
+            import matplotlib.colors as mcolors
+            custom_cmap = mcolors.LinearSegmentedColormap.from_list("custom_cmap", shap_plot_colors)
+
+        else:
+            from matplotlib import cm
+            custom_cmap = cm.get_cmap("coolwarm")
+
         plt.figure(figsize=(10, 6))
         shap.summary_plot(
             shap_vals,
             X_shap,
             feature_names=feature_names,
-            color=custom_cmap,
+            cmap=custom_cmap,  # the custom cmap from above, not colors directly
             plot_type="dot",  # or BAR
             show=False
         )
@@ -578,6 +640,7 @@ def chi_squared_test(contingency_table, include_expected=False, ci_cols=None):
     calling: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.chi2_contingency.html
     """
     chi2, p, dof, expected = chi2_contingency(contingency_table)
+    w = power_chi2
 
     if ci_cols:  # if we want to calculate the 95% CI of the proportion difference
         """

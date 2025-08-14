@@ -10,14 +10,16 @@ library(performance)
 library(datawizard)
 library(rstudioapi) 
 library(reshape2)
-library(multcompView)  # # Optional: Compact letter display for group differences
+library(multcompView)  # Compact letter display for group differences
 library(stringr)
 
 
 "
 Overall script executing all the modelling done for analyzing the survey. 
-
 "
+
+
+
 
 " ***************************************** KPT  ***************************************** "
 
@@ -33,12 +35,15 @@ In this analysis, we test how the presence or absence of each property
 
 dependent var: kill
 predictors: Consciousness, Intentions, Sensations
+
+Sensitive: to the manipulation; only people who killed at least one but not
+all entities are in here. 
 "
 
 
 ## Load Data -------------------------------------
 
-data_path <- file.choose()  # "kill_for_test\kill_to_pass_coded_per_entity.csv" 
+data_path <- file.choose()  # "kill_for_test\kill_to_pass_coded_per_entity_sensitive.csv" >> SENSITIVE
 save_dir <- dirname(data_path)  # deduce the saving path from this
 data <- read.csv(data_path) 
 
@@ -51,7 +56,7 @@ data$group <- factor(data$group)
 
 ## Prepare results saving ------------------------
 
-sink_file_path <- paste0(save_dir, "/kill_for_test_glm.txt")
+sink_file_path <- paste0(save_dir, "/kill_for_test_glm_sensitive.txt")
 sink(sink_file_path, append = FALSE)
 
 ## Analyze Data ----------------------------------
@@ -280,6 +285,12 @@ analyze_lmm <- function(formula, data, model_name, save_dir, txt_file_name) {
   as.data.frame(result_effects)
   print(result_effects)
   
+  # Compute R²
+  print("                ")
+  print("---------------------- R² (Variance Explained) ----------------------")
+  r2_values <- performance::r2(result)
+  print(r2_values)
+  
   # Stop sinking so further output goes back to console
   sink()
   
@@ -296,8 +307,11 @@ analyze_lmm <- function(formula, data, model_name, save_dir, txt_file_name) {
 
 
 ## model MS per C ----------------------
+# rename to not have spaces
+data_wide <- data_wide %>% rename(Moral_Status = `Moral Status`)
+
 result_list <- analyze_lmm(
-  formula = `Moral Status` ~ 
+  formula = Moral_Status ~ 
     Consciousness + Consciousness_ResponseMean + Consciousness_ItemMean +
     (Consciousness + Consciousness_ResponseMean | Item) +
     (Consciousness + Consciousness_ItemMean | response_id),
@@ -311,7 +325,6 @@ result_list <- analyze_lmm(
 
 
 ### Compute Off-Diagonal Difference Per Item ----------------------
-# identify off-diagonal items by extracting residuals and computing item-level deviations
 
 # Pivot wider: get mean, sd, n per Topic
 item_diff <- data %>%
@@ -446,11 +459,11 @@ result_list <- analyze_lmm(
 
 
 
-print("=================== C ratings - Per ICS group =================== ")
+print("=================== MS ratings - Per ICS group =================== ")
 
 "
-In this model we will examine whether the conception of consciousness as it is
-captured in the ICS groups affects the attributed consciousness of different 
+In this model we will examine whether the conception of moral status as it is
+captured in the ICS groups affects the attributed moral status of different 
 entities. 
 
 Crucially, we'd have to break it down per item, as:
@@ -466,13 +479,13 @@ clmm(rating ~ group * item + (1 | response_id),
 
 ## Load Data -------------------------------------
 
-data_path <- file.choose()  # "c_v_ms\c_per_ics.csv" - just consciousness ratings + ICS groups
+data_path <- file.choose()  # "c_v_ms\ms_per_ics.csv" - just consciousness ratings + ICS groups
 save_dir <- dirname(data_path)  # deduce the saving path from this
 data <- read.csv(data_path) 
 
 ## Prepare results saving ------------------------
 
-sink_file_path <- paste0(save_dir, "/c_per_ics.txt")
+sink_file_path <- paste0(save_dir, "/ms_per_ics.txt")
 sink(sink_file_path, append = FALSE)
 
 
@@ -492,14 +505,14 @@ df_long$rating <- as.ordered(df_long$rating)
 ### Analyze Data -------------------------------------
 
 ## model C rating per group and item ----------------------
-print("=================== C rating per ICS group and Entity =================== ")
+print("=================== MS rating per ICS group and Entity =================== ")
 
 "
 We run a CLMM = Cumulative Link Mixed Model
 (a special kind of ordinal regression model that also includes random effects), 
 because we don't want to treat the ratings as continuous
 
-dependent variable: consciousness attributions (ratings, ordinal)
+dependent variable: moral status attributions (ratings, ordinal)
 factors: ICS group (group)
 
 And we do this PER ITEM >> note that this means that there is NO VARIATION 
@@ -547,7 +560,8 @@ contrasts_df$p_adj <- p.adjust(contrasts_df$p.value, method = "bonferroni")
 contrasts_df <- contrasts_df %>%
   arrange(item, contrast)
 
-write.csv(contrasts_df, "c_per_ics_group_item_contrasts.csv", row.names = FALSE)
+write.csv(as.data.frame(contrasts_df), file.path(save_dir, "ms_per_ics_group_item_contrasts.csv"), row.names = FALSE)
+
 print(contrasts_df)
   
 

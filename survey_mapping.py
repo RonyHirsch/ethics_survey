@@ -340,6 +340,11 @@ consciousness_graded = {
     "c_graded_followup": Q_GRADED_MATTERMORE,
     "c_noncomp_1": Q_GRADED_INCOMP,
 }
+
+Q_GRADED_NAMES = {Q_GRADED_EQUAL: "gradedEqual",
+                  Q_GRADED_UNEQUAL: "gradedUnequal",
+                  Q_GRADED_INCOMP: "gradedNoComp"}
+
 # answers: numeric, and ANS_YES/NO on the followup
 
 
@@ -380,7 +385,7 @@ ANS_C_MS_4 = "Has"
 
 ANS_C_MS = {ANS_C_MS_1: 1, ANS_C_MS_4: 4}
 ANS_C_MS_LABELS = {ANS_C_MS_1: 1, ANS_C_MS_2: 2, ANS_C_MS_3: 3, ANS_C_MS_4: 4}
-ANS_C_MS_LABELS_REVERSED = {1: ANS_C_MS_1, 1: ANS_C_MS_2, 3: ANS_C_MS_3, 4: ANS_C_MS_4}
+ANS_C_MS_LABELS_REVERSED = {1: ANS_C_MS_1, 2: ANS_C_MS_2, 3: ANS_C_MS_3, 4: ANS_C_MS_4}
 
 C_RATINGS = {"c_You": {"c_You": 1, "": 4},
              "c_A large language model": {"c_LLM": 1, "": 4},

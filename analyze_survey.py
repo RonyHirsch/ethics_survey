@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import re
 from functools import reduce
+from collections import defaultdict
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from scipy.stats import iqr, friedmanchisquare
 import process_survey
@@ -27,6 +28,7 @@ EXP_COLORS = {1: "#e63946",
               5: "#344968"}
 
 EXP_BINARY_NAME_MAP = {0: "Non Expert", 1: "Expert"}
+AGREE_BINARY_NAME_MAP = {0: "Disagree", 1: "Agree"}
 
 ICS_GROUP_COLOR_LIST = ["#B53B03", "#ee9b00", "#005f73", "#3B4E58"]
 ICS_GROUP_ORDER_LIST = ["multidimensional", "cognitive-agential", "experiential", "other"]
@@ -34,13 +36,19 @@ ICS_GROUP_ORDER_LIST = ["multidimensional", "cognitive-agential", "experiential"
 NO_KILL_COLOR_LIST = [YES_NO_COLORS[survey_mapping.ANS_NO] for i in range(len(survey_mapping.ANS_ALLNOS_LIST))]
 
 
-EARTH_DANGER_COLOR_MAP = {survey_mapping.ANS_PERSON: "#264653",
-                          survey_mapping.ANS_DOG: "#f4a261",
-                          survey_mapping.ANS_PET: "#e76f51",
-                          survey_mapping.ANS_DICTATOR: "#006d77",
+EARTH_DANGER_COLOR_MAP = {survey_mapping.ANS_PERSON: "#ffbf69",
+                          survey_mapping.ANS_DICTATOR: "#e8dab2",
                           survey_mapping.ANS_UWS: "#8d99ae",
-                          survey_mapping.ANS_FLY: "#cb997e",
-                          survey_mapping.ANS_AI: "#355070"}
+
+                          survey_mapping.ANS_DOG: "#778da9",
+                          survey_mapping.ANS_PET: "#415a77",
+
+                          survey_mapping.ANS_FLY: "#917856",
+                          survey_mapping.ANS_AI: "#ffd8be"}
+
+
+EARTH_DANGER_CLUSTER_COLORS = ["#EDAE49", "#102E4A"]
+
 
 C_V_MS_COLORS = {survey_mapping.ANS_C_MS_1: "#DB5461",
                  survey_mapping.ANS_C_MS_2: "#fb9a99",
@@ -55,75 +63,6 @@ IMPORTANT_FEATURE_COLORS = {survey_mapping.ANS_LANG: "#2A848A",
                             survey_mapping.ANS_PHENOMENOLOGY: "#2274A5",
                             survey_mapping.ANS_THINK: "#E83F6F",
                             survey_mapping.ANS_OTHER: "#32936F"}
-
-
-def earth_in_danger_clustering(analysis_dict, save_path, cluster_num=2, cluster_colors=None):
-    """
-    Perform clustering of responses into [cluster_num] clusters based on responses to the Earth-in-Danger dilemma.
-
-    :param analysis_dict: analysis dict of all response-blocks dfs
-    :param save_path: path where all the analysis results are saved
-    :param cluster_num: number of clusters
-    :param cluster_colors: (optional) colors of clusters
-    :return: the results of the kmeans clustering: the df with the tagging of the clusters, the kmeans, and the
-    cluster centroids
-    """
-    # save path
-    result_path = os.path.join(save_path, "earth_danger")
-    if not os.path.isdir(result_path):
-        os.mkdir(result_path)
-
-    # load relevant data
-    df_earth = analysis_dict["earth_in_danger"]
-    questions = df_earth.columns[df_earth.columns != process_survey.COL_ID].tolist()
-
-    """
-    Kmeans clustering
-    """
-    df_earth_coded = df_earth.copy()
-    for col in questions:
-        """
-        Kmeans clustering relies on distance measures like Euclidean distance to determine cluster centers, 
-        so if using arbitrary numbers for categories, the model will interpret these numbers as having some sort of 
-        distance relationship. 
-
-        So we will convert everything into binary. However, in order to keep interpretability, I will choose the
-        0's and 1's myself (and not simple map each column into binary arbitrarily), to identify the same meaning. 
-        For that we use: EARTH_DANGER_QA_MAP
-        """
-        col_map = survey_mapping.EARTH_DANGER_QA_MAP[col]
-        df_earth_coded[col] = df_earth_coded[col].map(col_map)
-
-    df_earth_coded.set_index([process_survey.COL_ID], inplace=True)
-
-    """
-    Perform k-means clustering: group the choices into k clusters (cluster_num) based on feature similarity.
-    Each cluster is represented by a "centroid" (average position of the data points in the cluster).
-    Data points are assigned to the cluster whose centroid they are closest to.
-    """
-    df_pivot, kmeans, cluster_centroids = helper_funcs.perform_kmeans(df_pivot=df_earth_coded, clusters=cluster_num,
-                                                                      save_path=result_path, save_name="items")
-
-    """
-    Plot the KMeans cluster centroids. For each cluster, the centroid is the average data point for this cluster 
-    (the mean value of the features for all data points in the cluster). We use the centroids to visualize each 
-    cluster's choice in each earth-is-in-danger dyad, to interpret the differences between them.  
-    """
-
-    # Compute the cluster centroids and SEMs
-    # cluster_centroids = df_pivot.groupby("Cluster").mean()  # we get this from helper_funcs.perform_kmeans
-    cluster_sems = df_pivot.groupby("Cluster").sem()
-
-    # Plot - collapsed (all clusters together)
-    if cluster_colors is None:
-        cluster_colors = ["#EDAE49", "#102E4A"]
-    helper_funcs.plot_cluster_centroids(cluster_centroids=cluster_centroids, cluster_sems=cluster_sems,
-                                        save_path=result_path, save_name="items", fmt="svg",
-                                        label_map=survey_mapping.EARTH_DANGER_QA_MAP, binary=True,
-                                        label_names_coding=survey_mapping.EARTH_DANGER_ANS_MAP,
-                                        threshold=0, overlaid=True, cluster_colors_overlaid=cluster_colors)
-
-    return df_pivot, kmeans, cluster_centroids
 
 
 def demographics_age(demographics_df, save_path):
@@ -161,13 +100,14 @@ def demographics_age(demographics_df, save_path):
     age_group_counts_df.to_csv(os.path.join(save_path, "age_group_props.csv"), index=False)
 
     # plot histogram
-    age_color_order = ["#BC3908", "#BC3908", "#BC3908", "#BC3908", "#BC3908", "#BC3908", "#BC3908"]
-    plotter.plot_histogram(df=age_group_counts_df,
-                           category_col="age_group", data_col=COUNT,
-                           x_label="Age Group", y_label=COUNT, ytick_interval=10,
-                           save_path=save_path, save_name=f"age",
-                           format="svg",
-                           colors=age_color_order)
+    age_color_order = ["#590d22", "#800f2f", "#a4133c", "#c9184a", "#ff4d6d", "#ff758f", "#ff8fa3"]
+    age_colors = {AGE_LABELS[i]: age_color_order[i] for i in range(len(age_color_order))}
+    plotter.plot_categorical_bars(categories_prop_df=age_group_counts_df, category_col="age_group", data_col=PROP,
+                                  categories_colors=age_colors,
+                                  save_path=save_path, save_name=f"age", fmt="svg",
+                                  y_min=0, y_max=101, y_skip=10, delete_y=False, inch_w=22, inch_h=12,
+                                  layered=False, full_data_col=f"{PROP}", partial_data_col=None,
+                                  add_pcnt=True, pcnt_color="#2C333A", pcnt_size=30, pcnt_position="middle")
 
     return demographics_df.loc[:, [process_survey.COL_ID, "age_group"]]
 
@@ -258,12 +198,13 @@ def demographics_education(demographics_df, save_path):
     Plot
     """
     education_color_order = ["#a9d6e5", "#89c2d9", "#61a5c2", "#468faf", "#2c7da0"]
-    plotter.plot_histogram(df=category_df,
-                           category_col="education_label", data_col=COUNT,
-                           x_label="Education Level", y_label=COUNT, ytick_interval=10,
-                           save_path=save_path, save_name=f"education",
-                           format="svg",
-                           colors=education_color_order)
+    education_colors = {education_labels[education_order[i]]: education_color_order[i] for i in range(len(education_color_order))}
+    plotter.plot_categorical_bars(categories_prop_df=category_df, category_col="education_label", data_col=PROP,
+                                  categories_colors=education_colors,
+                                  save_path=save_path, save_name=f"education", fmt="svg",
+                                  y_min=0, y_max=101, y_skip=10, delete_y=False, inch_w=22, inch_h=12,
+                                  layered=False, full_data_col=f"{PROP}_all", partial_data_col=None,
+                                  add_pcnt=True, pcnt_color="#2C333A", pcnt_size=30, pcnt_position="middle")
 
     """
     Follow up on higher education - topic
@@ -1213,7 +1154,7 @@ def eid_descriptives(analysis_dict, save_path):
     # load the relevant data
     df_earth = analysis_dict["earth_in_danger"]
     questions = list(survey_mapping.EARTH_DANGER_QA_MAP.keys())  # keys are the Q's, values are the A's
-    df_earth.to_csv(os.path.join(f"eid_raw.csv"), index=False)
+    df_earth.to_csv(os.path.join(result_path, f"eid_raw.csv"), index=False)
 
     # simple descriptives
     counts_df = df_earth[questions].apply(lambda col: col.value_counts())
@@ -1253,6 +1194,8 @@ def eid_descriptives(analysis_dict, save_path):
                                          save_name="eid_preferences", fmt="svg",
                                          double_ticks=True, double_ticks_bar_titles=False,
                                          ordering_map_dict=survey_mapping.EARTH_DANGER_QA_MAP)
+    plot_df = pd.DataFrame(plot_data)
+    plot_df.to_csv(os.path.join(result_path, f"eid_preferences.csv"), index=False)
 
     return df_earth, result_path
 
@@ -1290,7 +1233,7 @@ def eid_clustering(eid_df, save_path):
                                                                                                  save_path=save_path,
                                                                                                  save_name="items",
                                                                                                  k_range=range(2, 5))
-    df_pivot.to_csv(os.path.join(save_path, f"earth_danger_clusters.csv"), index=False)
+    df_pivot.to_csv(os.path.join(save_path, f"earth_danger_clusters.csv"), index=True)  # index is participant code
 
 
     """
@@ -1310,7 +1253,7 @@ def eid_clustering(eid_df, save_path):
                                         save_path=save_path, save_name="items", fmt="svg",
                                         label_map=survey_mapping.EARTH_DANGER_QA_MAP, binary=True,
                                         label_names_coding=survey_mapping.EARTH_DANGER_ANS_MAP,
-                                        threshold=0, overlaid=True, cluster_colors_overlaid=["#EDAE49", "#102E4A"])
+                                        threshold=0, overlaid=True, cluster_colors_overlaid=EARTH_DANGER_CLUSTER_COLORS)
 
     return df_pivot, kmeans, cluster_centroids
 
@@ -1354,11 +1297,9 @@ def c_v_ms(analysis_dict, save_path):
                             x_col="Consciousness", x_label="Consciousness",
                             x_min=survey_mapping.ANS_C_MS[survey_mapping.ANS_C_MS_1],
                             x_max=survey_mapping.ANS_C_MS[survey_mapping.ANS_C_MS_4], x_ticks=1,
-                            #x_tick_labels=survey_mapping.ANS_C_MS_LABELS_REVERSED,
                             y_col="Moral Status", y_label="Moral Status",
                             y_min=survey_mapping.ANS_C_MS[survey_mapping.ANS_C_MS_1],
                             y_max=survey_mapping.ANS_C_MS[survey_mapping.ANS_C_MS_4], y_ticks=1,
-                            #y_tick_labels=survey_mapping.ANS_C_MS_LABELS_REVERSED,
                             save_path=result_path, save_name=f"correlation_c_ms",
                             palette_bounds=[C_V_MS_COLORS[survey_mapping.ANS_C_MS_1], C_V_MS_COLORS[survey_mapping.ANS_C_MS_4]],
                             corr_line=False, diag_line=True, fmt="svg",
@@ -1461,7 +1402,57 @@ def c_v_ms(analysis_dict, save_path):
     c_1_entity_stats = c_1_entity_stats.sort_values(by="num_people", ascending=False).reset_index(drop=True)
     c_1_entity_stats.to_csv(os.path.join(result_path, f"c_1_with_ms_3-4_summary.csv"), index=False)
 
+    """
+    Plot a pie for each entity such that it'll have all c=1 / ms=1 as a 100%, and proportions of ms / c ratings 
+    """
+    colors_dict = {i: C_V_MS_COLORS[survey_mapping.ANS_C_MS_LABELS_REVERSED[i]] for i in range(1, 5)}
+
+    # consciousness = 1 : moral status distribution
+    # take top 5:
+    c_1_top_5 = c_1_entity_stats["Item"].head(5).tolist()
+    save_and_plot_pies(df=df, entities=c_1_top_5, filter_prefix="c", value_prefix="ms", result_path=result_path,
+                       title_suffix="Moral Status (Consciousness = 1)", file_prefix="c1_ms", colors=colors_dict)
+
+    # moral status = 1 : consciousness distribution
+    ms_1_top_5 = ms_1_entity_stats["Item"].head(5).tolist()
+    save_and_plot_pies(df=df, entities=ms_1_top_5, filter_prefix="ms", value_prefix="c", result_path=result_path,
+                       title_suffix="Consciousness (Moral Status = 1)", file_prefix="ms1_c", colors=colors_dict)
+
     return long_data, df, result_path
+
+
+def save_and_plot_pies(df, entities, filter_prefix, value_prefix, result_path, title_suffix, colors,
+                       filter_val=1, file_prefix=""):
+    for entity in entities:
+        filter_col = f"{filter_prefix}_{entity}"
+        value_col = f"{value_prefix}_{entity}"
+
+        # filter for the condition
+        relevant = df.loc[:, [process_survey.COL_ID, filter_col, value_col]]
+        subset = relevant[relevant[filter_col] == filter_val][[value_col]]
+        if subset.empty:
+            continue
+
+        # get counts & proportions
+        counts = subset[value_col].value_counts().sort_index()
+        total_n = counts.sum()
+        props = counts / total_n * 100
+
+        category_df = pd.DataFrame({
+            "Rating": counts.index,
+            f"{COUNT}": counts.values,
+            f"{PROP}": props.values
+        })
+
+        category_df.to_csv(os.path.join(result_path, f"{file_prefix}_{entity}.csv"),index=False)
+
+        # plot pie
+        plotter.plot_pie(categories_names=counts.index.tolist(), categories_counts=counts.tolist(),
+                         categories_colors=colors,
+                         title=f"{title_suffix}: {entity} – N = {total_n}", save_path=result_path,
+                         save_name=f"{file_prefix}_{entity}", fmt="svg", props_in_legend=True, annot_props=True,
+                         label_inside=True)
+    return
 
 
 def kpt_per_demographics(kpt_df_sensitive, demographics_df, save_path):
@@ -1565,9 +1556,9 @@ def c_v_ms_expertise(c_v_ms_df, df_experience, save_path, significant_p_value=0.
     return
 
 
-def c_per_ics(c_v_ms_df, df_ics_groups, save_path):
+def ms_per_ics(c_v_ms_df, df_ics_groups, save_path):
     """
-    We want to answer the question: does being in group A mean you attribute consciousness to X differently?
+    We want to answer the question: does being in group A mean you attribute MORAL STATUS to X differently?
     For that, we need to prepare the data for modelling in R.
     The modelling will be done PER ITEM, as otherwise we'd have a model with 24 entities * 4 groups which is hundreds
     of effects.
@@ -1577,14 +1568,14 @@ def c_per_ics(c_v_ms_df, df_ics_groups, save_path):
     :param save_path:
     :return:
     """
-    c_df = c_v_ms_df.loc[:, [process_survey.COL_ID] + [c for c in c_v_ms_df.columns if c.startswith("c_")]]  # just consciousness ratings
+    ms_df = c_v_ms_df.loc[:, [process_survey.COL_ID] + [c for c in c_v_ms_df.columns if c.startswith("ms_")]]  # just MS ratings
     merged = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID]),
-                    [c_v_ms_df, df_ics_groups.loc[:, [process_survey.COL_ID, "group"]]])
-    merged.to_csv(os.path.join(save_path, f"c_per_ics.csv"), index=False)
+                    [ms_df, df_ics_groups.loc[:, [process_survey.COL_ID, "group"]]])
+    merged.to_csv(os.path.join(save_path, f"ms_per_ics.csv"), index=False)
     return
 
 
-def eid_per_demographics(eid_df, demographics_df, experience_df, save_path):
+def eid_per_demographics(eid_df, demographics_df, experience_df, save_path, eid_cluster_df=None):
 
     expertise_relevant_item_dict = {"AI": [survey_mapping.Q_UWS_AI, survey_mapping.Q_AI_DOG]}
                                     #"Animals": [survey_mapping.Q_PERSON_DOG, survey_mapping.Q_PERSON_PET,
@@ -1626,6 +1617,33 @@ def eid_per_demographics(eid_df, demographics_df, experience_df, save_path):
                                save_path=save_path, save_name=f"eid_demographic_{demo_domain.replace('?', '').replace('/', '-')}_{question_code}", save_expected=False,
                                grp1_vals=eid_df_relevant[decision].unique(),
                                grp1_color_dict=EARTH_DANGER_COLOR_MAP)
+
+    """
+    If we have the cluster information, try to see if difference in expertise matters for that
+    """
+    if eid_cluster_df is not None:
+        """
+        Then we will run a random forest classifier to see if cluster (0/1) can be predicted from self-reported
+        expertise level in any of the domains. >> we take the RAW form of experience here (for binarized, uncomment
+        and replace)
+        """
+        experience_cols_raw = list(survey_mapping.Q_EXP_NAME_DICT.values())
+        # experience_cols_binary = [c for c in experience_df.columns if c.endswith(f"_expert")]
+        exp_relevant = experience_df.loc[:, [process_survey.COL_ID] + experience_cols_raw]
+        cluster_relevant = eid_cluster_df.loc[:, [process_survey.COL_ID, "Cluster"]]
+        cluster_with_exp = pd.merge(exp_relevant, cluster_relevant, on=process_survey.COL_ID)
+
+        categorical_cols = []  # no categorical columns - self-reported experience is ordinal
+        order_cols = experience_cols_raw
+
+        cluster_with_exp.to_csv(os.path.join(save_path, f"model_dataframe_coded.csv"), index=False)
+        helper_funcs.run_random_forest_pipeline(dataframe=cluster_with_exp, dep_col="Cluster",
+                                                categorical_cols=categorical_cols,
+                                                order_cols=order_cols, save_path=save_path, save_prefix="",
+                                                rare_class_threshold=5, n_permutations=1000, scoring_method="accuracy",
+                                                cv_folds=10, split_test_size=0.3, random_state=42, n_repeats=50,
+                                                shap_plot=True, shap_plot_colors=EARTH_DANGER_CLUSTER_COLORS)
+
 
     return
 
@@ -1675,7 +1693,7 @@ def ms_c_prios_descriptives(analysis_dict, save_path):
         df_r = df_r[df_r[r].notnull()]
         df_r.to_csv(os.path.join(result_path, f"{r.replace('?', '').replace('/', '-')}.csv"), index=False)
 
-    return
+    return ms_prios, result_path
 
 
 def ms_features_descriptives(analysis_dict, save_path):
@@ -1826,6 +1844,34 @@ def experience_with_demographics_descriptives(df_demographics, df_experience, sa
     return
 
 
+def c_graded_descriptives(analysis_dict, save_path):
+    # save path
+    result_path = os.path.join(save_path, "graded_consciousness")
+    if not os.path.isdir(result_path):
+        os.mkdir(result_path)
+
+    c_graded = analysis_dict["consciousness_graded"].copy()
+    c_graded.to_csv(os.path.join(result_path, "consciousness_graded.csv"), index=False)
+
+    # all questions in this section
+    rating_questions = [survey_mapping.Q_GRADED_EQUAL, survey_mapping.Q_GRADED_UNEQUAL, survey_mapping.Q_GRADED_INCOMP]
+
+    df_melted = c_graded.melt(id_vars=process_survey.COL_ID, value_vars=rating_questions,
+                              var_name='question', value_name='rating')
+    counts = df_melted.groupby(['rating', 'question'])[process_survey.COL_ID].nunique().unstack(
+        fill_value=0).reset_index(drop=False, inplace=False)
+    counts.to_csv(os.path.join(save_path, "consciousness_graded_rating_counts.csv"), index=False)
+
+    """
+    Binarize agreement with each assertion: 1/2 = Disagree (0); 3/4 = Agree (1). 
+    """
+    agreed = [3, 4]
+    for col in rating_questions:
+        c_graded[f"binary_{col}"] = c_graded[col].isin(agreed).astype(int)
+
+    return c_graded, result_path
+
+
 def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     The method which manages all the processing of specific survey data for analyses.
@@ -1842,14 +1888,14 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Step 1: Basic demographics
     Get what we need to report the standard things we do
     """
-    df_demo = demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    #df_demo = demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 2: Expertise
     We collected self-reported expertise levels with various topics. Get what we need to report about that
     returns: the df with all subjects and just the rating columns of 4 experience types(not the 'other' responses etc)
     """
-    #df_exp_ratings, exp_path = experience_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_exp_ratings, exp_path = experience_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     "Extra: Experience and Demographics - all descriptives that cross these two"
     #experience_with_demographics_descriptives(df_demographics=df_demo, df_experience=df_exp_ratings, save_path=exp_path)
@@ -1860,7 +1906,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     df_c_groups contains a row per subject and focuses on answers to the Consciousness-wo-... questions, contraining
     the answers (y/n) to both (c wo intentions, c wo valence), and the group tagging based on that
     """
-    df_c_groups, df_ics_with_groups, ics_path = ics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    #df_c_groups, df_ics_with_groups, ics_path = ics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 4: Do the groups of people from the ics_descriptives differ based on experience with consciousness?
@@ -1943,7 +1989,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     *** NOTE *** df_kpt_sensitive includes ONLY PEOPLE WHO WERE SENSITIVE TO THE MANIPULATION - i.e., those who would
     kill at least one entity, but not all of them. 
     """
-    df_kpt, df_kpt_sensitive, kpt_path = kpt_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    #df_kpt, df_kpt_sensitive, kpt_path = kpt_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     * Prepare data for modelling in R * 
@@ -1957,14 +2003,14 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     
     *** AGAIN, ASSUMING ONLY PEOPLE WHO WERE SENSITIVE TO THE MANIPULATION ***
     """
-    kpt_per_entity(kpt_df_sensitive=df_kpt_sensitive, cgroups_df=df_c_groups, save_path=kpt_path)
+    #kpt_per_entity(kpt_df_sensitive=df_kpt_sensitive, cgroups_df=df_c_groups, save_path=kpt_path)
 
     """
     Step 14: Is the KPT killing behavior affected by thinking that this creature is even possible? 
     
     *** AGAIN, ASSUMING ONLY PEOPLE WHO WERE SENSITIVE TO THE MANIPULATION ***
     """
-    kpt_per_ics(kpt_df_sensitive=df_kpt_sensitive, df_ics_groups=df_ics_with_groups, save_path=kpt_path)
+    #kpt_per_ics(kpt_df_sensitive=df_kpt_sensitive, df_ics_groups=df_ics_with_groups, save_path=kpt_path)
 
 
     """
@@ -1972,7 +2018,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     
     *** AGAIN, ASSUMING ONLY PEOPLE WHO WERE SENSITIVE TO THE MANIPULATION ***
     """
-    kpt_per_demographics(kpt_df_sensitive=df_kpt_sensitive, demographics_df=df_demo, save_path=kpt_path)
+    #kpt_per_demographics(kpt_df_sensitive=df_kpt_sensitive, demographics_df=df_demo, save_path=kpt_path)
 
 
     """
@@ -1981,12 +2027,6 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     who to save. 
     """
     #df_eid, eid_path = eid_descriptives(analysis_dict=analysis_dict, save_path=save_path)
-
-    """
-    Step 17: EiD per demographics. Is the EiD behavior affected by demographics?
-    Similar logic to Step #15
-    """
-    #eid_per_demographics(eid_df=df_eid, demographics_df=df_demo, experience_df=df_exp_ratings, save_path=eid_path)
 
     """
     Step 18: EiD clusters
@@ -1999,6 +2039,24 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     #    eid_clusters = pd.read_csv(os.path.join(eid_path, f"earth_danger_clusters.csv"))
     #else:
     #    eid_clusters, kmeans, cluster_centroids = eid_clustering(eid_df=df_eid, save_path=eid_path)
+
+    """
+    Step 17: EiD per demographics. Is the EiD behavior affected by demographics?
+    Similar logic to Step #15 
+    """
+    #eid_per_demographics(eid_df=df_eid, demographics_df=df_demo, experience_df=df_exp_ratings, save_path=eid_path,
+    #                     eid_cluster_df=eid_clusters)
+
+    """
+    Step 18: EiD per consciousness conception group - ics - Do these groups belong to different CLUSTERS?
+    Similar logic to Step #10 and  #7
+    """
+    #perform_chi_square(df1=df_c_groups, col1="group",
+    #                   df2=eid_clusters, col2="Cluster", col2_name="Cluster",
+    #                   id_col=process_survey.COL_ID,
+    #                   save_path=eid_path, save_name="ics_group", save_expected=False,
+    #                   grp1_vals=ICS_GROUP_ORDER_LIST, grp2_vals=[0, 1], grp2_map=None,
+    #                   grp1_color_dict={ICS_GROUP_ORDER_LIST[i]: ICS_GROUP_COLOR_LIST[i] for i in range(len(ICS_GROUP_ORDER_LIST))})
 
     """
     Step 19: consciousness vs moral status (C v MS) 
@@ -2014,15 +2072,31 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     #c_v_ms_expertise(c_v_ms_df=df_c_v_ms, df_experience=df_exp_ratings, save_path=c_v_ms_path)
 
     """
-    Step ????: C ratings - does the conception of consciousness matter?
+    Step 20: Does the conception of consciousness matter for MORAL STATUS ATTRIBUTIONS?
+    This is for R script - function with comment 'MS rating per ICS group and Entity'
     """
-    #c_per_ics(c_v_ms_df=df_c_v_ms, df_ics_groups=df_ics_with_groups, save_path=c_v_ms_path)
+    #ms_per_ics(c_v_ms_df=df_c_v_ms, df_ics_groups=df_ics_with_groups, save_path=c_v_ms_path)
 
     """
     Step 21: moral consideration priorities: do you think non conscious creatures/systems should be taken into account 
     in moral decisions? And also for conscious creatures. 
     """
-    #ms_c_prios_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_ms_c_prios, prios_path = ms_c_prios_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+
+
+    """
+    >> does expertise matter for the prios questions?: checking for Consciousness and Ethics expertise
+    """
+    for expertise in [survey_mapping.Q_EXP_NAME_DICT[survey_mapping.Q_CONSC_EXP],  # consciousness
+                      survey_mapping.Q_EXP_NAME_DICT[survey_mapping.Q_ETHICS_EXP]]:  # ethics
+        perform_chi_square(df1=df_ms_c_prios.loc[:, [process_survey.COL_ID, survey_mapping.PRIOS_Q_NONCONS]],
+                           col1=survey_mapping.PRIOS_Q_NONCONS,
+                           df2=df_exp_ratings, col2=f"{expertise}_expert", col2_name=f"{expertise} Expertise",
+                           id_col=process_survey.COL_ID,
+                           grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES], grp1_color_dict=YES_NO_COLORS,
+                           grp2_vals=[0, 1], grp2_map=EXP_BINARY_NAME_MAP,
+                           save_path=prios_path, save_name=f"{survey_mapping.PRIOS_Q_NAME_MAP[survey_mapping.PRIOS_Q_NONCONS]}_{expertise.lower()}_exp",
+                           save_expected=False)
 
     """
     Step 22: moral consideration features: which features are most important for moral considerations? Descriptives
@@ -2036,5 +2110,28 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     #ms_phenomenology_experts(df_most_important=most_important_df, df_experience=df_exp_ratings,
     #                         save_path=ms_features_path)
+
+    """
+    Step 24: Graded consciousness
+    """
+    #df_c_graded, graded_path = c_graded_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+
+    """
+    >> do people who agree more that some non-human animals should have a higher moral status than others answer
+    differently on the assertion that consciousness is a graded phenomanon? 
+    """
+    #for col in list(survey_mapping.Q_GRADED_NAMES.keys()):
+    #    perform_chi_square(df1=df_ms_c_prios.loc[:, [process_survey.COL_ID, survey_mapping.PRIOS_Q_ANIMALS]],
+    #                       col1=survey_mapping.PRIOS_Q_ANIMALS,
+    #                       df2=df_c_graded, col2=f"binary_{col}",  # the BINARIZED agreement
+    #                       col2_name=col,
+    #                       id_col=process_survey.COL_ID,
+    #                       grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES], grp1_color_dict=YES_NO_COLORS,
+    #                       grp2_vals=[0, 1], grp2_map=AGREE_BINARY_NAME_MAP,  # 0 = disagree, 1 = agree
+    #                       save_path=graded_path,
+    #                       save_name=f"{survey_mapping.PRIOS_Q_NAME_MAP[survey_mapping.PRIOS_Q_ANIMALS]}_{survey_mapping.Q_GRADED_NAMES[col]}",
+    #                       save_expected=False)
+
+
     exit()
 
