@@ -35,7 +35,6 @@ ICS_GROUP_ORDER_LIST = ["multidimensional", "cognitive-agential", "experiential"
 
 NO_KILL_COLOR_LIST = [YES_NO_COLORS[survey_mapping.ANS_NO] for i in range(len(survey_mapping.ANS_ALLNOS_LIST))]
 
-
 EARTH_DANGER_COLOR_MAP = {survey_mapping.ANS_PERSON: "#ffbf69",
                           survey_mapping.ANS_DICTATOR: "#e8dab2",
                           survey_mapping.ANS_UWS: "#8d99ae",
@@ -48,7 +47,6 @@ EARTH_DANGER_COLOR_MAP = {survey_mapping.ANS_PERSON: "#ffbf69",
 
 
 EARTH_DANGER_CLUSTER_COLORS = ["#EDAE49", "#102E4A"]
-
 
 C_V_MS_COLORS = {survey_mapping.ANS_C_MS_1: "#DB5461",
                  survey_mapping.ANS_C_MS_2: "#fb9a99",
@@ -63,6 +61,23 @@ IMPORTANT_FEATURE_COLORS = {survey_mapping.ANS_LANG: "#2A848A",
                             survey_mapping.ANS_PHENOMENOLOGY: "#2274A5",
                             survey_mapping.ANS_THINK: "#E83F6F",
                             survey_mapping.ANS_OTHER: "#32936F"}
+
+
+C_I_HOW_LABEL_MAP = {survey_mapping.ANS_C_NECESSARY: "C necessary for I",
+                     survey_mapping.ANS_I_NECESSARY: "I necessary for C",
+                     survey_mapping.ANS_SAME: "Same",
+                     survey_mapping.ANS_THIRD: "Third feature",
+                     survey_mapping.ANS_NO: survey_mapping.ANS_NO}
+C_I_HOW_COLOR_MAP = {survey_mapping.ANS_C_NECESSARY: "#1a4e73",
+                     survey_mapping.ANS_I_NECESSARY: "#346182",
+                     survey_mapping.ANS_SAME: "#013a63",
+                     survey_mapping.ANS_THIRD: "#4d7592",
+                     survey_mapping.ANS_NO: YES_NO_COLORS[survey_mapping.ANS_NO]}
+C_I_HOW_ORDER = [survey_mapping.ANS_NO, survey_mapping.ANS_SAME, survey_mapping.ANS_C_NECESSARY,
+                 survey_mapping.ANS_I_NECESSARY, survey_mapping.ANS_THIRD]
+
+
+
 
 
 def demographics_age(demographics_df, save_path):
@@ -701,10 +716,13 @@ def perform_chi_square(df1, col1, df2, col2, id_col, save_path, save_name, save_
     # ensure we're on the same playing field - unify based on id_column
     merged = pd.merge(df1[[id_col, col1]], df2[[id_col, col2]], on=id_col)
     merged.to_csv(os.path.join(save_path, f"{save_name}_chisquared_data.csv"), index=False)
+    # how many people do we have?
+    num_obs = merged.shape[0]
     # create the contingency table
     contingency_table = pd.crosstab(merged[col1], merged[col2])
     chisquare_result, expected_df = helper_funcs.chi_squared_test(contingency_table=contingency_table,
-                                                                   include_expected=True, ci_cols=grp2_vals)
+                                                                  n=num_obs,
+                                                                  include_expected=True)
     chisquare_result["question1"] = col1
     chisquare_result["question2"] = col2
 
@@ -722,7 +740,10 @@ def perform_chi_square(df1, col1, df2, col2, id_col, save_path, save_name, save_
     if not y_tick_list:
         y_tick_list = [0, 25, 50, 75, 100]
     if not grp2_map:
-        grp2_map = {grp2_vals[i]: grp2_vals[i] for i in range(len(grp2_vals))}
+        if all(isinstance(item, str) for item in grp2_vals):  # if all items in the list are strings, we need ints for the X axis
+            grp2_map = {grp2_vals[i]: i for i in range(len(grp2_vals))}
+        else:
+            grp2_map = {grp2_vals[i]: grp2_vals[i] for i in range(len(grp2_vals))}
     if not col2_name:
         col2_name = col2
     plotter.plot_expertise_proportion_bars(df=plot_ready_df,
@@ -781,26 +802,14 @@ def consc_intell_descriptives(analysis_dict, save_path):
     """
     If they thought that consciousness and ingelligence are related, we asked them How. Plot these proportions
     """
-    follow_up = "How?"
+    follow_up = survey_mapping.Q_INTELLIGENCE_HOW
     yes_counts = con_intellect[con_intellect[question] == survey_mapping.ANS_YES][follow_up].value_counts()
     no_count = (con_intellect[question] == survey_mapping.ANS_NO).sum()
     specific_category_counts = pd.concat([yes_counts, pd.Series({survey_mapping.ANS_NO: no_count})])
-    how_label_map = {survey_mapping.ANS_C_NECESSARY: "C necessary for I",
-                     survey_mapping.ANS_I_NECESSARY: "I necessary for C",
-                     survey_mapping.ANS_SAME: "Same",
-                     survey_mapping.ANS_THIRD: "Third feature",
-                     survey_mapping.ANS_NO: survey_mapping.ANS_NO}
-    how_color_map = {survey_mapping.ANS_C_NECESSARY: "#1a4e73",
-                     survey_mapping.ANS_I_NECESSARY: "#346182",
-                     survey_mapping.ANS_SAME: "#013a63",
-                     survey_mapping.ANS_THIRD: "#4d7592",
-                     survey_mapping.ANS_NO: YES_NO_COLORS[survey_mapping.ANS_NO]}
-    how_order = [survey_mapping.ANS_NO, survey_mapping.ANS_SAME, survey_mapping.ANS_C_NECESSARY,
-                 survey_mapping.ANS_I_NECESSARY, survey_mapping.ANS_THIRD]
-    specific_category_counts = specific_category_counts.reindex(how_order)
+    specific_category_counts = specific_category_counts.reindex(C_I_HOW_ORDER)
     plotter.plot_pie(categories_names=specific_category_counts.index.tolist(), pie_direction=0,
                      categories_counts=specific_category_counts.tolist(),
-                     categories_colors=how_color_map, categories_labels=how_label_map,
+                     categories_colors=C_I_HOW_COLOR_MAP, categories_labels=C_I_HOW_LABEL_MAP,
                      title=f"{question}", label_inside=True, prop_fmt=".0f",
                      save_path=result_path, save_name=f"{question.replace('?', '').replace('/', '-')}_how", fmt="svg")
     df_counts = specific_category_counts.to_frame(name=COUNT)
@@ -1872,6 +1881,38 @@ def c_graded_descriptives(analysis_dict, save_path):
     return c_graded, result_path
 
 
+def most_important_per_intelligence(df_most_important, df_con_intell, save_path):
+    df_most_important["is_thinking_most_important"] = df_most_important[survey_mapping.Q_FEATURES_MOST_IMPORTANT].\
+        apply(lambda x: 1 if x == survey_mapping.ANS_THINK else 0)
+
+    result = perform_chi_square(df1=df_con_intell, col1=survey_mapping.Q_INTELLIGENCE, grp1_color_dict=YES_NO_COLORS,
+                                grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
+                                df2=df_most_important, col2="is_thinking_most_important",
+                                col2_name="Was thinking selected as most important?",
+                                grp2_vals=[0, 1], grp2_map=AGREE_BINARY_NAME_MAP,
+                                id_col=process_survey.COL_ID, y_tick_list=None,
+                                save_path=save_path, save_name=f"thinking most important_intelligence", save_expected=False)
+
+    # now take only the ones who did think consciousness and intelligence were related:
+    df_con_intell_yes = df_con_intell[df_con_intell[survey_mapping.Q_INTELLIGENCE] == survey_mapping.ANS_YES].copy().reset_index(drop=True, inplace=False)
+    # and only those who also chose thinking as the most important feature
+    df_con_intell_yes_thinking = df_con_intell_yes.merge(df_most_important.loc[df_most_important["is_thinking_most_important"] == 1,
+    [process_survey.COL_ID, survey_mapping.Q_FEATURES_MOST_IMPORTANT]], on=process_survey.COL_ID, how="inner")
+    df_con_intell_yes_thinking.to_csv(os.path.join(save_path, f"thinking most important yes_con intel related yes.csv"), index=False)
+    # and now some stats on
+    df_con_intell_yes_thinking_values = df_con_intell_yes_thinking[survey_mapping.Q_INTELLIGENCE_HOW].value_counts()
+    plotter.plot_pie(categories_names=df_con_intell_yes_thinking_values.index.tolist(), pie_direction=0,
+                     categories_counts=df_con_intell_yes_thinking_values.tolist(),
+                     categories_colors=C_I_HOW_COLOR_MAP, categories_labels=C_I_HOW_LABEL_MAP,
+                     title=f"{survey_mapping.Q_INTELLIGENCE}", label_inside=True, prop_fmt=".0f",
+                     save_path=save_path, save_name=f"thinking most important yes_con intel related yes_how", fmt="svg")
+    df_counts = df_con_intell_yes_thinking_values.to_frame(name=COUNT)
+    df_counts[PROP] = 100 * (df_counts[COUNT] / df_counts[COUNT].sum())
+    df_counts.to_csv(os.path.join(save_path, f"thinking most important yes_con intel related yes_how.csv"))
+
+    return
+
+
 def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     The method which manages all the processing of specific survey data for analyses.
@@ -1888,7 +1929,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Step 1: Basic demographics
     Get what we need to report the standard things we do
     """
-    #df_demo = demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_demo = demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 2: Expertise
@@ -1906,7 +1947,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     df_c_groups contains a row per subject and focuses on answers to the Consciousness-wo-... questions, contraining
     the answers (y/n) to both (c wo intentions, c wo valence), and the group tagging based on that
     """
-    #df_c_groups, df_ics_with_groups, ics_path = ics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_c_groups, df_ics_with_groups, ics_path = ics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 4: Do the groups of people from the ics_descriptives differ based on experience with consciousness?
@@ -1920,17 +1961,17 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     of consciousness experts (1 vs. 0) differ significantly across different ics groups.  
     """
     # Consciousness_expert is a binary column where 0 = people who rated themselves < EXPERTISE and 1 otherwise
-    #perform_chi_square(df1=df_c_groups, col1="group",
-    #                   df2=df_exp_ratings, col2="Consciousness_expert", col2_name="Consciousness Expertise",
-    #                   id_col=process_survey.COL_ID,
-    #                   save_path=ics_path, save_name="consciousness_exp", save_expected=False,
-    #                   grp1_vals=ICS_GROUP_ORDER_LIST, grp2_vals=[0, 1], grp2_map=EXP_BINARY_NAME_MAP,
-    #                   grp1_color_dict={ICS_GROUP_ORDER_LIST[i]: ICS_GROUP_COLOR_LIST[i] for i in range(len(ICS_GROUP_ORDER_LIST))})
+    perform_chi_square(df1=df_c_groups, col1="group",
+                       df2=df_exp_ratings, col2="Consciousness_expert", col2_name="Consciousness Expertise",
+                       id_col=process_survey.COL_ID,
+                       save_path=ics_path, save_name="consciousness_exp", save_expected=False,
+                       grp1_vals=ICS_GROUP_ORDER_LIST, grp2_vals=[0, 1], grp2_map=EXP_BINARY_NAME_MAP,
+                       grp1_color_dict={ICS_GROUP_ORDER_LIST[i]: ICS_GROUP_COLOR_LIST[i] for i in range(len(ICS_GROUP_ORDER_LIST))})
 
     """
     Step 5: Relationship between consciousness and intelligence
     """
-    #df_c_i, c_i_path = consc_intell_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_c_i, c_i_path = consc_intell_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 6: Does the perceived relationship between consciousness and intelligence depend on demographic factors
@@ -1943,45 +1984,45 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     relationship between consciousness and intelligence: 
     Perform a chi square test
     """
-    #perform_chi_square(df1=df_c_i, col1=survey_mapping.Q_INTELLIGENCE, grp1_color_dict=YES_NO_COLORS,
-    #                   grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
-    #                   df2=df_c_groups, col2="group", col2_name="Conception of Consciousness",
-    #                   grp2_vals=ICS_GROUP_ORDER_LIST, grp2_map=None,
-    #                   id_col=process_survey.COL_ID, y_tick_list=None,
-    #                   save_path=c_i_path, save_name=f"ics_intelligence", save_expected=False)
+    perform_chi_square(df1=df_c_i, col1=survey_mapping.Q_INTELLIGENCE, grp1_color_dict=YES_NO_COLORS,
+                       grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
+                       df2=df_c_groups, col2="group", col2_name="Conception of Consciousness",
+                       grp2_vals=ICS_GROUP_ORDER_LIST, grp2_map=None,
+                       id_col=process_survey.COL_ID, y_tick_list=None,
+                       save_path=c_i_path, save_name=f"ics_intelligence", save_expected=False)
 
 
     """
     Step 8: Zombie pill dilemma. A variation of Siewert's pheno-ectomy thought experiment. 
     Descriptives
     """
-    #df_pill, pill_path = zombie_pill_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_pill, pill_path = zombie_pill_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 9: Do consciousness experts answer the Zombie pill question differently than non-experts?
     Logic is similar to step #4
     """
     # Consciousness_expert is a binary column where 0 = people who rated themselves < EXPERTISE and 1 otherwise
-    #perform_chi_square(df1=df_pill, col1=survey_mapping.Q_ZOMBIE,
-    #                   df2=df_exp_ratings, col2="Consciousness_expert", col2_name="Consciousness Expertise",
-    #                   id_col=process_survey.COL_ID,
-    #                   save_path=pill_path, save_name="consciousness_exp", save_expected=False,
-    #                   grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
-    #                   grp2_vals=[0, 1], grp2_map=EXP_BINARY_NAME_MAP,
-    #                   grp1_color_dict=YES_NO_COLORS)
+    perform_chi_square(df1=df_pill, col1=survey_mapping.Q_ZOMBIE,
+                       df2=df_exp_ratings, col2="Consciousness_expert", col2_name="Consciousness Expertise",
+                       id_col=process_survey.COL_ID,
+                       save_path=pill_path, save_name="consciousness_exp", save_expected=False,
+                       grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
+                       grp2_vals=[0, 1], grp2_map=EXP_BINARY_NAME_MAP,
+                       grp1_color_dict=YES_NO_COLORS)
 
     """
     Step 10: Do the different ICS groups answer the Zombie pill question differently from each other?
     Logic is similar to steps #4 and #9
     Zombie = binary (yes/no), consciousness group = 4 groups (df_c_groups)
     """
-    #perform_chi_square(df1=df_pill, col1=survey_mapping.Q_ZOMBIE,
-    #                   df2=df_c_groups, col2="group", col2_name="Conception of Consciousness",
-    #                   id_col=process_survey.COL_ID,
-    #                   save_path=pill_path, save_name="ics_group", save_expected=False,
-    #                   grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
-    #                   grp2_vals=ICS_GROUP_ORDER_LIST, grp2_map=None,
-    #                   grp1_color_dict=YES_NO_COLORS)
+    perform_chi_square(df1=df_pill, col1=survey_mapping.Q_ZOMBIE,
+                       df2=df_c_groups, col2="group", col2_name="Conception of Consciousness",
+                       id_col=process_survey.COL_ID,
+                       save_path=pill_path, save_name="ics_group", save_expected=False,
+                       grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
+                       grp2_vals=ICS_GROUP_ORDER_LIST, grp2_map=None,
+                       grp1_color_dict=YES_NO_COLORS)
 
     """
     Step 11: Kill to Pass Test (KPT). A moral dilemma of 6 entities with I/C/S (ics), whether you'd kill them or not. 
@@ -1989,7 +2030,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     *** NOTE *** df_kpt_sensitive includes ONLY PEOPLE WHO WERE SENSITIVE TO THE MANIPULATION - i.e., those who would
     kill at least one entity, but not all of them. 
     """
-    #df_kpt, df_kpt_sensitive, kpt_path = kpt_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_kpt, df_kpt_sensitive, kpt_path = kpt_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     * Prepare data for modelling in R * 
@@ -2010,7 +2051,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     
     *** AGAIN, ASSUMING ONLY PEOPLE WHO WERE SENSITIVE TO THE MANIPULATION ***
     """
-    #kpt_per_ics(kpt_df_sensitive=df_kpt_sensitive, df_ics_groups=df_ics_with_groups, save_path=kpt_path)
+    kpt_per_ics(kpt_df_sensitive=df_kpt_sensitive, df_ics_groups=df_ics_with_groups, save_path=kpt_path)
 
 
     """
@@ -2026,7 +2067,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     In this block of questions, earth was in danger, with participants presented with dyads having to choose 
     who to save. 
     """
-    #df_eid, eid_path = eid_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_eid, eid_path = eid_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 18: EiD clusters
@@ -2035,35 +2076,36 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     The function eid_clustering codes the data, prepares it for k-means, and searches for the OPTIMAL number of clusters
     Once it is found, it saves it and there's no need to run again. 
     """
-    #if load:  # we load as this takes a while
-    #    eid_clusters = pd.read_csv(os.path.join(eid_path, f"earth_danger_clusters.csv"))
-    #else:
-    #    eid_clusters, kmeans, cluster_centroids = eid_clustering(eid_df=df_eid, save_path=eid_path)
+    load=True
+    if load:  # we load as this takes a while
+        eid_clusters = pd.read_csv(os.path.join(eid_path, f"earth_danger_clusters.csv"))
+    else:
+        eid_clusters, kmeans, cluster_centroids = eid_clustering(eid_df=df_eid, save_path=eid_path)
 
     """
     Step 17: EiD per demographics. Is the EiD behavior affected by demographics?
     Similar logic to Step #15 
     """
-    #eid_per_demographics(eid_df=df_eid, demographics_df=df_demo, experience_df=df_exp_ratings, save_path=eid_path,
-    #                     eid_cluster_df=eid_clusters)
+    eid_per_demographics(eid_df=df_eid, demographics_df=df_demo, experience_df=df_exp_ratings, save_path=eid_path,
+                         eid_cluster_df=None)
 
     """
     Step 18: EiD per consciousness conception group - ics - Do these groups belong to different CLUSTERS?
     Similar logic to Step #10 and  #7
     """
-    #perform_chi_square(df1=df_c_groups, col1="group",
-    #                   df2=eid_clusters, col2="Cluster", col2_name="Cluster",
-    #                   id_col=process_survey.COL_ID,
-    #                   save_path=eid_path, save_name="ics_group", save_expected=False,
-    #                   grp1_vals=ICS_GROUP_ORDER_LIST, grp2_vals=[0, 1], grp2_map=None,
-    #                   grp1_color_dict={ICS_GROUP_ORDER_LIST[i]: ICS_GROUP_COLOR_LIST[i] for i in range(len(ICS_GROUP_ORDER_LIST))})
+    perform_chi_square(df1=df_c_groups, col1="group",
+                       df2=eid_clusters, col2="Cluster", col2_name="Cluster",
+                       id_col=process_survey.COL_ID,
+                       save_path=eid_path, save_name="ics_group", save_expected=False,
+                       grp1_vals=ICS_GROUP_ORDER_LIST, grp2_vals=[0, 1], grp2_map=None,
+                       grp1_color_dict={ICS_GROUP_ORDER_LIST[i]: ICS_GROUP_COLOR_LIST[i] for i in range(len(ICS_GROUP_ORDER_LIST))})
 
     """
     Step 19: consciousness vs moral status (C v MS) 
     In two separate blocks, we presented people with 24 entities (same entities) and asked them about their moral 
     status, and about their consciousness. 
     """
-    #df_c_v_ms_long, df_c_v_ms, c_v_ms_path = c_v_ms(analysis_dict=analysis_dict, save_path=save_path)
+    df_c_v_ms_long, df_c_v_ms, c_v_ms_path = c_v_ms(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     Step 20: C v MS expertise:
@@ -2075,7 +2117,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Step 20: Does the conception of consciousness matter for MORAL STATUS ATTRIBUTIONS?
     This is for R script - function with comment 'MS rating per ICS group and Entity'
     """
-    #ms_per_ics(c_v_ms_df=df_c_v_ms, df_ics_groups=df_ics_with_groups, save_path=c_v_ms_path)
+    ms_per_ics(c_v_ms_df=df_c_v_ms, df_ics_groups=df_ics_with_groups, save_path=c_v_ms_path)
 
     """
     Step 21: moral consideration priorities: do you think non conscious creatures/systems should be taken into account 
@@ -2101,36 +2143,44 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     Step 22: moral consideration features: which features are most important for moral considerations? Descriptives
     """
-    #ms_features_df, most_important_df, ms_features_path = ms_features_descriptives(analysis_dict=analysis_dict,
-    #                                                                               save_path=save_path)
+    ms_features_df, most_important_df, ms_features_path = ms_features_descriptives(analysis_dict=analysis_dict,
+                                                                                   save_path=save_path)
 
     """
     Step 23: Is there a difference between consciousness experts and non-experts with respect to selecting phenomenology
     as the most important feature for moral considerations?
     """
-    #ms_phenomenology_experts(df_most_important=most_important_df, df_experience=df_exp_ratings,
-    #                         save_path=ms_features_path)
+    ms_phenomenology_experts(df_most_important=most_important_df, df_experience=df_exp_ratings,
+                             save_path=ms_features_path)
+
+
+    """
+    Step 23a: what is the relationship between  "thinking" as the most important feature 
+    and thinking consciousness and intelligence are related?
+    """
+    #most_important_per_intelligence(df_most_important=most_important_df, df_con_intell=df_c_i, save_path=ms_features_path)
+
 
     """
     Step 24: Graded consciousness
     """
-    #df_c_graded, graded_path = c_graded_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    df_c_graded, graded_path = c_graded_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
     >> do people who agree more that some non-human animals should have a higher moral status than others answer
     differently on the assertion that consciousness is a graded phenomanon? 
     """
-    #for col in list(survey_mapping.Q_GRADED_NAMES.keys()):
-    #    perform_chi_square(df1=df_ms_c_prios.loc[:, [process_survey.COL_ID, survey_mapping.PRIOS_Q_ANIMALS]],
-    #                       col1=survey_mapping.PRIOS_Q_ANIMALS,
-    #                       df2=df_c_graded, col2=f"binary_{col}",  # the BINARIZED agreement
-    #                       col2_name=col,
-    #                       id_col=process_survey.COL_ID,
-    #                       grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES], grp1_color_dict=YES_NO_COLORS,
-    #                       grp2_vals=[0, 1], grp2_map=AGREE_BINARY_NAME_MAP,  # 0 = disagree, 1 = agree
-    #                       save_path=graded_path,
-    #                       save_name=f"{survey_mapping.PRIOS_Q_NAME_MAP[survey_mapping.PRIOS_Q_ANIMALS]}_{survey_mapping.Q_GRADED_NAMES[col]}",
-    #                       save_expected=False)
+    for col in list(survey_mapping.Q_GRADED_NAMES.keys()):
+        perform_chi_square(df1=df_ms_c_prios.loc[:, [process_survey.COL_ID, survey_mapping.PRIOS_Q_ANIMALS]],
+                           col1=survey_mapping.PRIOS_Q_ANIMALS,
+                           df2=df_c_graded, col2=f"binary_{col}",  # the BINARIZED agreement
+                           col2_name=col,
+                           id_col=process_survey.COL_ID,
+                           grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES], grp1_color_dict=YES_NO_COLORS,
+                           grp2_vals=[0, 1], grp2_map=AGREE_BINARY_NAME_MAP,  # 0 = disagree, 1 = agree
+                           save_path=graded_path,
+                           save_name=f"{survey_mapping.PRIOS_Q_NAME_MAP[survey_mapping.PRIOS_Q_ANIMALS]}_{survey_mapping.Q_GRADED_NAMES[col]}",
+                           save_expected=False)
 
 
     exit()

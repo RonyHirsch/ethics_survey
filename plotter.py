@@ -1011,7 +1011,7 @@ def plot_expertise_proportion_bars(df, x_axis_exp_col_name, x_label, cols, cols_
             if annotate_bar:
                 for idx, (x, val, bot) in enumerate(zip(x_vals, values, bottom)):
                     if val > 0:
-                        ax.text(x, bot + val / 2, f"{val:.1f}%", ha='center', va='center', fontsize=annot_bar_size,
+                        ax.text(x, bot + val / 2, f"{val:.2f}%", ha='center', va='center', fontsize=annot_bar_size,
                                 color=annot_font_color)
             bottom += values
         ax.set_xticks(x_vals)
@@ -1026,7 +1026,7 @@ def plot_expertise_proportion_bars(df, x_axis_exp_col_name, x_label, cols, cols_
             if annotate_bar:
                 for idx, (x, val, bot) in enumerate(zip(x_vals, values, bottom)):
                     if val > 0:
-                        ax.text(x, bot + val / 2, f"{val:.1f}%", ha='center', va='center', fontsize=10,
+                        ax.text(x, bot + val / 2, f"{val:.2f}%", ha='center', va='center', fontsize=10,
                                 color=annot_font_color)
             bottom += values
         ax.set_xticks(sorted(x_vals.unique()))

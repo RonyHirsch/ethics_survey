@@ -440,9 +440,10 @@ MS_RATINGS = {"ms_You": {"ms_You": 1, "": 4},
 # consciousness and intellect
 Q_INTELLIGENCE = "Do you think consciousness and intelligence are related?"
 Q_INTELLIGENCE_FU = "What is the common denominator?"
+Q_INTELLIGENCE_HOW = "How?"
 con_intellect = {
     "con_intellect": Q_INTELLIGENCE,
-    "con_intellect_yes": "How?",
+    "con_intellect_yes": Q_INTELLIGENCE_HOW,
     "con_intellect_yes_fu": Q_INTELLIGENCE_FU
 }
 # answers:
