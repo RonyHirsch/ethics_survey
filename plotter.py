@@ -17,9 +17,9 @@ import math
 import datamapplot
 import geodatasets
 
-# Modify the default font settings
+# Modify the default font settings - GLOBAL FONT PARAMS
 mpl.rcParams['font.family'] = 'sans-serif'  # Change to serif fonts
-mpl.rcParams['font.sans-serif'] = ['Verdana']  # Specify a serif font
+mpl.rcParams['font.sans-serif'] = ['Helvetica']  # Specify a serif font: NHB prefer Helvetica / Arial
 
 custom_params = {"axes.spines.right": False, "axes.spines.top": False}
 sns.set_theme(style="ticks", rc=custom_params)
@@ -278,7 +278,7 @@ def plot_raincloud(df, id_col, data_col_names, data_col_colors, save_path, save_
 
 def plot_pie(categories_names, categories_counts, title, save_path, save_name,
              fmt="svg", pie_direction=180, categories_colors=None, categories_labels=None,
-             annot_groups=True, annot_group_selection=None, annot_props=True, prop_fmt=".1f",
+             annot_groups=True, annot_group_selection=None, annot_props=True, prop_fmt=".2f",
              legend=False, legend_order=None, legend_vertical=True,
              edge_color="white", rotate_labels=True, label_dist=1.01, props_in_legend=False, text_prop_size=22,
              label_inside=False, label_fontsize=25, label_fontcolor="white",
@@ -286,7 +286,6 @@ def plot_pie(categories_names, categories_counts, title, save_path, save_name,
 
     sns.set_style("ticks")
     sns.despine(right=True, top=True)
-    plt.rcParams['font.family'] = "Calibri"
 
     if categories_colors is not None:
         try:
@@ -451,8 +450,6 @@ def plot_overlaid_preferences(all_preferences, all_sems, all_colors, labels, lab
     Creates a single plot overlaying centroids (preferences) and SEMs for all clusters.
     """
 
-    plt.rcParams['font.family'] = "Calibri"
-
     fig, ax = plt.subplots(figsize=(16, 6))
     y_pos = np.arange(len(labels))
 
@@ -468,8 +465,12 @@ def plot_overlaid_preferences(all_preferences, all_sems, all_colors, labels, lab
         for i, (mean, sem, color) in enumerate(zip(preferences, sems, colors)):
             ax.hlines(y=y_pos[i], xmin=(-1 if binary else min_max[0]), xmax=(1 if binary else min_max[1]),
                       color="lightgray", linestyle='--', linewidth=1)
-            ax.errorbar(mean, y_pos[i], xerr=sem, fmt='o', color=color, markersize=15,
-                        ecolor="black", elinewidth=2, capsize=4)
+            ax.errorbar(mean, y_pos[i], xerr=sem, fmt='o', color=color, markersize=30,
+                        ecolor="black",  # error bar color
+                        elinewidth=2,  # error bar line width
+                        mec="black",  # marker edge color
+                        mew=2,  # marker edge width
+                        capsize=5)
 
     ax.axvline(0 if binary else threshold, color='black', linewidth=1)
     ax.set_yticks(y_pos)
@@ -506,8 +507,6 @@ def plot_overlaid_preferences(all_preferences, all_sems, all_colors, labels, lab
 
 def plot_nonbinary_preferences(means, sems, colors, labels, label_map, title, min, max, thresh,
                                save_name, save_path, fmt="png", label_names_coding=None):
-
-    plt.rcParams['font.family'] = "Calibri"
 
     fig, ax = plt.subplots(figsize=(16, 6))
     y_pos = np.arange(len(means))
@@ -548,7 +547,7 @@ def plot_nonbinary_preferences(means, sems, colors, labels, label_map, title, mi
 
 def plot_binary_preferences(means, sems, colors, labels, label_map, title, save_name, save_path, fmt="png",
                             label_names_coding=None):
-    plt.rcParams['font.family'] = "Calibri"
+
     fig, ax = plt.subplots(figsize=(16, 6))
     y_pos = np.arange(len(means))
 
@@ -634,9 +633,9 @@ def plot_3d_scatter(x_col, y_col, z_col, data, color_map=None, c_values_col=None
 
 def plot_null_hist(observed_alpha, null_alphas, parameter_name_xlabel, save_path, save_name, fmt="svg",
                    observed_alpha_color="red", bins=30, alpha=0.7):
+
     sns.set_style("ticks")
     sns.despine(right=True, top=True)
-    plt.rcParams['font.family'] = "Calibri"
 
     plt.figure(figsize=(10, 6))
 
@@ -674,7 +673,6 @@ def plot_histogram(df, category_col, data_col, save_path, save_name,
 
     sns.set_style("ticks")
     sns.despine(right=True, top=True)
-    plt.rcParams['font.family'] = "Calibri"
 
     plt.figure(figsize=(20, 12))
 
@@ -711,7 +709,6 @@ def plot_categorical_bars_layered(categories_prop_df, category_col, full_data_co
                                   inch_w=15, inch_h=12, order=None, annotate_bar=False, annot_font_color="white"):
     plt.figure(figsize=(8, 6))
     sns.set_style("ticks")
-    plt.rcParams['font.family'] = "Calibri"
 
     # Determine the order of categories
     if order is None:
@@ -775,7 +772,6 @@ def plot_categorical_bars_hued(categories_prop_df, x_col, category_col, data_col
                                inch_w=15, inch_h=12, add_pcnt=True, order=None, x_label=None, x_rotation=0):
     plt.figure(figsize=(8, 6))
     sns.set_style("ticks")
-    plt.rcParams['font.family'] = "Calibri"
 
     # Determine the order of categories
     if order is None:
@@ -842,7 +838,6 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
 
     plt.figure(figsize=(8, 6))
     sns.set_style("ticks")
-    plt.rcParams['font.family'] = "Calibri"
 
     # Determine the order of categories
     if order is None:
@@ -890,7 +885,7 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
             plt.text(
                 xpos,
                 full_y,
-                f"{full_height:.1f}%",
+                f"{full_height:.2f}%",
                 ha='center',
                 va=full_va,
                 fontsize=pcnt_size,
@@ -907,7 +902,7 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
             plt.text(
                 xpos,
                 partial_y,
-                f"{partial_height:.1f}%",
+                f"{partial_height:.2f}%",
                 ha='center',
                 va=partial_va,
                 fontsize=pcnt_size,
@@ -940,7 +935,7 @@ def plot_categorical_bars(categories_prop_df, category_col, data_col, categories
             plt.text(
                 x_pos,
                 y_pos,
-                f"{height:.1f}%",
+                f"{height:.2f}%",
                 ha= ha if flip else 'center',  # adjust horizontal alignment based on flip
                 va= va if not flip else 'center',  # adjust vertical alignment based on flip
                 fontsize=pcnt_size,
@@ -996,7 +991,6 @@ def plot_expertise_proportion_bars(df, x_axis_exp_col_name, x_label, cols, cols_
                                    annot_bar_size=20, x_tick_fontsize=20, y_tick_fontsize=20, axis_label_fontsize=22):
     sns.set_style("ticks")
     sns.despine(right=True, top=True)
-    plt.rcParams['font.family'] = "Calibri"
 
     fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -1115,7 +1109,7 @@ def plot_stacked_proportion_bars(plot_data=None, df=None, rating_col=None, item_
                                  sem_line=False, ytick_visible=True, y_title=None, default_ticks=True,
                                  text_width=30, fmt="svg", ordering_map_dict=None,
                                  annotate_bar=True, annot_font_color="white", annot_font_size=20, annot_font_colors=None,
-                                 split=False, relative=True, bar_relative=True, bar_range_min=1, bar_range_max=4,
+                                 split=False, relative=True, bar_range_min=1, bar_range_max=4,
                                  inches_w=18, inches_h=12, double_ticks=False, double_ticks_bar_titles=False,
                                  yes_all_proportion=None, no_all_proportion=None, punishment_alpha=0.6):
     """
@@ -1129,7 +1123,6 @@ def plot_stacked_proportion_bars(plot_data=None, df=None, rating_col=None, item_
     """
 
     sns.set_style("ticks")
-    plt.rcParams['font.family'] = "Calibri"
 
     # If DataFrame is provided, convert to plot_data
     if df is not None and rating_col is not None and item_cols is not None:
@@ -1291,7 +1284,6 @@ def plot_stacked_proportion_bars_in_a_batch(df, rating_col, item_cols, color_map
                                             text_width=max_text_width, fmt="svg"):
 
     sns.set_style("ticks")
-    plt.rcParams['font.family'] = "Calibri"
 
     fig, axs = plt.subplots(len(item_cols), 1, figsize=(15, (len(list(color_map.keys())) + 1) * len(item_cols)), sharex=True)
 
@@ -1377,7 +1369,6 @@ def plot_stacked_proportion_bars_old(plot_data, num_plots, colors, num_ratings, 
     """
 
     sns.set_style("ticks")
-    plt.rcParams['font.family'] = "Calibri"
     fig, axs = plt.subplots(num_plots, 1, figsize=(15, (num_ratings + 1) * num_plots), sharex=True)
 
     # plot each column as a separate bar
@@ -1522,7 +1513,6 @@ def plot_scatter_xy_panel(df, identity_col, x_col, x_label, x_min, x_max, x_tick
                           violins=False, violin_alpha=0.5, violin_color="gray"):
 
     sns.set_style("ticks")
-    plt.rcParams['font.family'] = "Calibri"
     # use the provided axis for plotting
     plt.sca(ax)
 
@@ -1669,7 +1659,6 @@ def plot_multiple_scatter_xy(data, identity_col, x_col, y_col, x_label, y_label,
 
     # Create a figure with subplots
     sns.set_style("ticks")
-    plt.rcParams['font.family'] = "Calibri"
     fig, axs = plt.subplots(rows, cols, figsize=(cols * 4, rows * 4))  # Adjust size as needed
     axs = axs.flatten()  # Flatten the 2D array of axes to 1D for easy indexing
 
@@ -1760,7 +1749,6 @@ def plot_categorical_scatter_fullresponse(df, x_col, y_col, response_id_col, sav
                                           scatter_alpha=0.6, fmt="svg"):
 
     plt.figure(figsize=(10, 6))
-    plt.rcParams["font.family"] = "Calibri"
     sns.set_style("ticks")
 
     # Map x_col categories to numeric values for plotting
@@ -1859,7 +1847,6 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
                     id_col=None, vertical_jitter=0, horizontal_jitter=0, x_tick_labels=None, y_tick_labels=None):
 
     plt.figure(figsize=(8, 6))
-    plt.rcParams["font.family"] = "Calibri"
     sns.set_style("ticks")
 
     # dot color
@@ -1981,7 +1968,6 @@ def plot_scatter(df, data_col, category_col, category_color_dict, category_order
 
     plt.figure(figsize=(8, 6))
     sns.set_style("ticks")
-    plt.rcParams['font.family'] = "Calibri"
 
     for category in category_order:
         sns.stripplot(x=category_col, y="jittered", data=df[df[category_col] == category],
@@ -2169,7 +2155,6 @@ def plot_density(df, x_col, x_col_name, hue_col, hue_col_name, save_name, save_p
     figure = plt.gcf()  # get current figure
     sns.set_style("ticks")
     sns.despine(right=True, top=True)
-    plt.rcParams["font.family"] = "Calibri"
     figure.set_size_inches(18, 12)
     plt.savefig(os.path.join(save_path, f"density_{save_name}.{format}"), format=format, dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
@@ -2192,7 +2177,6 @@ def plot_item_differences_with_annotations(df, id_col, value_col, category_col, 
 
     sns.set_style("ticks")
     sns.despine(right=True, top=True)
-    plt.rcParams['font.family'] = "Calibri"
 
     df_sorted = df.sort_values(value_col)
 

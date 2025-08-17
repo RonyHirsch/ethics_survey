@@ -87,7 +87,7 @@ class RareCategoryMerger(BaseEstimator, TransformerMixin):
 def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols, save_path, save_prefix="",
                                rare_class_threshold=5, n_permutations=1000, scoring_method="accuracy",
                                cv_folds=10, split_test_size=0.3, random_state=42, n_repeats=50,
-                               shap_plot=True, shap_plot_colors=None):
+                               shap_plot=True, shap_plot_colors=None, feature="Experience"):
 
     print("starting RF pipeline")
     # dep_col is assumed to be binary
@@ -334,16 +334,18 @@ def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols,
             custom_cmap = cm.get_cmap("coolwarm")
 
         plt.figure(figsize=(10, 6))
+        prefixes_to_remove = ("num_", "cat_", "onehot__", "scaler__")
+        X_shap = X_shap.rename(columns=lambda s: re.sub(rf"^({'|'.join(prefixes_to_remove)})+", "", s))  # clean feature names
         shap.summary_plot(
             shap_vals,
             X_shap,
-            feature_names=feature_names,
+            feature_names=X_shap.columns,
             cmap=custom_cmap,  # the custom cmap from above, not colors directly
             plot_type="dot",  # or BAR
             show=False
         )
-        plt.xlabel("SHAP value (impact on class '1' in model output)", fontsize=20)
-        plt.ylabel("Feature", fontsize=20)
+        plt.xlabel("Impact on probability to belong to class 1", fontsize=20)
+        plt.ylabel(f"{feature}", fontsize=20)
         plt.xticks(fontsize=15)
         plt.yticks(fontsize=15)
         plt.tight_layout()
@@ -911,6 +913,7 @@ def perform_kmeans(df_pivot, save_path, save_name, clusters=2, normalize=False):
     """
 
     q_cols = df_pivot.columns[:-1]  # everything but the "Cluster" column
+    n = df_pivot.shape[0]  # the number of observations
     result = list()
     for choice in q_cols:
         # create a contingency table for the current choice and the cluster column
@@ -919,8 +922,15 @@ def perform_kmeans(df_pivot, save_path, save_name, clusters=2, normalize=False):
         chi2, p, dof, expected = chi2_contingency(contingency_table)
         # Expected: the expected frequencies for each cell in the contingency table, the theoretical frequencies
         # that would occur in each cell of a contingency table if the choices are independent of the cluster
-        # now also effect size for that
-        w = power_chi2(dof=dof, n=df_pivot.shape[0], alpha=0.05, power=0.95)
+        """
+        Calculate effect size for the test using Cohen's w effect size
+        Cohen, J. (1988). Statistical power analysis for the behavioral sciences (2nd ed.).
+
+        See also: https://doi.org/10.3390/math11091982 
+        Notably, in a 2 x 2 design, Cohen's w == == phi == Cramer's V == Tschuprow's T == sqrt(chi squared / N)
+
+        """
+        w = math.sqrt(chi2 / n)
         result.append({"Choice": choice, "Chi2": chi2, "p-value": p, "dof": dof, "effect size": w,"Expected": expected})
     chisq_df = pd.DataFrame(result)
     chisq_df.to_csv(os.path.join(save_path, f"{save_name}_cluster_centroids_chisq.csv"), index=False)

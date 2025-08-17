@@ -998,7 +998,7 @@ def kpt_descriptives(analysis_dict, save_path):
     plotter.plot_stacked_proportion_bars(plot_data=sorted_plot_data, legend_labels=rating_labels, ytick_visible=True,
                                          text_width=39, title="Would you kill to pass the test?", show_mean=False,
                                          sem_line=False, colors=rating_colors, num_ratings=2, annotate_bar=True,
-                                         annot_font_color="#e0e1dd", save_path=result_path,
+                                         annot_font_color="#e0e1dd", save_path=result_path, annot_font_size=30,
                                          save_name="kill_to_pass_discounted", fmt="svg", split=True,
                                          yes_all_proportion=yes_all_proportion, no_all_proportion=no_all_proportion)
     df_result = pd.DataFrame(sorted_plot_data)
@@ -2076,7 +2076,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     The function eid_clustering codes the data, prepares it for k-means, and searches for the OPTIMAL number of clusters
     Once it is found, it saves it and there's no need to run again. 
     """
-    load=True
+    load = True
     if load:  # we load as this takes a while
         eid_clusters = pd.read_csv(os.path.join(eid_path, f"earth_danger_clusters.csv"))
     else:
