@@ -1947,7 +1947,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     df_exp_ratings, exp_path = experience_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     "Extra: Experience and Demographics - all descriptives that cross these two"
-    #experience_with_demographics_descriptives(df_demographics=df_demo, df_experience=df_exp_ratings, save_path=exp_path)
+    experience_with_demographics_descriptives(df_demographics=df_demo, df_experience=df_exp_ratings, save_path=exp_path)
 
     """
     I-C-S consciousness conception groups
@@ -2100,9 +2100,9 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Preregistered analysis 12: 
     Do the cluster significantly diverge from one another at the dyad-level?
     """
-    load = True
-    if load:  # we load as this takes a while
-        eid_clusters = pd.read_csv(os.path.join(eid_path, f"earth_danger_clusters.csv"))
+    cluster_path = os.path.join(eid_path, f"earth_danger_clusters.csv")
+    if load and os.path.exists(cluster_path):  # we load as this takes a while
+        eid_clusters = pd.read_csv(cluster_path)
     else:
         eid_clusters, kmeans, cluster_centroids = eid_clustering(eid_df=df_eid, save_path=eid_path)
 
@@ -2120,7 +2120,8 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     What is the relationship between selecting "thinking" as the most important feature and agreeing 
     consciousness and intelligence are related?
     """
-    most_important_per_intelligence(df_most_important=most_important_df, df_con_intell=df_c_i, save_path=ms_features_path)
+    most_important_per_intelligence(df_most_important=most_important_df, df_con_intell=df_c_i,
+                                    save_path=ms_features_path)
 
 
     """
