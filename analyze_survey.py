@@ -1323,7 +1323,7 @@ def c_v_ms(analysis_dict, save_path):
     """
 
     # group and summarize
-    item_diff = long_data.groupby(["Item", "Topic"]).agg( mean_rating=("Rating", "mean"),sd_rating=("Rating", "std"),
+    item_diff = long_data.groupby(["Item", "Topic"]).agg(mean_rating=("Rating", "mean"), sd_rating=("Rating", "std"),
                                                           n=("Rating", "count")).reset_index()
 
     # pivot to wide format
@@ -1505,6 +1505,11 @@ def kpt_per_demographics(kpt_df_sensitive, demographics_df, save_path):
 
 def c_v_ms_expertise(c_v_ms_df, df_experience, save_path, significant_p_value=0.05):
     """
+    -  Is a difference between self-reported experts with animals vs. non-experts, in consciousness or
+    moral status ratings of the 16 non-human animals?
+
+    - Is a difference between self-reported experts with AI vs. non-experts, in consciousness or
+    moral status ratings of the LLM/self-driving car?
 
     :param c_v_ms_df: dataframe with response_id and all the rating columns (c.., ms...)
     :param df_experience: dataframe containing the experience types (ratings) and the binarized expertise columns (_expert)
@@ -1652,7 +1657,6 @@ def eid_per_demographics(eid_df, demographics_df, experience_df, save_path, eid_
                                                 rare_class_threshold=5, n_permutations=1000, scoring_method="accuracy",
                                                 cv_folds=10, split_test_size=0.3, random_state=42, n_repeats=50,
                                                 shap_plot=True, shap_plot_colors=EARTH_DANGER_CLUSTER_COLORS)
-
 
     return
 
@@ -1923,16 +1927,20 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     :param load: for stuff that takes a ton of time to run every time
     """
 
-    #sub_df.to_csv(os.path.join(save_path, "sub_df.csv"), index=False)
+    sub_df.to_csv(os.path.join(save_path, "sub_df.csv"), index=False)
 
     """
-    Step 1: Basic demographics
+    ------------------ Descriptives only: for all the survey questions regardless of analysis  ------------------------
+    """
+
+    """
+    Basic demographics
     Get what we need to report the standard things we do
     """
     df_demo = demographics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
-    Step 2: Expertise
+    Expertise
     We collected self-reported expertise levels with various topics. Get what we need to report about that
     returns: the df with all subjects and just the rating columns of 4 experience types(not the 'other' responses etc)
     """
@@ -1942,7 +1950,8 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     #experience_with_demographics_descriptives(df_demographics=df_demo, df_experience=df_exp_ratings, save_path=exp_path)
 
     """
-    Step 3: Can consciousness be separated from intentions/valence? 
+    I-C-S consciousness conception groups
+    Can consciousness be separated from intentions/valence? 
     Answers to the "Do you think a creature/system can have intentions/consciousness/sensations w/o having..?" section
     df_c_groups contains a row per subject and focuses on answers to the Consciousness-wo-... questions, contraining
     the answers (y/n) to both (c wo intentions, c wo valence), and the group tagging based on that
@@ -1950,57 +1959,79 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     df_c_groups, df_ics_with_groups, ics_path = ics_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
-    Step 4: Do the groups of people from the ics_descriptives differ based on experience with consciousness?
-    Note that for this question we BINARIZED experience with consciousness into non-experts (ratings 1-2-3), and 
-    experts (ratings 4-5). 
-    
-    Because of that, we check for relationships between two categorical parameters: 
-    ics group belonging, and expertise (binarized). 
-    
-    Therefore, we need to do a chi square test of independence (and not kruskal), as we test whether the proportions
-    of consciousness experts (1 vs. 0) differ significantly across different ics groups.  
+    Moral consideration prios descriptives 
+    Do you think non conscious creatures/systems should be taken into account in moral decisions? 
+    Also for conscious creatures. 
     """
-    # Consciousness_expert is a binary column where 0 = people who rated themselves < EXPERTISE and 1 otherwise
-    perform_chi_square(df1=df_c_groups, col1="group",
-                       df2=df_exp_ratings, col2="Consciousness_expert", col2_name="Consciousness Expertise",
-                       id_col=process_survey.COL_ID,
-                       save_path=ics_path, save_name="consciousness_exp", save_expected=False,
-                       grp1_vals=ICS_GROUP_ORDER_LIST, grp2_vals=[0, 1], grp2_map=EXP_BINARY_NAME_MAP,
-                       grp1_color_dict={ICS_GROUP_ORDER_LIST[i]: ICS_GROUP_COLOR_LIST[i] for i in range(len(ICS_GROUP_ORDER_LIST))})
+    df_ms_c_prios, prios_path = ms_c_prios_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
-    Step 5: Relationship between consciousness and intelligence
+    Relationship between consciousness and intelligence
     """
     df_c_i, c_i_path = consc_intell_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
-    Step 6: Does the perceived relationship between consciousness and intelligence depend on demographic factors
-    (e.g., age) or expertise (e.g., with AI or with animals?) 
-    """
-    #consc_intell_RF(df_demographics=df_demo, df_experience=df_exp_ratings, df_con_intell=df_c_i, save_path=c_i_path)
-
-    """
-    Step 7: Examine the relationship between the conception of consciousness (from ICS groups) and the perceived 
-    relationship between consciousness and intelligence: 
-    Perform a chi square test
-    """
-    perform_chi_square(df1=df_c_i, col1=survey_mapping.Q_INTELLIGENCE, grp1_color_dict=YES_NO_COLORS,
-                       grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
-                       df2=df_c_groups, col2="group", col2_name="Conception of Consciousness",
-                       grp2_vals=ICS_GROUP_ORDER_LIST, grp2_map=None,
-                       id_col=process_survey.COL_ID, y_tick_list=None,
-                       save_path=c_i_path, save_name=f"ics_intelligence", save_expected=False)
-
-
-    """
-    Step 8: Zombie pill dilemma. A variation of Siewert's pheno-ectomy thought experiment. 
-    Descriptives
+    Zombie pill dilemma. A variation of Siewert's pheno-ectomy thought experiment. 
     """
     df_pill, pill_path = zombie_pill_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
     """
-    Step 9: Do consciousness experts answer the Zombie pill question differently than non-experts?
-    Logic is similar to step #4
+    Kill to Pass Test (KPT). A moral dilemma of 6 entities with I/C/S (ics), whether you'd kill them or not. 
+    *** NOTE *** df_kpt_sensitive includes ONLY PEOPLE WHO WERE SENSITIVE TO THE MANIPULATION - i.e., those who would
+    kill at least one entity, but not all of them. 
+    """
+    df_kpt, df_kpt_sensitive, kpt_path = kpt_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+
+    """
+    Consciousness vs moral status (C v MS) 
+    In two separate blocks, we presented people with 24 entities (same entities) and asked them about their moral 
+    status, and about their consciousness. 
+    """
+    df_c_v_ms_long, df_c_v_ms, c_v_ms_path = c_v_ms(analysis_dict=analysis_dict, save_path=save_path)
+
+    """
+    Lifeboat Ethics - Earth in Danger (EiD) dilemma. 
+    In this block of questions, earth was in danger, with participants presented with dyads having to choose 
+    who to save. 
+    """
+    df_eid, eid_path = eid_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+
+    """
+    Moral consideration features: which features are most important for moral considerations? (and which is the most
+    important?)
+    """
+    ms_features_df, most_important_df, ms_features_path = ms_features_descriptives(analysis_dict=analysis_dict,
+                                                                                   save_path=save_path)
+
+    """
+    Graded consciousness: assertions about consciousness being all-or-none, graded, or uncomparable 
+    """
+    df_c_graded, graded_path = c_graded_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+
+
+    """
+    ------------------ STATISTICAL ANALYSES and data prep for R modelling ------------------------------------
+    """
+
+    """
+    Preregistered analyses 1 and 2: 
+    Does expertise with [ethics/consciousness] affect agreement with the moral priors question?
+    """
+    for expertise in [survey_mapping.Q_EXP_NAME_DICT[survey_mapping.Q_CONSC_EXP],  # consciousness
+                      survey_mapping.Q_EXP_NAME_DICT[survey_mapping.Q_ETHICS_EXP]]:  # ethics
+        perform_chi_square(df1=df_ms_c_prios.loc[:, [process_survey.COL_ID, survey_mapping.PRIOS_Q_NONCONS]],
+                           col1=survey_mapping.PRIOS_Q_NONCONS,
+                           df2=df_exp_ratings, col2=f"{expertise}_expert", col2_name=f"{expertise} Expertise",
+                           id_col=process_survey.COL_ID,
+                           grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES], grp1_color_dict=YES_NO_COLORS,
+                           grp2_vals=[0, 1], grp2_map=EXP_BINARY_NAME_MAP,
+                           save_path=prios_path,
+                           save_name=f"{survey_mapping.PRIOS_Q_NAME_MAP[survey_mapping.PRIOS_Q_NONCONS]}_{expertise.lower()}_exp",
+                           save_expected=False)
+
+    """
+    Preregistered analysis 3:
+    Do consciousness experts answer the Zombie pill question differently than non-experts?
     """
     # Consciousness_expert is a binary column where 0 = people who rated themselves < EXPERTISE and 1 otherwise
     perform_chi_square(df1=df_pill, col1=survey_mapping.Q_ZOMBIE,
@@ -2012,163 +2043,39 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
                        grp1_color_dict=YES_NO_COLORS)
 
     """
-    Step 10: Do the different ICS groups answer the Zombie pill question differently from each other?
-    Logic is similar to steps #4 and #9
-    Zombie = binary (yes/no), consciousness group = 4 groups (df_c_groups)
+    Preregistered analysis 4:
+    Is there an association between attributions of consciousness and of moral status? 
+    >> This is an R modelling that is done on the 'c_v_ms\c_v_ms_long.csv' file that is saved in the c_v_ms() method.
+    Preregistered analysis 5: 
+    (off-diagonal entities) this statistical test is done WITHIN the c_v_ms() method.
     """
-    perform_chi_square(df1=df_pill, col1=survey_mapping.Q_ZOMBIE,
-                       df2=df_c_groups, col2="group", col2_name="Conception of Consciousness",
-                       id_col=process_survey.COL_ID,
-                       save_path=pill_path, save_name="ics_group", save_expected=False,
-                       grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
-                       grp2_vals=ICS_GROUP_ORDER_LIST, grp2_map=None,
-                       grp1_color_dict=YES_NO_COLORS)
 
     """
-    Step 11: Kill to Pass Test (KPT). A moral dilemma of 6 entities with I/C/S (ics), whether you'd kill them or not. 
-    Descriptives
-    *** NOTE *** df_kpt_sensitive includes ONLY PEOPLE WHO WERE SENSITIVE TO THE MANIPULATION - i.e., those who would
-    kill at least one entity, but not all of them. 
+    Preregistered analyses 6 and 7: 
+    Does expertise [with animals (6)/AI (7)] affect consciousness / moral status ratings?
     """
-    df_kpt, df_kpt_sensitive, kpt_path = kpt_descriptives(analysis_dict=analysis_dict, save_path=save_path)
+    c_v_ms_expertise(c_v_ms_df=df_c_v_ms, df_experience=df_exp_ratings, save_path=c_v_ms_path)
 
     """
-    * Prepare data for modelling in R * 
-    Step 12: Does the likelihood to kill a creature in the KPT scenarios change depending of its specific features? 
-    (having I/C/S)?
-    Prepare data for modelling (in R): Kill ~ Consciousness * Intentions * Sensations + (1|participant)
-    
-    Step 13: Does the likelihood to kill a creature in the KPT scenarios change depending on the conception of 
-    consciousness? (ics group: df_c_groups)
-    Prepare data for modelling (in R): Kill ~ Group + (1|participant) + (1|entity)
-    
-    *** AGAIN, ASSUMING ONLY PEOPLE WHO WERE SENSITIVE TO THE MANIPULATION ***
-    """
-    #kpt_per_entity(kpt_df_sensitive=df_kpt_sensitive, cgroups_df=df_c_groups, save_path=kpt_path)
-
-    """
-    Step 14: Is the KPT killing behavior affected by thinking that this creature is even possible? 
-    
-    *** AGAIN, ASSUMING ONLY PEOPLE WHO WERE SENSITIVE TO THE MANIPULATION ***
-    """
-    kpt_per_ics(kpt_df_sensitive=df_kpt_sensitive, df_ics_groups=df_ics_with_groups, save_path=kpt_path)
-
-
-    """
-    Step 15: Is the KPT killing behavior affected by demographics?
-    
-    *** AGAIN, ASSUMING ONLY PEOPLE WHO WERE SENSITIVE TO THE MANIPULATION ***
-    """
-    #kpt_per_demographics(kpt_df_sensitive=df_kpt_sensitive, demographics_df=df_demo, save_path=kpt_path)
-
-
-    """
-    Step 16: Lifeboat Ethics - Earth in Danger (EiD) Block. 
-    In this block of questions, earth was in danger, with participants presented with dyads having to choose 
-    who to save. 
-    """
-    df_eid, eid_path = eid_descriptives(analysis_dict=analysis_dict, save_path=save_path)
-
-    """
-    Step 18: EiD clusters
-    can we cluster people based on their saving patterns into meaningful groups?
-    use df_eid, and perform k-means clustering. 
-    The function eid_clustering codes the data, prepares it for k-means, and searches for the OPTIMAL number of clusters
-    Once it is found, it saves it and there's no need to run again. 
-    """
-    load = True
-    if load:  # we load as this takes a while
-        eid_clusters = pd.read_csv(os.path.join(eid_path, f"earth_danger_clusters.csv"))
-    else:
-        eid_clusters, kmeans, cluster_centroids = eid_clustering(eid_df=df_eid, save_path=eid_path)
-
-    """
-    Step 17: EiD per demographics. Is the EiD behavior affected by demographics?
-    Similar logic to Step #15 
-    """
-    eid_per_demographics(eid_df=df_eid, demographics_df=df_demo, experience_df=df_exp_ratings, save_path=eid_path,
-                         eid_cluster_df=None)
-
-    """
-    Step 18: EiD per consciousness conception group - ics - Do these groups belong to different CLUSTERS?
-    Similar logic to Step #10 and  #7
-    """
-    perform_chi_square(df1=df_c_groups, col1="group",
-                       df2=eid_clusters, col2="Cluster", col2_name="Cluster",
-                       id_col=process_survey.COL_ID,
-                       save_path=eid_path, save_name="ics_group", save_expected=False,
-                       grp1_vals=ICS_GROUP_ORDER_LIST, grp2_vals=[0, 1], grp2_map=None,
-                       grp1_color_dict={ICS_GROUP_ORDER_LIST[i]: ICS_GROUP_COLOR_LIST[i] for i in range(len(ICS_GROUP_ORDER_LIST))})
-
-    """
-    Step 19: consciousness vs moral status (C v MS) 
-    In two separate blocks, we presented people with 24 entities (same entities) and asked them about their moral 
-    status, and about their consciousness. 
-    """
-    df_c_v_ms_long, df_c_v_ms, c_v_ms_path = c_v_ms(analysis_dict=analysis_dict, save_path=save_path)
-
-    """
-    Step 20: C v MS expertise:
-    Does expertise affect consciousness / moral status ratings?
-    """
-    #c_v_ms_expertise(c_v_ms_df=df_c_v_ms, df_experience=df_exp_ratings, save_path=c_v_ms_path)
-
-    """
-    Step 20: Does the conception of consciousness matter for MORAL STATUS ATTRIBUTIONS?
-    This is for R script - function with comment 'MS rating per ICS group and Entity'
+    Preregistered analysis 8:
+    Does the conception of consciousness (ICS groups) matter for moral status attributions?
+    >> This is an R modelling that is done on the 'c_v_ms\ms_per_ics.csv' file, a script with comment 
+    'MS rating per ICS group and Entity'
     """
     ms_per_ics(c_v_ms_df=df_c_v_ms, df_ics_groups=df_ics_with_groups, save_path=c_v_ms_path)
 
     """
-    Step 21: moral consideration priorities: do you think non conscious creatures/systems should be taken into account 
-    in moral decisions? And also for conscious creatures. 
+    Preregistered analysis 9:
+    EiD per demographics. Is the EiD behavior affected by demographics? 
+    Specifically, does pet ownership matter for the relevant 'my pet' dyads?
     """
-    df_ms_c_prios, prios_path = ms_c_prios_descriptives(analysis_dict=analysis_dict, save_path=save_path)
-
-
-    """
-    >> does expertise matter for the prios questions?: checking for Consciousness and Ethics expertise
-    """
-    for expertise in [survey_mapping.Q_EXP_NAME_DICT[survey_mapping.Q_CONSC_EXP],  # consciousness
-                      survey_mapping.Q_EXP_NAME_DICT[survey_mapping.Q_ETHICS_EXP]]:  # ethics
-        perform_chi_square(df1=df_ms_c_prios.loc[:, [process_survey.COL_ID, survey_mapping.PRIOS_Q_NONCONS]],
-                           col1=survey_mapping.PRIOS_Q_NONCONS,
-                           df2=df_exp_ratings, col2=f"{expertise}_expert", col2_name=f"{expertise} Expertise",
-                           id_col=process_survey.COL_ID,
-                           grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES], grp1_color_dict=YES_NO_COLORS,
-                           grp2_vals=[0, 1], grp2_map=EXP_BINARY_NAME_MAP,
-                           save_path=prios_path, save_name=f"{survey_mapping.PRIOS_Q_NAME_MAP[survey_mapping.PRIOS_Q_NONCONS]}_{expertise.lower()}_exp",
-                           save_expected=False)
+    eid_per_demographics(eid_df=df_eid, demographics_df=df_demo, experience_df=df_exp_ratings,
+                         save_path=eid_path, eid_cluster_df=None)
 
     """
-    Step 22: moral consideration features: which features are most important for moral considerations? Descriptives
-    """
-    ms_features_df, most_important_df, ms_features_path = ms_features_descriptives(analysis_dict=analysis_dict,
-                                                                                   save_path=save_path)
-
-    """
-    Step 23: Is there a difference between consciousness experts and non-experts with respect to selecting phenomenology
-    as the most important feature for moral considerations?
-    """
-    ms_phenomenology_experts(df_most_important=most_important_df, df_experience=df_exp_ratings,
-                             save_path=ms_features_path)
-
-
-    """
-    Step 23a: what is the relationship between  "thinking" as the most important feature 
-    and thinking consciousness and intelligence are related?
-    """
-    #most_important_per_intelligence(df_most_important=most_important_df, df_con_intell=df_c_i, save_path=ms_features_path)
-
-
-    """
-    Step 24: Graded consciousness
-    """
-    df_c_graded, graded_path = c_graded_descriptives(analysis_dict=analysis_dict, save_path=save_path)
-
-    """
-    >> do people who agree more that some non-human animals should have a higher moral status than others answer
-    differently on the assertion that consciousness is a graded phenomanon? 
+    Preregistered analysis 10:
+    Do people who agree more that some non-human animals should have a higher moral status than others [moral prios]
+    answer differently on the assertion that consciousness is a graded phenomanon? [graded consciousness]
     """
     for col in list(survey_mapping.Q_GRADED_NAMES.keys()):
         perform_chi_square(df1=df_ms_c_prios.loc[:, [process_survey.COL_ID, survey_mapping.PRIOS_Q_ANIMALS]],
@@ -2182,6 +2089,140 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
                            save_name=f"{survey_mapping.PRIOS_Q_NAME_MAP[survey_mapping.PRIOS_Q_ANIMALS]}_{survey_mapping.Q_GRADED_NAMES[col]}",
                            save_expected=False)
 
+    """
+    Preregistered analysis 11: 
+    EiD clusters.
+    Can we cluster people based on their saving patterns into meaningful groups?
+    use df_eid, and perform k-means clustering. 
+    The function eid_clustering codes the data, prepares it for k-means, and searches for the OPTIMAL number of clusters
+    Once it is found, it saves it and there's no need to run again. 
+    
+    Preregistered analysis 12: 
+    Do the cluster significantly diverge from one another at the dyad-level?
+    """
+    load = True
+    if load:  # we load as this takes a while
+        eid_clusters = pd.read_csv(os.path.join(eid_path, f"earth_danger_clusters.csv"))
+    else:
+        eid_clusters, kmeans, cluster_centroids = eid_clustering(eid_df=df_eid, save_path=eid_path)
+
+
+    """
+    Preregistered analysis 13: 
+    Is there a difference between consciousness experts and non-experts with respect to selecting phenomenology
+    as the most important feature for moral considerations?
+    """
+    ms_phenomenology_experts(df_most_important=most_important_df, df_experience=df_exp_ratings,
+                             save_path=ms_features_path)
+
+    """
+    Preregistered analysis 14:
+    What is the relationship between selecting "thinking" as the most important feature and agreeing 
+    consciousness and intelligence are related?
+    """
+    most_important_per_intelligence(df_most_important=most_important_df, df_con_intell=df_c_i, save_path=ms_features_path)
+
+
+    """
+    Preregistered analysis 15:
+    Does the likelihood to kill a creature in the KPT scenarios change depending of its specific features? 
+    (having I/C/S)?
+    >> This will prepare data for R modelling that will be done on 
+    'kill_for_test\kill_to_pass_coded_per_entity_sensitive.csv'
+    
+    Note: we only model people who were SENSITIVE to the manipulation (i.e., did not answer 'all_yes' or 'all_no'). 
+    """
+    kpt_per_entity(kpt_df_sensitive=df_kpt_sensitive, cgroups_df=df_c_groups, save_path=kpt_path)
+
+
+    """
+    Preregistered analysis 16:
+    Is the KPT killing behavior affected by thinking that this creature is even possible? 
+    Note: we only model people who were SENSITIVE to the manipulation (i.e., did not answer 'all_yes' or 'all_no'). 
+    """
+    kpt_per_ics(kpt_df_sensitive=df_kpt_sensitive, df_ics_groups=df_ics_with_groups, save_path=kpt_path)
 
     exit()
+
+
+
+
+
+
+
+
+
+    """
+    -------------------------------------------- DEPRECATED ANALYSES --------------------------------------------------
+    """
+
+    """
+    Do the groups of people from the ics_descriptives differ based on experience with consciousness?
+    Note that for this question we BINARIZED experience with consciousness into non-experts (ratings 1-2-3), and 
+    experts (ratings 4-5). 
+    
+    Because of that, we check for relationships between two categorical parameters: 
+    ics group belonging, and expertise (binarized). 
+    
+    Therefore, we need to do a chi square test of independence (and not kruskal), as we test whether the proportions
+    of consciousness experts (1 vs. 0) differ significantly across different ics groups.  
+    """
+    # Consciousness_expert is a binary column where 0 = people who rated themselves < EXPERTISE and 1 otherwise
+    #perform_chi_square(df1=df_c_groups, col1="group",
+    #                   df2=df_exp_ratings, col2="Consciousness_expert", col2_name="Consciousness Expertise",
+    #                   id_col=process_survey.COL_ID,
+    #                   save_path=ics_path, save_name="consciousness_exp", save_expected=False,
+    #                   grp1_vals=ICS_GROUP_ORDER_LIST, grp2_vals=[0, 1], grp2_map=EXP_BINARY_NAME_MAP,
+    #                   grp1_color_dict={ICS_GROUP_ORDER_LIST[i]: ICS_GROUP_COLOR_LIST[i] for i in range(len(ICS_GROUP_ORDER_LIST))})
+
+    """
+    Step 6: Does the perceived relationship between consciousness and intelligence depend on demographic factors
+    (e.g., age) or expertise (e.g., with AI or with animals?) 
+    """
+    #consc_intell_RF(df_demographics=df_demo, df_experience=df_exp_ratings, df_con_intell=df_c_i, save_path=c_i_path)
+
+    """
+    Step 7: Examine the relationship between the conception of consciousness (from ICS groups) and the perceived 
+    relationship between consciousness and intelligence: 
+    Perform a chi square test
+    """
+    #perform_chi_square(df1=df_c_i, col1=survey_mapping.Q_INTELLIGENCE, grp1_color_dict=YES_NO_COLORS,
+    #                   grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
+    #                   df2=df_c_groups, col2="group", col2_name="Conception of Consciousness",
+    #                   grp2_vals=ICS_GROUP_ORDER_LIST, grp2_map=None,
+    #                   id_col=process_survey.COL_ID, y_tick_list=None,
+    #                   save_path=c_i_path, save_name=f"ics_intelligence", save_expected=False)
+
+
+    """
+    Step 10: Do the different ICS groups answer the Zombie pill question differently from each other?
+    Logic is similar to steps #4 and #9
+    Zombie = binary (yes/no), consciousness group = 4 groups (df_c_groups)
+    """
+    #perform_chi_square(df1=df_pill, col1=survey_mapping.Q_ZOMBIE,
+    #                   df2=df_c_groups, col2="group", col2_name="Conception of Consciousness",
+    #                   id_col=process_survey.COL_ID,
+    #                   save_path=pill_path, save_name="ics_group", save_expected=False,
+    #                   grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
+    #                   grp2_vals=ICS_GROUP_ORDER_LIST, grp2_map=None,
+    #                   grp1_color_dict=YES_NO_COLORS)
+
+    """
+    Step 15: Is the KPT killing behavior affected by demographics?
+    
+    *** AGAIN, ASSUMING ONLY PEOPLE WHO WERE SENSITIVE TO THE MANIPULATION ***
+    """
+    #kpt_per_demographics(kpt_df_sensitive=df_kpt_sensitive, demographics_df=df_demo, save_path=kpt_path)
+
+    """
+    Step 18: EiD per consciousness conception group - ics - Do these groups belong to different CLUSTERS?
+    Similar logic to Step #10 and  #7
+    """
+    #perform_chi_square(df1=df_c_groups, col1="group",
+    #                   df2=eid_clusters, col2="Cluster", col2_name="Cluster",
+    #                   id_col=process_survey.COL_ID,
+    #                   save_path=eid_path, save_name="ics_group", save_expected=False,
+    #                   grp1_vals=ICS_GROUP_ORDER_LIST, grp2_vals=[0, 1], grp2_map=None,
+    #                   grp1_color_dict={ICS_GROUP_ORDER_LIST[i]: ICS_GROUP_COLOR_LIST[i] for i in range(len(ICS_GROUP_ORDER_LIST))})
+
 
