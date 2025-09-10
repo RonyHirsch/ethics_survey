@@ -34,7 +34,7 @@ Author: RonyHirsch
 import os
 import re
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Optional, Iterable, Union
+from typing import List, Dict, Tuple, Optional, Iterable, Union, Literal
 import numpy as np
 import pandas as pd
 import math, textwrap
@@ -1163,11 +1163,26 @@ def save_report_ready_table(res: "TreeBHResult", csv_path: str) -> None:
 def ascii_tree_from_csv(
     csv_path: str,
     out_path: Optional[str] = None,
-    sort_by: str = "node_id",          # still supported; we already sorted by name+id in load_tree_index
+    sort_by: Literal["node_id", "name", "none"] = "node_id",
     strip_parent_prefix: bool = True,
     min_ancestor_len_for_strip: int = 5,
 ) -> str:
     ti = load_tree_index(csv_path)
+
+    # Decide ordering
+    if sort_by == "node_id":
+        key_fn = lambda nid: nid
+    elif sort_by == "name":
+        key_fn = lambda nid: ti.name_map[nid]
+    else:  # "none"
+        key_fn = None
+
+    # Precompute ordered roots/children (avoids re-sorting during recursion)
+    roots = sorted(ti.roots, key=key_fn) if key_fn else list(ti.roots)
+    children = (
+        {pid: sorted(kids, key=key_fn) for pid, kids in ti.children.items()}
+        if key_fn else ti.children
+    )
 
     lines: List[str] = []
 
@@ -1175,25 +1190,31 @@ def ascii_tree_from_csv(
         connector = "└── " if is_last else "├── "
         raw_label = ti.name_map[nid]
         anc_names = ancestor_name_chain(nid, ti.parent_map, ti.name_map)
-        label = strip_ancestors_prefix(raw_label, anc_names, min_ancestor_len_for_strip=min_ancestor_len_for_strip) \
-                if strip_parent_prefix else raw_label
+        label = (
+            strip_ancestors_prefix(
+                raw_label,
+                anc_names,
+                min_ancestor_len_for_strip=min_ancestor_len_for_strip,
+            )
+            if strip_parent_prefix
+            else raw_label
+        )
 
         # leaf?
         row = ti.nodes_df.loc[ti.nodes_df["node_id"] == nid].iloc[0]
-        is_leaf = pd.notna(row["p_value"])
-        if is_leaf:
+        if pd.notna(row["p_value"]):
             label += " (leaf)"
 
         lines.append(label if prefix == "" else prefix + connector + label)
 
-        kids = ti.children.get(nid, [])
+        kids = children.get(nid, [])
         if kids:
             new_prefix = prefix + ("    " if is_last else "│   ")
             for i, k in enumerate(kids):
                 render(k, new_prefix, i == len(kids) - 1)
 
-    for i, r in enumerate(ti.roots):
-        render(r, "", i == len(ti.roots) - 1)
+    for i, r in enumerate(roots):
+        render(r, "", i == len(roots) - 1)
 
     sketch = "\n".join(lines)
     if out_path:

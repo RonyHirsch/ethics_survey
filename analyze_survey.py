@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 import re
+from scipy import stats
 from functools import reduce
 from collections import defaultdict
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler
@@ -700,8 +701,8 @@ def ics_descriptives(analysis_dict, save_path):
 
 
 def perform_chi_square(df1, col1, df2, col2, id_col, save_path, save_name, save_expected=False,
-                       grp1_vals=None, grp2_vals=None, grp2_map=None,
-                       grp1_color_dict=None, y_tick_list=None, col2_name=None, contingency_back=False):
+                       grp1_vals=None, grp1_color_dict=None, grp2_vals=None, grp2_map=None,
+                       y_tick_list=None, col2_name=None, contingency_back=False, write_files=True):
     """
     Performs chi square test of independence, testing whether the proportions in one group (df1) differ significantly
     across different groups of df2.
@@ -729,9 +730,10 @@ def perform_chi_square(df1, col1, df2, col2, id_col, save_path, save_name, save_
     chisquare_result["question1_counts"] = str(contingency_table.sum(axis=1).to_dict())
     chisquare_result["question2_counts"] = str(contingency_table.sum(axis=0).to_dict())
 
-    chisquare_result.to_csv(os.path.join(save_path, f"{save_name}_chisquared.csv"), index=False)
-    if save_expected:
-        expected_df.to_csv(os.path.join(save_path, f"{save_name}_chisquared_expected.csv"), index=False)
+    if write_files:
+        chisquare_result.to_csv(os.path.join(save_path, f"{save_name}_chisquared.csv"), index=False)
+        if save_expected:
+            expected_df.to_csv(os.path.join(save_path, f"{save_name}_chisquared_expected.csv"), index=False)
 
     # plot
     counts = merged.groupby([col2, col1]).size().unstack(fill_value=0)
@@ -1345,6 +1347,67 @@ def c_v_ms(analysis_dict, save_path):
 
     # direction
     item_diff["direction"] = np.where(item_diff["diff"] > 0, "above the diagonal", "below the diagonal")
+
+    """
+    Convert to p-values so that they can then be corrected using the TreeBH method.
+    Our “CI excludes 0” rule is equivalent to saying the two-sided p-value < .05 under a normal/t approximation.
+    
+    We compute a t-statistic (diff / SE) and a two-sided p-value:
+    Welch version uses the two group standard deviations and sample sizes (what your se_diff assumes).
+    """
+    # guard against division by zero
+    item_diff["t_stat_welch"] = item_diff["diff"] / item_diff["se_diff"].replace(0, np.nan)
+
+    # Welch–Satterthwaite degrees of freedom for two means with unequal variances
+    v1 = (item_diff["sd_rating_Moral Status"] ** 2) / item_diff["n_Moral Status"]
+    v2 = (item_diff["sd_rating_Consciousness"] ** 2) / item_diff["n_Consciousness"]
+    df_num = (v1 + v2) ** 2
+    df_den = (v1 ** 2) / (item_diff["n_Moral Status"] - 1).clip(lower=1) + (v2 ** 2) / (
+                item_diff["n_Consciousness"] - 1).clip(lower=1)
+    item_diff["df_welch"] = df_num / df_den
+
+    # two-sided p-values (Welch)
+    item_diff["p_welch"] = 2 * stats.t.sf(np.abs(item_diff["t_stat_welch"]), df=item_diff["df_welch"])
+
+    """
+    Calculate also the paired option: use the within-respondent differences between consciousness and moral status 
+    ratings. It SE by using the covariance implicitly.
+    """
+    # Build respondent-by-item wide table with both topics
+    wide = long_data.pivot_table(
+        index=[process_survey.COL_ID, "Item"],
+        columns="Topic",
+        values="Rating",
+        aggfunc="mean"
+    ).reset_index()
+
+    # Drop rows missing either rating (robust if any missingness sneaks in)
+    wide = wide.dropna(subset=["Consciousness", "Moral Status"])
+
+    # Within-respondent difference for each item
+    wide["diff_i"] = wide["Moral Status"] - wide["Consciousness"]
+
+    # Aggregate paired stats per item (vectorized & compact)
+    g = wide.groupby("Item")["diff_i"]
+    paired = pd.DataFrame({
+        "n_paired": g.size(),
+        "diff_paired": g.mean(),
+        "sd_diff_paired": g.std(ddof=1)
+    })
+    paired["se_diff_paired"] = paired["sd_diff_paired"] / np.sqrt(paired["n_paired"])
+    # Protect against zero SE (all respondents identical): leaves t/p as NaN
+    paired["t_stat_paired"] = paired["diff_paired"] / paired["se_diff_paired"].replace(0, np.nan)
+    paired["df_paired"] = paired["n_paired"] - 1
+    paired["p_paired"] = 2 * stats.t.sf(np.abs(paired["t_stat_paired"]), df=paired["df_paired"])
+    paired["lower_paired"] = paired["diff_paired"] - 1.96 * paired["se_diff_paired"]
+    paired["upper_paired"] = paired["diff_paired"] + 1.96 * paired["se_diff_paired"]
+    paired["off_diagonal_paired"] = (paired["lower_paired"] > 0) | (paired["upper_paired"] < 0)
+    paired["direction_paired"] = np.where(paired["diff_paired"] > 0, "above the diagonal", "below the diagonal")
+
+    # Merge paired results back into your existing item_diff
+    item_diff = item_diff.merge(paired.reset_index(), on="Item", how="left")
+
+    # save
     item_diff.to_csv(os.path.join(result_path, f"item_off_diagonal_differences.csv"), index=False)
 
     # for plotting (color)
@@ -1503,7 +1566,7 @@ def kpt_per_demographics(kpt_df_sensitive, demographics_df, save_path):
     return
 
 
-def c_v_ms_expertise(c_v_ms_df, df_experience, save_path, significant_p_value=0.05):
+def c_v_ms_expertise(c_v_ms_df, df_experience, save_path, plot_this=False, significant_p_value=0.05):
     """
     -  Is a difference between self-reported experts with animals vs. non-experts, in consciousness or
     moral status ratings of the 16 non-human animals?
@@ -1545,28 +1608,29 @@ def c_v_ms_expertise(c_v_ms_df, df_experience, save_path, significant_p_value=0.
             )
             mw_results.to_csv(os.path.join(save_path, f"{rating_prefix}{expertise_domain}_expertise_items.csv"), index=False)
 
-            """
-            Plot
-            """
-            # identify significant items
-            significant_items = mw_results[mw_results[corrected_p_col] < significant_p_value]["Item"].tolist()
-            ratings = sorted(list(survey_mapping.ANS_C_MS_LABELS.values()))  # 1 ,2, 3, 4
-            rating_colors = {survey_mapping.ANS_C_MS_LABELS[label]: C_V_MS_COLORS[label] for label in list(survey_mapping.ANS_C_MS_LABELS.keys())}
+            if plot_this is True:
+                """
+                Plot
+                """
+                # identify significant items
+                significant_items = mw_results[mw_results[corrected_p_col] < significant_p_value]["Item"].tolist()
+                ratings = sorted(list(survey_mapping.ANS_C_MS_LABELS.values()))  # 1 ,2, 3, 4
+                rating_colors = {survey_mapping.ANS_C_MS_LABELS[label]: C_V_MS_COLORS[label] for label in list(survey_mapping.ANS_C_MS_LABELS.keys())}
 
-            for item in significant_items:
-                item_name = item.removeprefix(rating_prefix)  # Python 3.9+
-                count_df = merged_df.groupby([expert_col, item]).size().reset_index(name=f"{COUNT}")
-                count_df["total"] = count_df.groupby(expert_col)[f"{COUNT}"].transform("sum")
-                count_df[f"{PROP}"] = 100 * count_df[f"{COUNT}"] / count_df["total"]
-                pivot_df = count_df.pivot(index=expert_col, columns=item, values=f"{PROP}").fillna(0).reset_index()
-                pivot_df.to_csv(os.path.join(save_path, f"{expertise_domain}_expertise_{item}.csv"), index=False)
-                plotter.plot_expertise_proportion_bars(df=pivot_df, cols=ratings, cols_colors=rating_colors,
-                                                       x_axis_exp_col_name=expert_col, x_map=EXP_BINARY_NAME_MAP,
-                                                       x_label=f"Reported experience with {expertise_domain}",
-                                                       y_ticks=[0, 25, 50, 75, 100],
-                                                       save_name=f"{expertise_domain}_expertise_{item}",
-                                                       save_path=save_path, plt_title=item_name,
-                                                       annotate_bar=True, annot_font_color="white")
+                for item in significant_items:
+                    item_name = item.removeprefix(rating_prefix)  # Python 3.9+
+                    count_df = merged_df.groupby([expert_col, item]).size().reset_index(name=f"{COUNT}")
+                    count_df["total"] = count_df.groupby(expert_col)[f"{COUNT}"].transform("sum")
+                    count_df[f"{PROP}"] = 100 * count_df[f"{COUNT}"] / count_df["total"]
+                    pivot_df = count_df.pivot(index=expert_col, columns=item, values=f"{PROP}").fillna(0).reset_index()
+                    pivot_df.to_csv(os.path.join(save_path, f"{expertise_domain}_expertise_{item}.csv"), index=False)
+                    plotter.plot_expertise_proportion_bars(df=pivot_df, cols=ratings, cols_colors=rating_colors,
+                                                           x_axis_exp_col_name=expert_col, x_map=EXP_BINARY_NAME_MAP,
+                                                           x_label=f"Reported experience with {expertise_domain}",
+                                                           y_ticks=[0, 25, 50, 75, 100],
+                                                           save_name=f"{expertise_domain}_expertise_{item}",
+                                                           save_path=save_path, plt_title=item_name,
+                                                           annotate_bar=True, annot_font_color="white")
     return
 
 
@@ -1589,34 +1653,13 @@ def ms_per_ics(c_v_ms_df, df_ics_groups, save_path):
     return
 
 
-def eid_per_demographics(eid_df, demographics_df, experience_df, save_path, eid_cluster_df=None):
-
-    expertise_relevant_item_dict = {"AI": [survey_mapping.Q_UWS_AI, survey_mapping.Q_AI_DOG]}
-                                    #"Animals": [survey_mapping.Q_PERSON_DOG, survey_mapping.Q_PERSON_PET,
-                                    #            survey_mapping.Q_DICTATOR_DOG, survey_mapping.Q_DICTATOR_PET,
-                                    #            survey_mapping.Q_UWS_DOG, survey_mapping.Q_UWS_PET,
-                                    #            survey_mapping.Q_UWS_FLY, survey_mapping.Q_AI_DOG]
+def eid_per_demographics(eid_df, demographics_df, save_path):
 
     demographics_relevant_item_dict = {survey_mapping.Q_PETS: [survey_mapping.Q_PERSON_PET,
                                                                survey_mapping.Q_DICTATOR_PET,
                                                                survey_mapping.Q_UWS_PET]}
 
-    for expertise_domain in expertise_relevant_item_dict:
-        expert_col = f"{expertise_domain}_expert"  # as was defined in the expert - non expert split
-        expertise_df = experience_df.loc[:, [process_survey.COL_ID, expert_col]]
-
-        relevant_decisions = expertise_relevant_item_dict[expertise_domain]
-        for decision in relevant_decisions:
-            question_code = [k for k, v in survey_mapping.earth_in_danger.items() if v == decision][0]
-            eid_df_relevant = eid_df.loc[:, [process_survey.COL_ID, decision]]
-            # run a chi squared test
-            perform_chi_square(df1=eid_df_relevant, col1=decision,
-                               df2=expertise_df, col2=expert_col, col2_name=f"{expertise_domain} Expertise: {decision}",
-                               grp2_vals=[0, 1], grp2_map=EXP_BINARY_NAME_MAP, id_col=process_survey.COL_ID,
-                               save_path=save_path, save_name=f"eid_expertise_{expertise_domain}_{question_code}", save_expected=False,
-                               grp1_vals=eid_df_relevant[decision].unique(),
-                               grp1_color_dict=EARTH_DANGER_COLOR_MAP)
-
+    result = list()
     for demo_domain in demographics_relevant_item_dict:
         demo_df = demographics_df.loc[:, [process_survey.COL_ID, demo_domain]]
         relevant_decisions = demographics_relevant_item_dict[demo_domain]
@@ -1624,39 +1667,21 @@ def eid_per_demographics(eid_df, demographics_df, experience_df, save_path, eid_
             question_code = [k for k, v in survey_mapping.earth_in_danger.items() if v == decision][0]
             eid_df_relevant = eid_df.loc[:, [process_survey.COL_ID, decision]]
             # run a chi squared test
-            perform_chi_square(df1=eid_df_relevant, col1=decision,
-                               df2=demo_df, col2=demo_domain, col2_name=f"{demo_domain}",
-                               grp2_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
-                               id_col=process_survey.COL_ID,
-                               save_path=save_path, save_name=f"eid_demographic_{demo_domain.replace('?', '').replace('/', '-')}_{question_code}", save_expected=False,
-                               grp1_vals=eid_df_relevant[decision].unique(),
-                               grp1_color_dict=EARTH_DANGER_COLOR_MAP)
+            res_df = perform_chi_square(df1=eid_df_relevant, col1=decision,
+                                        df2=demo_df, col2=demo_domain, col2_name=f"{demo_domain}",
+                                        grp2_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
+                                        id_col=process_survey.COL_ID,
+                                        save_path=save_path, save_name=f"eid_demographic_{demo_domain.replace('?', '').replace('/', '-')}_{question_code}",
+                                        save_expected=False,
+                                        grp1_vals=eid_df_relevant[decision].unique(),
+                                        grp1_color_dict=EARTH_DANGER_COLOR_MAP,
+                                        write_files=False  # aggregate instead to one big file
+                                        )
+            result.append(res_df)
 
-    """
-    If we have the cluster information, try to see if difference in expertise matters for that
-    """
-    if eid_cluster_df is not None:
-        """
-        Then we will run a random forest classifier to see if cluster (0/1) can be predicted from self-reported
-        expertise level in any of the domains. >> we take the RAW form of experience here (for binarized, uncomment
-        and replace)
-        """
-        experience_cols_raw = list(survey_mapping.Q_EXP_NAME_DICT.values())
-        # experience_cols_binary = [c for c in experience_df.columns if c.endswith(f"_expert")]
-        exp_relevant = experience_df.loc[:, [process_survey.COL_ID] + experience_cols_raw]
-        cluster_relevant = eid_cluster_df.loc[:, [process_survey.COL_ID, "Cluster"]]
-        cluster_with_exp = pd.merge(exp_relevant, cluster_relevant, on=process_survey.COL_ID)
-
-        categorical_cols = []  # no categorical columns - self-reported experience is ordinal
-        order_cols = experience_cols_raw
-
-        cluster_with_exp.to_csv(os.path.join(save_path, f"model_dataframe_coded.csv"), index=False)
-        helper_funcs.run_random_forest_pipeline(dataframe=cluster_with_exp, dep_col="Cluster",
-                                                categorical_cols=categorical_cols,
-                                                order_cols=order_cols, save_path=save_path, save_prefix="",
-                                                rare_class_threshold=5, n_permutations=1000, scoring_method="accuracy",
-                                                cv_folds=10, split_test_size=0.3, random_state=42, n_repeats=50,
-                                                shap_plot=True, shap_plot_colors=EARTH_DANGER_CLUSTER_COLORS)
+        result_df = pd.concat(result, ignore_index=True)
+        agg_path = os.path.join(save_path, f"eid_demographic_{demo_domain.replace('?', '').replace('/', '-')}_chisquared.csv")
+        result_df.to_csv(agg_path, index=False)
 
     return
 
@@ -1830,7 +1855,6 @@ def experience_with_demographics_descriptives(df_demographics, df_experience, sa
     # for each expertise type, take only experts, see if their claimed experience is acadmic, and if so, see their edu
     discrepancy_summary = list()
     for exp in cols_experience:
-        print(f"{exp}")
         df_exp = edu_exp_df[edu_exp_df[exp] >= EXPERTISE]  # take only experts in this topic
         df_exp_num = df_exp.shape[0]
         # experience is declared to come (at least in part) from academia (could be other things as well)
@@ -1914,6 +1938,38 @@ def most_important_per_intelligence(df_most_important, df_con_intell, save_path)
     df_counts[PROP] = 100 * (df_counts[COUNT] / df_counts[COUNT].sum())
     df_counts.to_csv(os.path.join(save_path, f"thinking most important yes_con intel related yes_how.csv"))
 
+    return
+
+
+def eid_ics_RF(eid_df, df_experience, save_path):
+    """
+    Run a random forest classifier to see if cluster (0/1) can be predicted from self-reported expertise level in any
+    of the domains. >> we take the RAW form of experience here (for binarized, uncomment and replace)
+    :param eid_df:
+    :param df_experience:
+    :param save_path:
+    :return:
+    """
+
+    exp_columns = list(survey_mapping.Q_EXP_NAME_DICT.values())
+    #exp_columns = [x for x in df_experience.columns if "_expert" in x]  # binarized option
+
+    # create a df for the pipeline
+    exp_relevant = df_experience.loc[:, [process_survey.COL_ID] + exp_columns]
+    cluster_relevant = eid_df.loc[:, [process_survey.COL_ID, "Cluster"]]
+    merged = pd.merge(exp_relevant, cluster_relevant, on=process_survey.COL_ID)
+    merged.to_csv(os.path.join(save_path, f"eid_ics_RF_data.csv"), index=False)
+
+    # prepare RF run
+    categorical_cols = []  # no categorical columns - self-reported experience is ORDINAL - change if you binarize
+    order_cols = exp_columns
+
+    helper_funcs.run_random_forest_pipeline(dataframe=merged, dep_col="Cluster",
+                                            categorical_cols=categorical_cols, order_cols=order_cols,
+                                            save_path=save_path, save_prefix="",
+                                            rare_class_threshold=5, n_permutations=1000, scoring_method="accuracy",
+                                            cv_folds=10, split_test_size=0.3, random_state=42, n_repeats=50,
+                                            shap_plot=True, shap_plot_colors=EARTH_DANGER_CLUSTER_COLORS)
     return
 
 
@@ -2010,7 +2066,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
 
 
     """
-    ------------------ STATISTICAL ANALYSES and data prep for R modelling ------------------------------------
+    ------------------------- STATISTICAL ANALYSES and data prep for R modelling --------------------------------------
     """
 
     """
@@ -2033,7 +2089,6 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Preregistered analysis 3:
     Do consciousness experts answer the Zombie pill question differently than non-experts?
     """
-    # Consciousness_expert is a binary column where 0 = people who rated themselves < EXPERTISE and 1 otherwise
     perform_chi_square(df1=df_pill, col1=survey_mapping.Q_ZOMBIE,
                        df2=df_exp_ratings, col2="Consciousness_expert", col2_name="Consciousness Expertise",
                        id_col=process_survey.COL_ID,
@@ -2054,7 +2109,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Preregistered analyses 6 and 7: 
     Does expertise [with animals (6)/AI (7)] affect consciousness / moral status ratings?
     """
-    c_v_ms_expertise(c_v_ms_df=df_c_v_ms, df_experience=df_exp_ratings, save_path=c_v_ms_path)
+    c_v_ms_expertise(c_v_ms_df=df_c_v_ms, df_experience=df_exp_ratings, save_path=c_v_ms_path, plot_this=False)
 
     """
     Preregistered analysis 8:
@@ -2069,8 +2124,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     EiD per demographics. Is the EiD behavior affected by demographics? 
     Specifically, does pet ownership matter for the relevant 'my pet' dyads?
     """
-    eid_per_demographics(eid_df=df_eid, demographics_df=df_demo, experience_df=df_exp_ratings,
-                         save_path=eid_path, eid_cluster_df=None)
+    eid_per_demographics(eid_df=df_eid, demographics_df=df_demo, save_path=eid_path)
 
     """
     Preregistered analysis 10:
@@ -2106,9 +2160,25 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     else:
         eid_clusters, kmeans, cluster_centroids = eid_clustering(eid_df=df_eid, save_path=eid_path)
 
-
     """
     Preregistered analysis 13: 
+    Does experience (AI, consciousness, animals, ethics) predict the clusters?
+    """
+    eid_ics_RF(eid_df=eid_clusters, df_experience=df_exp_ratings, save_path=eid_path)
+
+    """
+    Preregistered analysis 14: 
+    EiD per consciousness conception group - ics - Do these groups belong to different CLUSTERS?
+    """
+    perform_chi_square(df1=df_c_groups, col1="group",
+                       df2=eid_clusters, col2="Cluster", col2_name="Cluster",
+                       id_col=process_survey.COL_ID,
+                       save_path=eid_path, save_name="ics_group", save_expected=False,
+                       grp1_vals=ICS_GROUP_ORDER_LIST, grp2_vals=[0, 1], grp2_map=None,
+                       grp1_color_dict={ICS_GROUP_ORDER_LIST[i]: ICS_GROUP_COLOR_LIST[i] for i in range(len(ICS_GROUP_ORDER_LIST))})
+
+    """
+    Preregistered analysis 15: 
     Is there a difference between consciousness experts and non-experts with respect to selecting phenomenology
     as the most important feature for moral considerations?
     """
@@ -2116,7 +2186,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
                              save_path=ms_features_path)
 
     """
-    Preregistered analysis 14:
+    Preregistered analysis 16:
     What is the relationship between selecting "thinking" as the most important feature and agreeing 
     consciousness and intelligence are related?
     """
@@ -2125,7 +2195,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
 
 
     """
-    Preregistered analysis 15:
+    Preregistered analysis 17:
     Does the likelihood to kill a creature in the KPT scenarios change depending of its specific features? 
     (having I/C/S)?
     >> This will prepare data for R modelling that will be done on 
@@ -2137,7 +2207,7 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
 
 
     """
-    Preregistered analysis 16:
+    Preregistered analysis 18:
     Is the KPT killing behavior affected by thinking that this creature is even possible? 
     Note: we only model people who were SENSITIVE to the manipulation (i.e., did not answer 'all_yes' or 'all_no'). 
     """
@@ -2215,15 +2285,6 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     #kpt_per_demographics(kpt_df_sensitive=df_kpt_sensitive, demographics_df=df_demo, save_path=kpt_path)
 
-    """
-    Step 18: EiD per consciousness conception group - ics - Do these groups belong to different CLUSTERS?
-    Similar logic to Step #10 and  #7
-    """
-    #perform_chi_square(df1=df_c_groups, col1="group",
-    #                   df2=eid_clusters, col2="Cluster", col2_name="Cluster",
-    #                   id_col=process_survey.COL_ID,
-    #                   save_path=eid_path, save_name="ics_group", save_expected=False,
-    #                   grp1_vals=ICS_GROUP_ORDER_LIST, grp2_vals=[0, 1], grp2_map=None,
-    #                   grp1_color_dict={ICS_GROUP_ORDER_LIST[i]: ICS_GROUP_COLOR_LIST[i] for i in range(len(ICS_GROUP_ORDER_LIST))})
+
 
 

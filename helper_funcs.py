@@ -1,6 +1,9 @@
 import os
+os.environ["MPLBACKEND"] = "Agg"   # headless backend, no Tkinter
 import re
 import logging
+import matplotlib
+matplotlib.use("Agg", force=True)  # belt-and-suspenders: force Agg to eliminate Tk as it causes redundant runtime errors - BEFORE shap
 import shap
 import string
 import math
@@ -56,7 +59,6 @@ STOPWORDS = {"the", "and", "to", "of", "a", "is", "in", "that", "it", "as", "for
 
 # Set up logging for debugging
 logging.basicConfig(level=logging.INFO)
-
 
 
 # Custom transformer to merge rare categories
@@ -334,12 +336,15 @@ def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols,
             custom_cmap = cm.get_cmap("coolwarm")
 
         plt.figure(figsize=(10, 6))
+        # clean feature names
         prefixes_to_remove = ("num_", "cat_", "onehot__", "scaler__")
-        X_shap = X_shap.rename(columns=lambda s: re.sub(rf"^({'|'.join(prefixes_to_remove)})+", "", s))  # clean feature names
+        clean_feature_names = [  # order preserved because list comprehension iterates over feature_names in place
+            re.sub(rf"^({'|'.join(prefixes_to_remove)})+", "", s) for s in feature_names
+        ]
         shap.summary_plot(
             shap_vals,
-            X_shap,
-            feature_names=X_shap.columns,
+            X_shap,  # ndarray
+            feature_names=clean_feature_names,
             cmap=custom_cmap,  # the custom cmap from above, not colors directly
             plot_type="dot",  # or BAR
             show=False
