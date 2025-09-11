@@ -311,14 +311,16 @@ PRIOS_Q_NONCONS = "Do you think non-conscious creatures/systems should be taken 
 PRIOS_Q_CONS = "Do you think conscious creatures/systems should be taken into account in moral decisions?"
 PRIOS_Q_PEOPLE = "Do you think some people should have a higher moral status than others?"
 PRIOS_Q_ANIMALS = "Do you think some non-human animals should have a higher moral status than others?"
+PRIOS_Q_PEOPLE_WHAT = "What characterizes people with higher moral status?"
+PRIOS_Q_ANIMALS_WHAT = "What characterizes animals with higher moral status?"
 
 moral_considerations_prios = {
     "mc_Wc": PRIOS_Q_NONCONS,
     "mc_Wc_'no'": PRIOS_Q_CONS,
     "mc_human_prio": PRIOS_Q_PEOPLE,
-    "mc_human_prio_why": "What characterizes people with higher moral status?",
+    "mc_human_prio_why": PRIOS_Q_PEOPLE_WHAT,
     "mc_nonhuman_prio": PRIOS_Q_ANIMALS,
-    "mc_nonhuman_prio_why": "What characterizes animals with higher moral status?"
+    "mc_nonhuman_prio_why": PRIOS_Q_ANIMALS_WHAT
 }
 
 PRIOS_Q_NAME_MAP = {PRIOS_Q_NONCONS: "prios_nonCons",

@@ -646,29 +646,40 @@ def chi_squared_test(contingency_table, n, include_expected=False):
     """
     Performs chi square test of independence,
     calling: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.chi2_contingency.html
-    Effect size calculation: pingouin's power_chi2
-    https://pingouin-stats.org/build/html/generated/pingouin.power_chi2.html#pingouin-power-chi2
     """
 
     chi2, p, dof, expected = chi2_contingency(contingency_table)
 
     """
     Calculate effect size for the test using Cohen's w effect size
+    
+    See: https://doi.org/10.3390/math11091982 
+    Notably, in a 2 x 2 design, Cohen's w == == phi == Cramer's V == Tschuprow's T == sqrt(chi squared / N).
+    However, if it's not a 2 x 2 design (e.g., 2 x 4), this assumption breaks and we need to use Cramer's V. 
+    
+    References: 
     Cohen, J. (1988). Statistical power analysis for the behavioral sciences (2nd ed.).
-    
-    See also: https://doi.org/10.3390/math11091982 
-    Notably, in a 2 x 2 design, Cohen's w == == phi == Cramer's V == Tschuprow's T == sqrt(chi squared / N)
-    
+    Cramér, H. (1946). Mathematical Methods of Statistics. Princeton University Press.
     """
-    w = math.sqrt(chi2 / n)
 
+    # Cohen's w: only if all chi squared tests are 2 x 2
+    #w = math.sqrt(chi2 / n)
+
+    # Cramer's V
+    r, c = contingency_table.shape  # the number of categories in the first (rows) and second (cols) variables
+    k = min(r - 1, c - 1)
+    if k <= 0 or n <= 0:
+        print(f"something went wrong in the power calculation of the chi squared test on {contingency_table}")
+        V = float("nan")
+    else:
+        V = math.sqrt(chi2 / (n * k))
 
     result_df = pd.DataFrame({
         "test": ["chi squared"],
         "statistic": [chi2],
         "p": [p],
         "df": [dof],  # Degrees of Freedom
-        "effect size": [w],
+        "effect size": [V],
     })
     if include_expected:
         expected_df = pd.DataFrame(expected, index=contingency_table.index, columns=contingency_table.columns)

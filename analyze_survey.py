@@ -4,9 +4,6 @@ import numpy as np
 import re
 from scipy import stats
 from functools import reduce
-from collections import defaultdict
-from sklearn.preprocessing import LabelEncoder, MinMaxScaler
-from scipy.stats import iqr, friedmanchisquare
 import process_survey
 import survey_mapping
 import helper_funcs
@@ -524,21 +521,6 @@ def experience_descriptives(analysis_dict, save_path):
         )
     )])
     fig.update_layout(title_text="Experience Ratings Sankey Diagram", font_size=font_size)
-
-    #fig.show()
-
-    x = 4  ## TODO: DEBUG HERE to solve this figure
-    #flow_data_export = pd.DataFrame({
-    #    "source": [unique_labels[s] for s in sources],
-    #    "target": [unique_labels[t] for t in targets],
-    #    "value": values
-    #})
-
-    #flow_data_export.to_csv(os.path.join("experience_flow.csv"), index=False)
-    #try:
-    #    fig.write_image(os.path.join("experience_flow.svg"))
-    #except ValueError as e:
-    #    print(f"SVG not saved — you need to install kaleido: pip install -U kaleido\n{e}")
 
     """
     Alternative figure - stacked bar plot
@@ -1433,8 +1415,8 @@ def c_v_ms(analysis_dict, save_path):
                                                    plt_title="Off Diagonal", fmt="svg")
 
     """
-    Entities that people though have no moral status but at the same time attributed them with some
-    degree of consciousness.
+    Entities that people thought have no moral status but at the same time attributed them with some degree of 
+    consciousness.
     """
 
     entity_list = list(survey_mapping.other_creatures_general_names.keys())
@@ -1721,7 +1703,6 @@ def ms_c_prios_descriptives(analysis_dict, save_path):
                          save_path=result_path, save_name=f"{question.replace('?', '').replace('/', '-')}", fmt="svg",
                          props_in_legend=True, annot_props=True, label_inside=True, annot_groups=True)
 
-
     """
     Follow up on reasons (the free-text examples)
     """
@@ -1941,7 +1922,7 @@ def most_important_per_intelligence(df_most_important, df_con_intell, save_path)
     return
 
 
-def eid_ics_RF(eid_df, df_experience, save_path):
+def eid_ics_rf(eid_df, df_experience, save_path):
     """
     Run a random forest classifier to see if cluster (0/1) can be predicted from self-reported expertise level in any
     of the domains. >> we take the RAW form of experience here (for binarized, uncomment and replace)
@@ -2064,7 +2045,6 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     """
     df_c_graded, graded_path = c_graded_descriptives(analysis_dict=analysis_dict, save_path=save_path)
 
-
     """
     ------------------------- STATISTICAL ANALYSES and data prep for R modelling --------------------------------------
     """
@@ -2164,7 +2144,10 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Preregistered analysis 13: 
     Does experience (AI, consciousness, animals, ethics) predict the clusters?
     """
-    eid_ics_RF(eid_df=eid_clusters, df_experience=df_exp_ratings, save_path=eid_path)
+    # it takes a while, no reason to re-run it unless we have a specific reason to
+    rf_path = os.path.join(eid_path, "eid_ics_RF_data.csv")
+    if not load or not os.path.exists(rf_path):
+        eid_ics_rf(eid_df=eid_clusters, df_experience=df_exp_ratings, save_path=eid_path)
 
     """
     Preregistered analysis 14: 
@@ -2193,7 +2176,6 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     most_important_per_intelligence(df_most_important=most_important_df, df_con_intell=df_c_i,
                                     save_path=ms_features_path)
 
-
     """
     Preregistered analysis 17:
     Does the likelihood to kill a creature in the KPT scenarios change depending of its specific features? 
@@ -2204,7 +2186,6 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Note: we only model people who were SENSITIVE to the manipulation (i.e., did not answer 'all_yes' or 'all_no'). 
     """
     kpt_per_entity(kpt_df_sensitive=df_kpt_sensitive, cgroups_df=df_c_groups, save_path=kpt_path)
-
 
     """
     Preregistered analysis 18:
