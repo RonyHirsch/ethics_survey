@@ -1049,10 +1049,8 @@ def plot_expertise_proportion_bars(df, x_axis_exp_col_name, x_label, cols, cols_
     sns.despine(right=True, top=True)
     plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches="tight", pad_inches=0.01)
 
-    figure = plt.gcf()
-    del figure
+    plt.close("all")
     plt.clf()
-    plt.close()
 
     return
 
@@ -1097,9 +1095,9 @@ def plot_categorical_proportion_bar(categories_prop_df, category_col, data_col, 
     figure.set_size_inches(15, 12)
     plt.savefig(os.path.join(save_path, f"{save_name}.svg"), format="svg", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
-    del figure
+
+    plt.close("all")  # explicitly close everything
     plt.clf()
-    plt.close()
 
     return
 
@@ -1270,9 +1268,9 @@ def plot_stacked_proportion_bars(plot_data=None, df=None, rating_col=None, item_
     figure.set_size_inches(inches_w, inches_h)
     plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
-    del figure
+
+    plt.close(figure)  # explicitly close this figure
     plt.clf()
-    plt.close()
     return
 
 
@@ -1342,9 +1340,9 @@ def plot_stacked_proportion_bars_in_a_batch(df, rating_col, item_cols, color_map
     figure.set_size_inches(15, 12)
     plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches="tight",
                 pad_inches=0.01)
-    del figure
+
+    plt.close(figure)  # explicitly close this figure
     plt.clf()
-    plt.close()
     return
 
 
@@ -1498,9 +1496,9 @@ def plot_stacked_proportion_bars_old(plot_data, num_plots, colors, num_ratings, 
     figure.set_size_inches(inches_w, inches_h)
     plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
-    del figure
+
+    plt.close(figure)  # explicitly close this figure
     plt.clf()
-    plt.close()
 
     return
 
@@ -1705,9 +1703,9 @@ def plot_categorical_scatter(df, x_col, xtick_labels, y_col, color, save_path, s
     figure = plt.gcf()  # get current figure
     plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches="tight",
                 pad_inches=0.01)
-    del figure
+
+    plt.close(figure)  # explicitly close this figure
     plt.clf()
-    plt.close()
     return
 
 
@@ -1731,9 +1729,9 @@ def plot_categorical_multliscatter(df, x_col, xtick_labels, y_cols, colors, save
     figure = plt.gcf()  # get current figure
     plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches="tight",
                 pad_inches=0.01)
-    del figure
+
+    plt.close(figure)  # explicitly close this figure
     plt.clf()
-    plt.close()
     return
 
 
@@ -1835,9 +1833,9 @@ def plot_categorical_scatter_fullresponse(df, x_col, y_col, response_id_col, sav
     figure.set_size_inches(18, 12)
     plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches="tight",
                 pad_inches=0.01)
-    del figure
+
+    plt.close(figure)  # explicitly close this figure
     plt.clf()
-    plt.close()
     return
 
 
@@ -1945,9 +1943,9 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
     figure.set_size_inches(18, 12)
     plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches="tight",
                 pad_inches=0.01)
-    del figure
+
+    plt.close(figure)  # explicitly close this figure
     plt.clf()
-    plt.close()
 
     return
 
@@ -2006,9 +2004,9 @@ def plot_scatter(df, data_col, category_col, category_color_dict, category_order
     figure.set_size_inches(16, 12)
     plt.savefig(os.path.join(save_path, f"{save_name}.png"), format="png", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
-    del figure
+
+    plt.close(figure)  # explicitly close this figure
     plt.clf()
-    plt.close()
 
     return
 
@@ -2087,9 +2085,9 @@ def plot_world_map_proportion(country_proportions_df, data_column, save_path, sa
     figure.set_size_inches(15, 12)
     plt.savefig(os.path.join(save_path, f"{save_name}_country.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
-    del figure
+
+    plt.close(figure)  # explicitly close this figure
     plt.clf()
-    plt.close()
 
     """
     Plot by continent
@@ -2120,9 +2118,9 @@ def plot_world_map_proportion(country_proportions_df, data_column, save_path, sa
     figure.set_size_inches(15, 12)
     plt.savefig(os.path.join(save_path, f"{save_name}_continent.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
-    del figure
+
+    plt.close(figure)  # explicitly close this figure
     plt.clf()
-    plt.close()
 
     """
     Save df with data
@@ -2158,9 +2156,9 @@ def plot_density(df, x_col, x_col_name, hue_col, hue_col_name, save_name, save_p
     figure.set_size_inches(18, 12)
     plt.savefig(os.path.join(save_path, f"density_{save_name}.{format}"), format=format, dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
-    del figure
+
+    plt.close(figure)  # explicitly close this figure
     plt.clf()
-    plt.close()
     return
 
 
@@ -2229,8 +2227,7 @@ def plot_item_differences_with_annotations(df, id_col, value_col, category_col, 
                 bbox_inches="tight", pad_inches=0.01)
 
     figure = plt.gcf()
-    del figure
+    plt.close(figure)  # explicitly close this figure
     plt.clf()
-    plt.close()
 
     return

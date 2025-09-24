@@ -75,9 +75,6 @@ C_I_HOW_ORDER = [survey_mapping.ANS_NO, survey_mapping.ANS_SAME, survey_mapping.
                  survey_mapping.ANS_I_NECESSARY, survey_mapping.ANS_THIRD]
 
 
-
-
-
 def demographics_age(demographics_df, save_path):
     """
     Get descriptive statistics about age
@@ -684,7 +681,7 @@ def ics_descriptives(analysis_dict, save_path):
 
 def perform_chi_square(df1, col1, df2, col2, id_col, save_path, save_name, save_expected=False,
                        grp1_vals=None, grp1_color_dict=None, grp2_vals=None, grp2_map=None,
-                       y_tick_list=None, col2_name=None, contingency_back=False, write_files=True):
+                       y_tick_list=None, col2_name=None, contingency_back=False, write_files=True, direction_group=1):
     """
     Performs chi square test of independence, testing whether the proportions in one group (df1) differ significantly
     across different groups of df2.
@@ -694,6 +691,11 @@ def perform_chi_square(df1, col1, df2, col2, id_col, save_path, save_name, save_
     at least one of thr groups (col1, col2), will only have TWO LEVELS, and note that we need that group to be
     GROUP 2 (so that in the contingency table these will be the COLUMNS). Then, we will pass to ci_cols the levels (2)
     of that grouping variable (e.g., [0, 1], ['no', 'yes'], etc), for the calculation of the CI.
+
+    direction_group :
+        Which group to use for directionality analysis (1 or 2).
+        - If 1: grp1_vals[0] is baseline, grp1_vals[1] is outcome of interest, compare across grp2
+        - If 2: grp2_vals[0] is baseline, grp2_vals[1] is comparison, look at grp1 outcome
     """
 
     # ensure we're on the same playing field - unify based on id_column
@@ -711,6 +713,49 @@ def perform_chi_square(df1, col1, df2, col2, id_col, save_path, save_name, save_
 
     chisquare_result["question1_counts"] = str(contingency_table.sum(axis=1).to_dict())
     chisquare_result["question2_counts"] = str(contingency_table.sum(axis=0).to_dict())
+
+    # directionality of results: only if we have a 2 x 2 design
+    if len(grp1_vals) == 2 and len(grp2_vals) == 2:
+
+        if direction_group == 1:
+            # grp1 has the outcome we're tracking
+            # grp2 has the groups we're comparing
+            outcome = grp1_vals[1]
+
+            # proportions of outcome within each grp2 category
+            prop_0 = 100 * contingency_table.loc[outcome, grp2_vals[0]] / contingency_table[grp2_vals[0]].sum()
+            prop_1 = 100 * contingency_table.loc[outcome, grp2_vals[1]] / contingency_table[grp2_vals[1]].sum()
+
+            prop_diff = prop_1 - prop_0
+            direction = f"{outcome} {'more' if prop_diff > 0 else 'less'} likely in {grp2_vals[1]} vs {grp2_vals[0]}"
+
+        else:  # direction_group == 2 (default)
+            # grp2 has the outcome we're tracking
+            # grp1 has the groups we're comparing
+            outcome = grp2_vals[1]
+
+            # proportions of outcome within each grp1 category
+            prop_0 = 100 * contingency_table.loc[grp1_vals[0], outcome] / contingency_table.loc[grp1_vals[0]].sum()
+            prop_1 = 100 * contingency_table.loc[grp1_vals[1], outcome] / contingency_table.loc[grp1_vals[1]].sum()
+
+            prop_diff = prop_1 - prop_0
+            direction = f"{outcome} {'more' if prop_diff > 0 else 'less'} likely in {grp1_vals[1]} vs {grp1_vals[0]}"
+
+        if abs(prop_diff) < 0.1:  # essentially no difference
+            direction = "No difference"
+
+        # Store results
+        chisquare_result["prop_difference"] = prop_diff
+        chisquare_result["direction"] = direction
+        chisquare_result["direction_group"] = direction_group
+
+        # Store the actual proportions with clear naming
+        if direction_group == 1:
+            chisquare_result[f"prop_{outcome}_{grp2_vals[0]}"] = prop_0
+            chisquare_result[f"prop_{outcome}_{grp2_vals[1]}"] = prop_1
+        else:
+            chisquare_result[f"prop_{outcome}_{grp1_vals[0]}"] = prop_0
+            chisquare_result[f"prop_{outcome}_{grp1_vals[1]}"] = prop_1
 
     if write_files:
         chisquare_result.to_csv(os.path.join(save_path, f"{save_name}_chisquared.csv"), index=False)
@@ -742,23 +787,6 @@ def perform_chi_square(df1, col1, df2, col2, id_col, save_path, save_name, save_
     if contingency_back:
         return chisquare_result, contingency_table
     return chisquare_result
-
-
-def perform_kruskal_wallis(df_ordinal, ordinal_col, df_group, group_col, id_col, save_path, save_name):
-    """
-    Kruskal–Wallis Test: It's a non-parametric alternative to one-way ANOVA.
-    Compares more than 2 independent groups (in group_col), with an ordinal data (ordinal_col)
-    (Null hypothesis: all groups come from the same distribution)
-
-    Ranks all the values from all groups together (from lowest to highest), compares average ranks across groups,
-    and tests whether the distributions are significantly different across groups.
-    """
-    merged_df = pd.merge(df_ordinal[[id_col, ordinal_col]],
-                         df_group[[id_col, group_col]],
-                         on=id_col)
-    kruskal_df = helper_funcs.kruskal_wallis_test(merged_df=merged_df, ordinal_col=ordinal_col, group_col=group_col)
-    kruskal_df.to_csv(os.path.join(save_path, f"{save_name}_kruskal.csv"), index=False)
-    return
 
 
 def consc_intell_descriptives(analysis_dict, save_path):
@@ -811,46 +839,6 @@ def consc_intell_descriptives(analysis_dict, save_path):
     con_intellect_common_denominator = con_intellect[~con_intellect[survey_mapping.Q_INTELLIGENCE_FU].isna()]
     con_intellect_common_denominator.to_csv(os.path.join(result_path, "common_denominator.csv"), index=False)
     return con_intellect, result_path
-
-
-def consc_intell_RF(df_demographics, df_experience, df_con_intell, save_path):
-    # create dataframe to pass to a RF classifier
-    experience_cols_binary = [x for x in df_experience.columns if "_expert" in x]
-    df_experience_binary = df_experience.loc[:, [process_survey.COL_ID] + experience_cols_binary]
-    df_c_i_relevant = df_con_intell.loc[:, [process_survey.COL_ID, survey_mapping.Q_INTELLIGENCE]]
-    df_demo_relevant = df_demographics.loc[:, [process_survey.COL_ID, "age_group", "education_level",
-                                               survey_mapping.Q_GENDER, survey_mapping.Q_EMPLOYMENT,
-                                               survey_mapping.Q_COUNTRY]]
-    merged_df = reduce(lambda left, right: pd.merge(left, right, on=[process_survey.COL_ID], how='outer'),
-                       [df_experience_binary, df_demo_relevant, df_c_i_relevant])
-
-    """
-    Process columns to fit RF classifier
-    """
-    # turn 'age_group' into an ordinal variable (Categorical will turn groups into ints according do the order we have)
-    merged_df["age_group_order"] = pd.Categorical(merged_df["age_group"], categories=AGE_LABELS, ordered=True).codes
-
-    # binarize the predicted column
-    merged_df["con_intel_related_binary"] = merged_df[survey_mapping.Q_INTELLIGENCE].str.strip().map(survey_mapping.ANS_YESNO_MAP)
-    merged_df.to_csv(os.path.join(save_path, "random_forest_dataframe_original.csv"), index=False)
-
-    # define cols:
-    categorical_cols = [
-        survey_mapping.Q_GENDER,
-        survey_mapping.Q_EMPLOYMENT,
-        survey_mapping.Q_COUNTRY
-    ]
-    order_cols = experience_cols_binary + ["education_level", "age_group_order"]
-    dep_col = "con_intel_related_binary"
-    df = merged_df.loc[:, [process_survey.COL_ID] + categorical_cols + order_cols + [dep_col]]
-    df.to_csv(os.path.join(save_path, "random_forest_dataframe_coded.csv"), index=False)
-    helper_funcs.run_random_forest_pipeline(dataframe=df, dep_col=dep_col, categorical_cols=categorical_cols,
-                                            order_cols=order_cols, save_path=save_path, save_prefix="",
-                                            rare_class_threshold=5, n_permutations=1000, scoring_method="accuracy",
-                                            cv_folds=10, split_test_size=0.3, random_state=42, n_repeats=50,
-                                            shap_plot=True)
-
-    return
 
 
 def zombie_pill_descriptives(analysis_dict, save_path):
@@ -1220,8 +1208,6 @@ def eid_clustering(eid_df, save_path):
     Each cluster is represented by a "centroid" (average position of the data points in the cluster).
     Data points are assigned to the cluster whose centroid they are closest to.
     """
-    #df_pivot, kmeans, cluster_centroids = helper_funcs.perform_kmeans(df_pivot=df_earth_coded, clusters=cluster_num,
-    #                                                                  save_path=save_path, save_name="items")
     optimal_k, (df_pivot, kmeans, cluster_centroids), all_scores = helper_funcs.kmeans_optimal_k(df_pivot=df_earth_coded,
                                                                                                  save_path=save_path,
                                                                                                  save_name="items",
@@ -1377,6 +1363,7 @@ def c_v_ms(analysis_dict, save_path):
         "sd_diff_paired": g.std(ddof=1)
     })
     paired["se_diff_paired"] = paired["sd_diff_paired"] / np.sqrt(paired["n_paired"])
+
     # Protect against zero SE (all respondents identical): leaves t/p as NaN
     paired["t_stat_paired"] = paired["diff_paired"] / paired["se_diff_paired"].replace(0, np.nan)
     paired["df_paired"] = paired["n_paired"] - 1
@@ -1506,45 +1493,6 @@ def save_and_plot_pies(df, entities, filter_prefix, value_prefix, result_path, t
                          title=f"{title_suffix}: {entity} – N = {total_n}", save_path=result_path,
                          save_name=f"{file_prefix}_{entity}", fmt="svg", props_in_legend=True, annot_props=True,
                          label_inside=True)
-    return
-
-
-def kpt_per_demographics(kpt_df_sensitive, demographics_df, save_path):
-    """
-    :param kpt_df_sensitive: ASSUMING THIS DF CONTAINS ONLY PEOPLE SENSITIVE TO THE KPT MANIPULATION
-    :param demographics_df: the df block of demographic data
-    :param save_path: where the results will be saved (csvs, plots)
-    """
-    # identify the KPT questions (based on them being binary, kill/nokill)
-    all_feature_cols = [col for col in kpt_df_sensitive.columns if set(kpt_df_sensitive[col].unique()) <= {0, 1}]
-    # merge
-    df_merged = pd.merge(kpt_df_sensitive, demographics_df, on=process_survey.COL_ID)
-    # sum how many creatures would a person kill
-    df_merged["kill_total"] = df_merged[all_feature_cols].sum(axis=1)
-    df_merged.to_csv(os.path.join(save_path, "kpt_sensitive_per_demographics.csv"), index=False)
-
-    # define the relevant demographic categories we are interested in checking
-    relevant_demo_cols = {survey_mapping.Q_GENDER: "gender", "age_group": "ageGroup"}
-    df_clean = df_merged[["kill_total"] + list(relevant_demo_cols.keys())].dropna()
-
-    for col in relevant_demo_cols.keys():
-        col_name = relevant_demo_cols[col]
-        grouped_df = [
-            group["kill_total"].dropna().values
-            for _, group in df_clean.groupby(col)
-            if not group["kill_total"].dropna().empty
-        ]
-        kruskal_df = helper_funcs.kruskal_wallis_test(grouped=grouped_df)
-        kruskal_df.to_csv(os.path.join(save_path, f"kpt_sensitive_{col_name}_kruskal.csv"), index=False)
-        summary_df = (
-            df_clean.groupby(col)["kill_total"]
-            .agg([f"{COUNT}", "mean", "std", "min", "max"])
-            .assign(SE=lambda d: d["std"] / d[f"{COUNT}"] ** 0.5)
-            .reset_index()
-        )
-        summary_df["CI_95_low"] = summary_df["mean"] - 1.96 * summary_df["SE"]
-        summary_df["CI_95_high"] = summary_df["mean"] + 1.96 * summary_df["SE"]
-        summary_df.to_csv(os.path.join(save_path, f"kpt_sensitive_{col_name}_summary.csv"), index=False)
     return
 
 
@@ -2195,77 +2143,3 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     kpt_per_ics(kpt_df_sensitive=df_kpt_sensitive, df_ics_groups=df_ics_with_groups, save_path=kpt_path)
 
     exit()
-
-
-
-
-
-
-
-
-
-    """
-    -------------------------------------------- DEPRECATED ANALYSES --------------------------------------------------
-    """
-
-    """
-    Do the groups of people from the ics_descriptives differ based on experience with consciousness?
-    Note that for this question we BINARIZED experience with consciousness into non-experts (ratings 1-2-3), and 
-    experts (ratings 4-5). 
-    
-    Because of that, we check for relationships between two categorical parameters: 
-    ics group belonging, and expertise (binarized). 
-    
-    Therefore, we need to do a chi square test of independence (and not kruskal), as we test whether the proportions
-    of consciousness experts (1 vs. 0) differ significantly across different ics groups.  
-    """
-    # Consciousness_expert is a binary column where 0 = people who rated themselves < EXPERTISE and 1 otherwise
-    #perform_chi_square(df1=df_c_groups, col1="group",
-    #                   df2=df_exp_ratings, col2="Consciousness_expert", col2_name="Consciousness Expertise",
-    #                   id_col=process_survey.COL_ID,
-    #                   save_path=ics_path, save_name="consciousness_exp", save_expected=False,
-    #                   grp1_vals=ICS_GROUP_ORDER_LIST, grp2_vals=[0, 1], grp2_map=EXP_BINARY_NAME_MAP,
-    #                   grp1_color_dict={ICS_GROUP_ORDER_LIST[i]: ICS_GROUP_COLOR_LIST[i] for i in range(len(ICS_GROUP_ORDER_LIST))})
-
-    """
-    Step 6: Does the perceived relationship between consciousness and intelligence depend on demographic factors
-    (e.g., age) or expertise (e.g., with AI or with animals?) 
-    """
-    #consc_intell_RF(df_demographics=df_demo, df_experience=df_exp_ratings, df_con_intell=df_c_i, save_path=c_i_path)
-
-    """
-    Step 7: Examine the relationship between the conception of consciousness (from ICS groups) and the perceived 
-    relationship between consciousness and intelligence: 
-    Perform a chi square test
-    """
-    #perform_chi_square(df1=df_c_i, col1=survey_mapping.Q_INTELLIGENCE, grp1_color_dict=YES_NO_COLORS,
-    #                   grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
-    #                   df2=df_c_groups, col2="group", col2_name="Conception of Consciousness",
-    #                   grp2_vals=ICS_GROUP_ORDER_LIST, grp2_map=None,
-    #                   id_col=process_survey.COL_ID, y_tick_list=None,
-    #                   save_path=c_i_path, save_name=f"ics_intelligence", save_expected=False)
-
-
-    """
-    Step 10: Do the different ICS groups answer the Zombie pill question differently from each other?
-    Logic is similar to steps #4 and #9
-    Zombie = binary (yes/no), consciousness group = 4 groups (df_c_groups)
-    """
-    #perform_chi_square(df1=df_pill, col1=survey_mapping.Q_ZOMBIE,
-    #                   df2=df_c_groups, col2="group", col2_name="Conception of Consciousness",
-    #                   id_col=process_survey.COL_ID,
-    #                   save_path=pill_path, save_name="ics_group", save_expected=False,
-    #                   grp1_vals=[survey_mapping.ANS_NO, survey_mapping.ANS_YES],
-    #                   grp2_vals=ICS_GROUP_ORDER_LIST, grp2_map=None,
-    #                   grp1_color_dict=YES_NO_COLORS)
-
-    """
-    Step 15: Is the KPT killing behavior affected by demographics?
-    
-    *** AGAIN, ASSUMING ONLY PEOPLE WHO WERE SENSITIVE TO THE MANIPULATION ***
-    """
-    #kpt_per_demographics(kpt_df_sensitive=df_kpt_sensitive, demographics_df=df_demo, save_path=kpt_path)
-
-
-
-
