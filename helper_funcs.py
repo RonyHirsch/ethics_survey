@@ -857,32 +857,76 @@ def kmeans_optimal_k(df_pivot, save_path, save_name, k_range=range(2, 10), norma
     best_k = None
     best_result = None
 
-    results = []
+    records = []  # list of dicts for later 1-SE selection
+    results = []  # (k, silhouette_avg) list for compatibility
+    result_map = {}  # to retrieve the best_result tuple later
 
     for k in k_range:
         print(f"\n--- Trying k={k} ---")
-        df_result, kmeans_model, centroids = perform_kmeans(df_pivot=df_pivot, clusters=k, normalize=normalize,
-                                                            save_path=save_path, save_name=f"{save_name}_k{k}")
+        df_result, kmeans_model, centroids, silhouette_avg, sil_se, p_val = perform_kmeans(df_pivot=df_pivot,
+                                                                                           clusters=k,
+                                                                                           normalize=normalize,
+                                                                                           save_path=save_path,
+                                                                                           save_name=f"{save_name}_k{k}")
         # silhouette score (already printed and stored inside perform_kmeans)
-        silhouette_avg = silhouette_score(df_result.drop(columns="Cluster"), df_result["Cluster"])
+        silhouette_avg = round(silhouette_score(df_result.drop(columns="Cluster"), df_result["Cluster"]), 2)
         results.append((k, silhouette_avg))
-        # update optimum
-        if silhouette_avg > best_score:
-            best_score = silhouette_avg
-            best_k = k
-            best_result = (df_result, kmeans_model, centroids)
 
-    print(f"\nOptimal k: {best_k}; silhouette score: {best_score:.3f}")
+        # calculate cluster sizes
+        cluster_sizes = df_result['Cluster'].value_counts().sort_index()
+        total_n = len(df_result)
+
+        # print detailed cluster information
+        print(f"Cluster sizes:")
+        for cluster_id in range(k):
+            count = cluster_sizes.get(cluster_id, 0)
+            pct = (count / total_n) * 100
+            print(f"  Cluster {cluster_id}: {count} ({pct:.2f}%)")
+
+        results.append((k, silhouette_avg))
+        result_map[k] = (df_result, kmeans_model, centroids)
+        records.append({"k": k, "silhouette": silhouette_avg, "sil_se": sil_se, "p_value": p_val})
+
+    # update optimum [1-SE] selection rule
+    sils = np.array([r["silhouette"] for r in records], dtype=float)
+    ses = np.array([r["sil_se"] for r in records], dtype=float)
+    ks = np.array([r["k"] for r in records], dtype=int)
+
+    idx_star = int(np.nanargmax(sils))
+    k_star = int(ks[idx_star])
+    sil_star = float(sils[idx_star])
+    se_star = float(ses[idx_star]) if np.isfinite(ses[idx_star]) else np.nan
+
+    if np.isfinite(se_star) and se_star > 0.0:
+        cutoff = math.ceil((sil_star - se_star) * 100) / 100
+        # smallest k whose silhouette >= cutoff
+        candidate_indices = np.where(sils >= cutoff)[0]
+        k_hat = int(ks[int(candidate_indices[0])]) if candidate_indices.size else k_star
+        print(f"\n[1-SE rule] best silhouette at k*={k_star} (sil={sil_star:.2f}, SE={se_star:.2f}) "
+              f"→ cutoff={cutoff:.2f} : choose smallest k with sil≥cutoff: k={k_hat}")
+    else:
+        k_hat = k_star
+        print(f"\n[1-SE rule] SE not available or zero at k*={k_star}; defaulting to argmax silhouette.")
+
+    best_k = k_hat
+    best_result = result_map[best_k]
+    print(f"\nOptimal k (1-SE rule): {best_k}; silhouette score: {dict(results)[best_k]:.6f}")
+
     return best_k, best_result, results
 
 
-def perform_kmeans(df_pivot, save_path, save_name, clusters=2, normalize=False):
+def perform_kmeans(df_pivot, save_path, save_name, clusters=2, normalize=False, n_iterations=1000,
+                   bootstrap_sil_reps=1000, bootstrap_refit=False, random_state=42):
     """
     Perform k-means clustering (scikit-learn's) to group the data into a specified number of clusters.
     We then append the cluster labels to the dataset and calculate the silhouette score,
     which evaluates how well-separated the clusters are. We then test the clustering's statistical significance by
-    comparing it to random clusters. This medho also saves the cluster centroids, which represent the average values
+    comparing it to random clusters. This medhod also saves the cluster centroids, which represent the average values
     of features for each cluster.
+
+    If bootstrap_refit=False (default), we *reuse* the fitted clustering and bootstrap
+    the rows (labels follow the resample)
+    If bootstrap_refit=True, we refit KMeans on each bootstrap sample (slower, more thorough).
     """
     txt_output = list()
 
@@ -893,22 +937,22 @@ def perform_kmeans(df_pivot, save_path, save_name, clusters=2, normalize=False):
 
     # Perform k-means clustering
     # The n_init parameter controls the number of times the KMeans algorithm is run with different centroid seeds; 10 is the default
-    kmeans = KMeans(n_clusters=clusters, random_state=42, n_init=10)
+    kmeans = KMeans(n_clusters=clusters, random_state=random_state, n_init=10)
+    labels = kmeans.fit_predict(df_pivot)
     df_pivot = df_pivot.copy()
-    df_pivot.loc[:, "Cluster"] = kmeans.fit_predict(df_pivot)
+    df_pivot.loc[:, "Cluster"] = labels
 
     # Calculate silhouette score
     """
     The silhouette score measures how similar a data point is to its own cluster compared to other clusters. 
     It ranges from -1 to 1, where a value closer to 1 indicates that the data points are well clustered.
     """
-    silhouette_avg = silhouette_score(df_pivot.drop(columns="Cluster"), df_pivot["Cluster"])
+    silhouette_avg = round(silhouette_score(df_pivot.drop(columns="Cluster"), df_pivot["Cluster"]), 2)
     line = f"{clusters}-Means Clustering Silhouette Score: {silhouette_avg:.2f}"
     print(line)
     txt_output.append(line)
 
     # test the statistical significance of the clustering (against random clusters)
-    n_iterations = 1000
     random_silhouette_scores = [
         silhouette_score(df_pivot.drop(columns="Cluster"), np.random.randint(0, clusters, size=df_pivot.shape[0]))
         for _ in range(n_iterations)
@@ -955,7 +999,62 @@ def perform_kmeans(df_pivot, save_path, save_name, clusters=2, normalize=False):
         for line in txt_output:
             file.write(str(line) + '\n')
 
-    return df_pivot, kmeans, cluster_centroids
+    # bootstrap SE for the silhouette (default: no refit)
+    sil_se = _silhouette_bootstrap_se(df_pivot, clusters=clusters, B=bootstrap_sil_reps, refit=bootstrap_refit,
+                                      rng_seed=random_state)
+
+    return df_pivot, kmeans, cluster_centroids, float(silhouette_avg), float(sil_se), float(p_value)
+
+
+def _silhouette_bootstrap_se(df_with_cluster, clusters, B=1000, refit=False, rng_seed=42):
+    """
+    Estimate SE of silhouette by bootstrap.
+    B: resample rows with replacement and recompute a silhouette score, the SE is then the sample standard deviation/√B
+    of those bootstrap silhouette scores. Bigger B = more stable SE but more compute.
+    refit: For each bootstrap sample, we reuse the original cluster labels for the resampled rows, then compute silhouette.
+    This captures sampling variability of the silhouette given the original partition.
+    """
+    if B is None or B <= 0:
+        return np.nan
+    rng = np.random.default_rng(rng_seed)
+    X_full = df_with_cluster.drop(columns="Cluster")
+    y_full = df_with_cluster["Cluster"].to_numpy()
+    n = len(df_with_cluster)
+
+    scores = []
+    for _ in range(B):
+        idx = rng.integers(0, n, n)
+        Xb = X_full.iloc[idx, :]
+        if not refit:
+            yb = y_full[idx]
+            # need ≥2 samples per cluster for silhouette
+            counts = pd.Series(yb).value_counts()
+            if (counts < 2).any():
+                continue
+            try:
+                s = silhouette_score(Xb, yb)
+                scores.append(s)
+            except Exception:
+                continue
+        else:
+            try:
+                km = KMeans(n_clusters=clusters, random_state=42, n_init=10)
+                yb = km.fit_predict(Xb)
+                if len(np.unique(yb)) < 2:
+                    continue
+                s = silhouette_score(Xb, yb)
+                scores.append(s)
+            except Exception:
+                continue
+
+    if len(scores) >= 2:
+        """
+        the standard error of a statistic is estimated by the standard deviation of the bootstrap replicates
+        Efron & Tibshirani (1993) describe the bootstrap SE as the sample SD of the bootstrap statistics. 
+        That’s the quantity the 1-SE rule should use.
+        """
+        return float(np.std(scores, ddof=1))
+    return np.nan
 
 
 def plot_kmeans_on_PCA(df_pivot, pca_df, save_path, save_name, palette=None):

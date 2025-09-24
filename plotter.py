@@ -308,9 +308,6 @@ def plot_pie(categories_names, categories_counts, title, save_path, save_name,
     """
     startangle = pie_direction - (categories_counts[0] / sum(categories_counts)) * 180
 
-    # pie plot
-    fig, ax = plt.subplots(figsize=(20, 10))
-
     total_count = sum(categories_counts)
     proportions = [f"{(count / total_count) * 100:{prop_fmt}}%" for count in categories_counts]
 
@@ -395,9 +392,7 @@ def plot_pie(categories_names, categories_counts, title, save_path, save_name,
     figure = plt.gcf()  # get current figure
     plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=f"{fmt}", dpi=1000, bbox_inches='tight',
                 pad_inches=0.01)
-    del figure
-    plt.clf()
-    plt.close()
+    plt.close("all")
     return
 
 
@@ -427,9 +422,7 @@ def plot_pca_scatter_2d(df, hue, title, save_path, save_name, pal=None, fmt="png
     plt.savefig(os.path.join(save_path, f"{save_name}_PCA_result.{fmt}"), format=f"{fmt}", dpi=1000,
                 bbox_inches='tight',
                 pad_inches=0.01)
-    del figure
-    plt.clf()
-    plt.close()
+    plt.close("all")
     return
 
 

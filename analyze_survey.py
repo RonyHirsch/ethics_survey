@@ -44,7 +44,7 @@ EARTH_DANGER_COLOR_MAP = {survey_mapping.ANS_PERSON: "#ffbf69",
                           survey_mapping.ANS_AI: "#ffd8be"}
 
 
-EARTH_DANGER_CLUSTER_COLORS = ["#EDAE49", "#102E4A"]
+EARTH_DANGER_CLUSTER_COLORS = ["#EDAE49", "#102E4A", "#bb3e03", "#0a9396"]
 
 C_V_MS_COLORS = {survey_mapping.ANS_C_MS_1: "#DB5461",
                  survey_mapping.ANS_C_MS_2: "#fb9a99",
@@ -153,6 +153,7 @@ def demographics_gender(demographics_df, save_path):
                          "Male": "#4a5759",
                          "Non-binary": "#f7e1d7",
                          "Genderqueer": "#edafb8",
+                         "Genderfluid": "#9d8189",
                          "Prefer not to say": "#dedbd2"}
 
     plotter.plot_pie(categories_names=category_counts.index.tolist(), categories_counts=category_counts.tolist(),
@@ -1224,7 +1225,6 @@ def eid_clustering(eid_df, save_path):
     """
 
     # Compute the cluster centroids and SEMs
-    # cluster_centroids = df_pivot.groupby("Cluster").mean()  # we get this from helper_funcs.perform_kmeans
     cluster_sems = df_pivot.groupby("Cluster").sem()
 
     # Plot - collapsed (all clusters together)
@@ -1885,6 +1885,11 @@ def eid_ics_rf(eid_df, df_experience, save_path):
 
     # create a df for the pipeline
     exp_relevant = df_experience.loc[:, [process_survey.COL_ID] + exp_columns]
+
+    # if response_id is the index, reset it to make it a column
+    if eid_df.index.name == process_survey.COL_ID:
+        eid_df = eid_df.reset_index()
+
     cluster_relevant = eid_df.loc[:, [process_survey.COL_ID, "Cluster"]]
     merged = pd.merge(exp_relevant, cluster_relevant, on=process_survey.COL_ID)
     merged.to_csv(os.path.join(save_path, f"eid_ics_RF_data.csv"), index=False)
