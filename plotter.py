@@ -1835,7 +1835,19 @@ def plot_categorical_scatter_fullresponse(df, x_col, y_col, response_id_col, sav
 def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_col, y_label, y_min, y_max, y_ticks,
                     save_path, save_name, color_col=None, color_col_colors=None, palette_bounds=None, annotate_id=True,
                     title_text="", fmt="png", size=600, alpha=1, corr_line=False, diag_line=False, individual_df=None,
-                    id_col=None, vertical_jitter=0, horizontal_jitter=0, x_tick_labels=None, y_tick_labels=None):
+                    id_col=None, vertical_jitter=0, horizontal_jitter=0, x_tick_labels=None, y_tick_labels=None,
+                    # for NHB compatibility
+                    width_mm=None, height_mm=None,
+                    tick_fontsize=None, label_fontsize=None, title_fontsize=None, annotation_fontsize=None,
+                    font_family="sans-serif"):
+
+    # fonts (defaults preserve old look unless overridden)
+    _default_tick = 22 if tick_fontsize is None else tick_fontsize
+    _default_label = 25 if label_fontsize is None else label_fontsize
+    _default_title = 16 if title_fontsize is None else title_fontsize
+    _default_annot = 20 if annotation_fontsize is None else annotation_fontsize
+
+    plt.rcParams["font.family"] = font_family
 
     plt.figure(figsize=(8, 6))
     sns.set_style("ticks")
@@ -1902,40 +1914,47 @@ def plot_scatter_xy(df, identity_col, x_col, x_label, x_min, x_max, x_ticks, y_c
     # annotate
     if annotate_id:
         for i in range(len(df)):
-            plt.text(df[x_col][i], df[y_col][i] + 0.065, df[identity_col][i], fontsize=20, ha="center")
+            plt.text(df[x_col][i], df[y_col][i] + 0.065, df[identity_col][i],fontsize=_default_annot, ha="center")
 
     # update limits based on jitter
     x_min_jittered = df[x_col].min() - horizontal_jitter
     x_max_jittered = df[x_col].max() + horizontal_jitter
     y_min_jittered = df[y_col].min() - vertical_jitter
     y_max_jittered = df[y_col].max() + vertical_jitter
-    # adjust the limits based on the jitter
-    plt.xlim(x_min_jittered, x_max_jittered)
-    plt.ylim(y_min_jittered, y_max_jittered)
 
     # titles etc
     if x_tick_labels is not None:
-        plt.xticks(list(x_tick_labels.keys()), list(x_tick_labels.values()), fontsize=22)
+        plt.xticks(list(x_tick_labels.keys()), list(x_tick_labels.values()), fontsize=_default_tick)
     else:
-        plt.xticks(np.arange(x_min, x_max + (0.05 * x_ticks), x_ticks), fontsize=22)
+        plt.xticks(np.arange(x_min, x_max + (0.05 * x_ticks), x_ticks), fontsize=_default_tick)
 
     if y_tick_labels is not None:
-        plt.yticks(list(y_tick_labels.keys()), list(y_tick_labels.values()), fontsize=22)
+        plt.yticks(list(y_tick_labels.keys()), list(y_tick_labels.values()), fontsize=_default_tick)
     else:
-        plt.yticks(np.arange(y_min, y_max + (0.05 * y_ticks), y_ticks), fontsize=22)
+        plt.yticks(np.arange(y_min, y_max + (0.05 * y_ticks), y_ticks), fontsize=_default_tick)
 
-    plt.xlim([x_min, x_max + (0.05 * y_ticks)])
+    plt.xlim([x_min, x_max + (0.05 * x_ticks)])
     plt.ylim([y_min, y_max + (0.05 * y_ticks)])
-    plt.xlabel(x_label.title(), fontsize=25)
-    plt.ylabel(y_label.title(), fontsize=25)
-    plt.title(f"{title_text.title()}", fontsize=16)
+
+    plt.xlabel(x_label.title(), fontsize=_default_label)
+    plt.ylabel(y_label.title(), fontsize=_default_label)
+    plt.title(f"{title_text.title()}", fontsize=_default_title)
 
     # save plot
     sns.despine(right=True, top=True)
     figure = plt.gcf()  # get current figure
-    figure.set_size_inches(18, 12)
-    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches="tight",
-                pad_inches=0.01)
+    # size with NHB compatibility
+    if width_mm is not None or height_mm is not None:
+        w_in = (width_mm / 25.4) if width_mm is not None else figure.get_size_inches()[0]
+        if height_mm is None:
+            # keep old 3:2 aspect unless user specifies height
+            h_in = w_in * (2 / 3)
+        else:
+            h_in = height_mm / 25.4
+        figure.set_size_inches(w_in, h_in)
+    else:
+        figure.set_size_inches(18, 12)  # legacy
+    plt.savefig(os.path.join(save_path, f"{save_name}.{fmt}"), format=fmt, dpi=1000, bbox_inches="tight", pad_inches=0.01)
 
     plt.close(figure)  # explicitly close this figure
     plt.clf()
@@ -2159,7 +2178,8 @@ def plot_item_differences_with_annotations(df, id_col, value_col, category_col, 
                                            se=False, se_col=None, alpha=0.7, annotate=False,
                                            color_map=None, y_ticks_label_map=None,
                                            x_tick_size=12, y_tick_size=12, annotate_fontsize=9, label_font_size=25,
-                                           x_label="", y_label="", plt_title="", fmt="svg"):
+                                           x_label="", y_label="", plt_title="", fmt="svg",
+                                           size_inches_x=12, size_inches_y_per_item=0.4):
     """
     Plots the difference between MoralStatus and Consciousness ratings for each item.
     Significant differences (off_diagonal=True) are colored differently.
@@ -2178,7 +2198,7 @@ def plot_item_differences_with_annotations(df, id_col, value_col, category_col, 
 
     colors = df_sorted[category_col].map(color_map)
 
-    plt.figure(figsize=(12, len(df_sorted) * 0.4))
+    plt.figure(figsize=(size_inches_x, len(df_sorted) * size_inches_y_per_item))
 
     bars = plt.barh(df_sorted[id_col], df_sorted[value_col], color=colors, alpha=alpha)
 

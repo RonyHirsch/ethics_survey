@@ -1,3 +1,5 @@
+import os
+
 other_creatures_general_names = {
     "You": "You",
     "A large language model": "LLM",
@@ -23,6 +25,42 @@ other_creatures_general_names = {
     "A fetus (human; 24 weeks)": "Fetus",
     "A newborn baby (human)": "Newborn",
     "An ant": "Ant"
+}
+
+"""
+animals, you, baby: https://images.phylopic.org/
+fetus: https://uxwing.com/embryo-pregnancy-icon/ 
+LLM: https://www.flaticon.com/free-icon/computer_3354976?term=computer&page=1&position=10&origin=tag&related_id=3354976
+car: https://www.iconpacks.net/free-icon/car-2901.html
+electron: https://www.svgrepo.com/svg/341785/electron
+"""
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+other_creatures_icon_paths = {
+    "You": os.path.join(BASE_DIR, "icons/human.png"),
+    "A large language model": os.path.join(BASE_DIR, "icons/llm.png"),
+    "A self-driving car": os.path.join(BASE_DIR, "icons/car.png"),
+    "An electron": os.path.join(BASE_DIR, "icons/electron.png"),
+    "A fungus": os.path.join(BASE_DIR, "icons/fungus.png"),
+    "A tree": os.path.join(BASE_DIR, "icons/tree.png"),
+    "A cow": os.path.join(BASE_DIR, "icons/cow.png"),
+    "A turtle": os.path.join(BASE_DIR, "icons/turtle.png"),
+    "A dog": os.path.join(BASE_DIR, "icons/dog.png"),
+    "A cat": os.path.join(BASE_DIR, "icons/cat.png"),
+    "A lobster": os.path.join(BASE_DIR, "icons/lobster.png"),
+    "A sea urchin": os.path.join(BASE_DIR, "icons/urchin.png"),
+    "An octopus": os.path.join(BASE_DIR, "icons/octopus.png"),
+    "A salmon": os.path.join(BASE_DIR, "icons/salmon.png"),
+    "A bat": os.path.join(BASE_DIR, "icons/bat.png"),
+    "A bee": os.path.join(BASE_DIR, "icons/bee.png"),
+    "A mosquito": os.path.join(BASE_DIR, "icons/mosquito.png"),
+    "A fruit-fly": os.path.join(BASE_DIR, "icons/fly.png"),
+    "A rat": os.path.join(BASE_DIR, "icons/rat.png"),
+    "A pigeon": os.path.join(BASE_DIR, "icons/pigeon.png"),
+    "An orangutan": os.path.join(BASE_DIR, "icons/orangutan.png"),
+    "A fetus (human; 24 weeks)": os.path.join(BASE_DIR, "icons/fetus.png"),
+    "A newborn baby (human)": os.path.join(BASE_DIR, "icons/baby.png"),
+    "An ant": os.path.join(BASE_DIR, "icons/ant.png")
 }
 
 other_creatures_isNonHumanAnimal = {"You": 0,
