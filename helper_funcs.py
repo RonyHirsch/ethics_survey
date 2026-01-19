@@ -1,35 +1,34 @@
+"""
+Statistical and machine learning helper functions for survey analysis.
+
+Provides reusable utilities including: random forest pipelines, ordinal regression, mixed-effects models, PERMANOVA,
+chi-square tests, PCA, k-means clustering with silhouette-based optimal k selection
+
+Author: RonyHirsch
+"""
+
 import os
 os.environ["MPLBACKEND"] = "Agg"   # headless backend, no Tkinter
 import re
-import logging
 import matplotlib
 matplotlib.use("Agg", force=True)  # belt-and-suspenders: force Agg to eliminate Tk as it causes redundant runtime errors - BEFORE shap
 import shap
-import string
 import math
-from itertools import combinations
-from collections import Counter
 from sklearn.decomposition import PCA
 from sklearn.mixture import GaussianMixture
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score, pairwise_distances
 from sklearn.preprocessing import StandardScaler
-from bertopic import BERTopic
-from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.inspection import permutation_importance
-from sentence_transformers import SentenceTransformer
 from skbio.stats.distance import permanova
 from skbio.stats.distance import DistanceMatrix
 import scipy.stats as stats
-from scipy.stats import chi2_contingency, mannwhitneyu, ttest_ind, ttest_1samp, ttest_rel, f_oneway, kruskal, shapiro, levene, norm
+from scipy.stats import chi2_contingency, mannwhitneyu, ttest_ind, ttest_1samp, ttest_rel, f_oneway, kruskal, shapiro, levene
 from scipy.spatial.distance import cdist
-from statsmodels.stats.proportion import proportions_ztest, confint_proportions_2indep
+from statsmodels.stats.proportion import proportions_ztest
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from tqdm import tqdm
-from gensim.models import LdaModel
-from gensim.corpora import Dictionary
-from gensim.models.coherencemodel import CoherenceModel
 from sklearn.model_selection import GridSearchCV, cross_val_score, train_test_split, StratifiedKFold
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
@@ -46,19 +45,6 @@ from sklearn.metrics import cohen_kappa_score
 from mord import LogisticIT
 from statsmodels.stats.multitest import multipletests
 import plotter
-
-
-"""
-For free-text response analysis
-Sample stopwords (to avoid requiring NLTK)
-"""
-STOPWORDS = {"the", "and", "to", "of", "a", "is", "in", "that", "it", "as", "for", "on", "with", "this", "be", "or",
-             "are", "an", "by", "can", "at", "which", "from", "but", "has", "have", "was", "were", "not", "so",
-             "if", "about", "more", "do", "does", "i", "you", "we", "they", "he", "she", "them", "their", "its",
-             "being", "will", "would", "should", "there", "some", "what", "when", "how", "why", "just"}
-
-# Set up logging for debugging
-logging.basicConfig(level=logging.INFO)
 
 
 # Custom transformer to merge rare categories
@@ -88,7 +74,7 @@ class RareCategoryMerger(BaseEstimator, TransformerMixin):
 
 def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols, save_path, save_prefix="",
                                rare_class_threshold=5, n_permutations=1000, scoring_method="accuracy",
-                               cv_folds=10, split_test_size=0.3, random_state=42, n_repeats=50,
+                               cv_folds=10, split_test_size=0.3, n_repeats=50,
                                shap_plot=True, shap_plot_colors=None, feature="Experience"):
 
     print("starting RF pipeline")
@@ -113,8 +99,7 @@ def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols,
 
     # train/test split (before any modeling)
     print("splitting data into train and test")
-    X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, test_size=split_test_size,
-                                                        random_state=random_state)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, test_size=split_test_size)
 
     # setting up preprocessing pipelines
     print("setting up preprocessing and model pipeline")
@@ -133,7 +118,7 @@ def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols,
     # full pipeline
     rf_pipeline = Pipeline(steps=[
         ("preprocessor", preprocessor),
-        ("classifier", RandomForestClassifier(class_weight='balanced', random_state=random_state))  # "balanced" = to deal with having a majority/minority class
+        ("classifier", RandomForestClassifier(class_weight='balanced'))  # "balanced" = to deal with having a majority/minority class
     ])
 
     # grid search on training data for hyperparameter tuning
@@ -153,7 +138,7 @@ def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols,
 
     # cross-validate best model on training set
     print("cross-validating best model on training data")
-    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+    cv = StratifiedKFold(n_splits=cv_folds, shuffle=True)
     train_cv_scores = cross_val_score(best_model, X_train, y_train, cv=cv, scoring=scoring_method)
     mean_train_cv_score = np.mean(train_cv_scores)
     print(f"Mean train CV {scoring_method}: {mean_train_cv_score:.4f}")
@@ -213,7 +198,6 @@ def run_random_forest_pipeline(dataframe, dep_col, categorical_cols, order_cols,
         X_test_preprocessed_dense,
         y_test,
         n_repeats=n_repeats,  # permutation importance stability, the standard is 30; Empirical studies (including from scikit-learn authors) show that 30–50 repeats  is usually enough to estimate permutation importance reliably and with low variance.
-        random_state=random_state,
         scoring=scoring_method
     )
 
@@ -370,9 +354,10 @@ def run_group_mann_whitney(df, comparison_cols, group_col, group_col_name, group
     """
     results = []
     for col in comparison_cols:
-        group1 = df[df[group_col] == group1_val][col].dropna()
-        group2 = df[df[group_col] == group2_val][col].dropna()
+        group1 = pd.to_numeric(df[df[group_col] == group1_val][col].dropna())
+        group2 = pd.to_numeric(df[df[group_col] == group2_val][col].dropna())
         result = mann_whitney_utest(list_group1=group1, list_group2=group2)
+
         result["Item"] = col
 
         result[f"N_{group_col_name}={group1_name}"] = len(group1)
@@ -392,8 +377,9 @@ def run_group_mann_whitney(df, comparison_cols, group_col, group_col_name, group
     raw_pvals = result_df["p"]
     _, corrected_pvals, _, _ = multipletests(raw_pvals, method=p_corr_method)  # benjamini-hochberg
 
-    result_df[f"p_{p_corr_method}"] = corrected_pvals
-    result_df = result_df.sort_values(by=f"p_{p_corr_method}")
+    # we only correct in the end (treeBH method), leaving here in case someone wants to use my code
+    #result_df[f"p_{p_corr_method}"] = corrected_pvals
+    #result_df = result_df.sort_values(by=f"p_{p_corr_method}")
     return result_df, f"p_{p_corr_method}"
 
 
@@ -436,7 +422,7 @@ def run_ordinal_pipeline(dataframe, dep_col, categorical_cols, order_cols, save_
     ])
 
     # Cross-validation using Quadratic Weighted Kappa
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    cv = StratifiedKFold(n_splits=5, shuffle=True)
     qwk_scores = []
     for train_idx, test_idx in cv.split(X, y):
         ordinal_pipeline.fit(X.iloc[train_idx], y.iloc[train_idx])
@@ -479,10 +465,7 @@ def run_ordinal_pipeline(dataframe, dep_col, categorical_cols, order_cols, save_
     return result
 
 
-
-
 def mixed_effects_model(long_df, dep_col, ind_col1, ind_col2, id_col, cols_to_standardize=list()):
-    np.random.seed(42)
     scaler = StandardScaler()
     if len(cols_to_standardize) > 0:
         long_df[cols_to_standardize] = scaler.fit_transform(long_df[cols_to_standardize])
@@ -772,7 +755,7 @@ def lca_analysis(df, save_path, n_classes=3):
     df_scaled = scaler.fit_transform(df)
 
     # fit the Gaussian Mixture Model as an approximation to LCA
-    gmm = GaussianMixture(n_components=n_classes, random_state=42)
+    gmm = GaussianMixture(n_components=n_classes)
     gmm.fit(df_scaled)
     latent_classes = gmm.predict(df_scaled)  # get the predicted class (latent class) for each participant
     class_probs = gmm.predict_proba(df_scaled)
@@ -853,9 +836,6 @@ def kmeans_optimal_k(df_pivot, save_path, save_name, k_range=range(2, 10), norma
     """
     Try different values of k for perform_kmeans, and find the optimal one based on silhouette score.
     """
-    best_score = -1
-    best_k = None
-    best_result = None
 
     records = []  # list of dicts for later 1-SE selection
     results = []  # (k, silhouette_avg) list for compatibility
@@ -916,7 +896,7 @@ def kmeans_optimal_k(df_pivot, save_path, save_name, k_range=range(2, 10), norma
 
 
 def perform_kmeans(df_pivot, save_path, save_name, clusters=2, normalize=False, n_iterations=1000,
-                   bootstrap_sil_reps=1000, bootstrap_refit=False, random_state=42):
+                   bootstrap_sil_reps=1000, bootstrap_refit=False):
     """
     Perform k-means clustering (scikit-learn's) to group the data into a specified number of clusters.
     We then append the cluster labels to the dataset and calculate the silhouette score,
@@ -937,7 +917,7 @@ def perform_kmeans(df_pivot, save_path, save_name, clusters=2, normalize=False, 
 
     # Perform k-means clustering
     # The n_init parameter controls the number of times the KMeans algorithm is run with different centroid seeds; 10 is the default
-    kmeans = KMeans(n_clusters=clusters, random_state=random_state, n_init=10)
+    kmeans = KMeans(n_clusters=clusters, n_init=10)
     labels = kmeans.fit_predict(df_pivot)
     df_pivot = df_pivot.copy()
     df_pivot.loc[:, "Cluster"] = labels
@@ -1000,13 +980,12 @@ def perform_kmeans(df_pivot, save_path, save_name, clusters=2, normalize=False, 
             file.write(str(line) + '\n')
 
     # bootstrap SE for the silhouette (default: no refit)
-    sil_se = _silhouette_bootstrap_se(df_pivot, clusters=clusters, B=bootstrap_sil_reps, refit=bootstrap_refit,
-                                      rng_seed=random_state)
+    sil_se = _silhouette_bootstrap_se(df_pivot, clusters=clusters, B=bootstrap_sil_reps, refit=bootstrap_refit)
 
     return df_pivot, kmeans, cluster_centroids, float(silhouette_avg), float(sil_se), float(p_value)
 
 
-def _silhouette_bootstrap_se(df_with_cluster, clusters, B=1000, refit=False, rng_seed=42):
+def _silhouette_bootstrap_se(df_with_cluster, clusters, B=1000, refit=False):
     """
     Estimate SE of silhouette by bootstrap.
     B: resample rows with replacement and recompute a silhouette score, the SE is then the sample standard deviation/√B
@@ -1016,7 +995,7 @@ def _silhouette_bootstrap_se(df_with_cluster, clusters, B=1000, refit=False, rng
     """
     if B is None or B <= 0:
         return np.nan
-    rng = np.random.default_rng(rng_seed)
+    rng = np.random.default_rng()
     X_full = df_with_cluster.drop(columns="Cluster")
     y_full = df_with_cluster["Cluster"].to_numpy()
     n = len(df_with_cluster)
@@ -1038,7 +1017,7 @@ def _silhouette_bootstrap_se(df_with_cluster, clusters, B=1000, refit=False, rng
                 continue
         else:
             try:
-                km = KMeans(n_clusters=clusters, random_state=42, n_init=10)
+                km = KMeans(n_clusters=clusters, n_init=10)
                 yb = km.fit_predict(Xb)
                 if len(np.unique(yb)) < 2:
                     continue
@@ -1323,260 +1302,6 @@ def two_proportion_ztest(group1, df1, group2, df2, col_items, col_prop, col_n):
 
     # Return the results as a DataFrame
     return pd.DataFrame(result)
-
-
-def preprocess_text(text):
-    """
-    Preprocess text for analysis: lowercase, remove punctuation, remove stopwords
-    """
-    text = text.lower()
-    text = text.translate(str.maketrans("", "", string.punctuation))  # remove punctuation
-    words = text.split()  # tokenization (split by spaces)
-    words = [word for word in words if word not in STOPWORDS]  # remove stopwords
-    return " ".join(words)  # cleaned text
-
-
-def preprocess_text_basic(text):
-    """
-    Does NOT remove stop words etc; just lowercase and remove extra spaces
-    :param text:
-    :return:
-    """
-    return str(text).strip().lower()
-
-
-def find_optimal_topics(df, text_column, topic_range=range(2, 10)):
-    """
-    ***
-    WHY I ENDED UP NOT USING IT:
-    Despite its great results on medium or large sized texts (>50 words), typically mails and news articles are about
-    this size range, LDA poorly performs on short texts like Tweets, Reddit posts or StackOverflow titles’ questions.
-    ***
-    The most popular Topic Modeling algorithm is LDA, Latent Dirichlet Allocation (LDA).
-    - Latent because the topics are “hidden”. We have a bunch of texts and we want the algorithm to put them into
-    clusters that will make sense to us.
-    - Dirichlet stands for the Dirichlet distribution the model uses as a prior to generate document-topic and
-    word-topic distributions.
-    - Allocation because we want to allocate topics to our texts.
-    We will choose the optimal number of topics for LDA analysis based on the coherence score.
-    Coherence Score measures how "interpretable" topics are by checking word co-occurrence
-    (Higher coherence = better topic separation).
-    We will use Gensim to calculate coherence.
-    """
-
-    tokenized_text = df[text_column].dropna().astype(str).tolist()
-    tokenized_text = [text.split() for text in tokenized_text]
-
-    dictionary = Dictionary(tokenized_text)
-    corpus = [dictionary.doc2bow(text) for text in tokenized_text]
-
-    coherence_scores = []
-
-    for num in topic_range:
-        lda_model = LdaModel(corpus=corpus, id2word=dictionary, num_topics=num, passes=10, random_state=42)
-        """
-        Coherence Score measures how well words in a topic make sense together. 
-        It evaluates if words frequently appear together in actual responses.
-        For dyads of words in a given topic, it calculates the Pointwise Mutual Information (how often the words
-        actually co-occurred in responses). 
-        """
-        coherence_model = CoherenceModel(model=lda_model, texts=tokenized_text, dictionary=dictionary, coherence='c_v')
-        coherence_scores.append(coherence_model.get_coherence())
-
-    # If we want, we can plot the coherence scores (THE HIGHER THE BETTER)
-    #import matplotlib.pyplot as plt
-    #plt.plot(topic_range, coherence_scores, marker='o')
-    #plt.xlabel("Number of Topics")
-    #plt.ylabel("Coherence Score")
-    #plt.title("Optimal Number of Topics")
-    #plt.show()
-
-    # best number of topics based on coherence score
-    best_num_topics = topic_range[coherence_scores.index(max(coherence_scores))]
-    print(f"\nOptimal number of topics: {best_num_topics}, coherence_score = {max(coherence_scores)}")
-    return best_num_topics
-
-
-def topic_modelling_LDA(df, text_column, save_path, save_name, num_topics=None):
-    """
-    I assume df contains a row per repsonse (participant), with an ID column, and some column where all the free
-    text is
-    ***
-    WHY I ENDED UP NOT USING IT:
-    Despite its great results on medium or large sized texts (>50 words), typically mails and news articles are about
-    this size range, LDA poorly performs on short texts like Tweets, Reddit posts or StackOverflow titles’ questions.
-    It doesn't have context-awareness (the ability to detect that a meaning of a word can change based on context)
-    ***
-    The most popular Topic Modeling algorithm is LDA, Latent Dirichlet Allocation (LDA).
-    - Latent because the topics are “hidden”. We have a bunch of texts and we want the algorithm to put them into
-    clusters that will make sense to us.
-    - Dirichlet stands for the Dirichlet distribution the model uses as a prior to generate document-topic and
-    word-topic distributions.
-    - Allocation because we want to allocate topics to our texts.
-    """
-    # preprocess
-    df["processed_text"] = df[text_column].astype(str).apply(preprocess_text)
-    logging.info("Preprocessing done")
-
-    """
-    Word Frequency Analysis
-    """
-    all_words = " ".join(df["processed_text"]).split()
-    word_freq = Counter(all_words)
-    total_words = sum(word_freq.values())
-    word_freq_df = pd.DataFrame(word_freq.items(), columns=["Word", "Frequency"])
-    word_freq_df["Proportion (%)"] = (word_freq_df["Frequency"] / total_words) * 100
-    word_freq_df.sort_values(by="Frequency", ascending=False, inplace=True)
-    word_freq_csv_path = os.path.join(save_path, f"{save_name}_word_freqs.csv")
-    word_freq_df.to_csv(word_freq_csv_path, index=False)
-    logging.info("Word Frequency Analysis done")
-    """
-    Topic modeling with LDA
-    """
-    if num_topics is None:
-        num_topics = find_optimal_topics(df=df, text_column="processed_text")
-    logging.info("Found optimal number of topics")
-
-    tokenized_text = df["processed_text"].dropna().astype(str).tolist()  # avoids issues with NaN values or non-string inputs
-    tokenized_text = [text.split() for text in tokenized_text]
-    dictionary = Dictionary(tokenized_text)
-    corpus = [dictionary.doc2bow(text) for text in tokenized_text]
-    logging.info("Created the corpus")
-
-    """
-    LDA is a probabilistic generative model for discovering hidden topics.
-    Each response is considered a mixture of topics. Each topic is a mixture of words, with some words more important 
-    than others.
-    LDA assigns probabilities of topics to responses and words to topics, and tries to learn these distributions to find 
-    coherent themes in the data.
-    """
-    lda = LdaModel(corpus=corpus, id2word=dictionary, num_topics=num_topics, passes=10, random_state=42)
-    logging.info("LDA model trained")
-
-    # extract the topics
-    topics_data = []
-    for topic_idx, topic in enumerate(lda.show_topics(num_topics=num_topics, formatted=False)):
-        logging.info(f"Extracting topics: {topic_idx}")
-        top_words = [word for word, _ in topic[1]]
-        topics_data.append({"Topic": topic_idx + 1, "Top Words": ", ".join(top_words)})
-    topics_df = pd.DataFrame(topics_data)
-    logging.info("Done; created topic df")
-    topics_csv_path = os.path.join(save_path, f"{save_name}_topics.csv")
-    topics_df.to_csv(topics_csv_path, index=False)
-
-    return
-
-
-def topic_modelling_bertopic(df, text_column, save_path, save_name, use_tfidf=True):
-    """
-    Perform topic modeling using BERTopic (transformer-based architecture, enabling context-aware analysis of text)
-    https://arxiv.org/abs/2203.05794
-     M. Grootendorst, “BERTopic: Neural topic modeling with a class-based TF-IDF procedure,” CoRR, vol. /2203.05794, 2022
-
-    - `use_tfidf`: If True, uses TF-IDF representation. If False, uses CountVectorizer.
-    """
-
-    # BASIC - just lowercase and removing extra spaces
-    df["processed_text"] = df[text_column].astype(str).apply(preprocess_text_basic)
-    texts = df["processed_text"].tolist()
-    logging.info("Preprocessing completed")
-
-    """
-    Create word embeddings:
-    SentenceTransformer = a wrapper around pretrained BERT-like models that generate sentence embeddings.
-    Normally, BERT models process individual words and do not generate a fixed-size embedding for an entire sentence.
-    SentenceTransformer solves this by using models fine-tuned for sentence similarity tasks (like SBERT).
-    Instead of getting embeddings per word, we get a single vector per sentence (=response). 
-    """
-    # this is a compressed and faster version of BERT (fewer params and runs w/o GPU)
-    embedding_model = SentenceTransformer("all-MiniLM-L6-v2")  # outputs a 384-dim vector for each response, was trained to capture semantic similarities
-    logging.info("Sentence Transformer loaded.")
-
-    """
-    Text Vectorization:
-    
-    - CountVectorizer(): Converts text into a bag-of-words representation. It creates a response-term matrix where each 
-    row is a sentence, and each column is a word: each cell counts how many times a word appears in a response.
-    It works well for keyword frequency analysis but is highly affected by common words and doesn't handle word importance
-    
-    - TfidfVectorizer(): applies TF-IDF weighting, so instead of raw word counts it assigns importance scores to words:
-    TF−IDF= TF×log(N/DF). Such that:
-        TF (Term Frequency): How often a word appears in a document.
-        DF (Document Frequency): How many documents contain the word. (responses)
-        N: Total number of documents. (responses)
-    
-    """
-    vectorizer = TfidfVectorizer() if use_tfidf else CountVectorizer()
-    method = "TF-IDF" if use_tfidf else "CountVectorizer"
-    logging.info(f"Vectorization method selected: {method}")
-
-    """
-    Fit BERTopic model to the data: it will use Uses HDBSCAN (Hierarchical Density-Based Clustering) to cluster 
-    similar embeddings. BERTopic Assigns each sentence to a topic based on closeness in embedding space.
-    """
-    topic_model = BERTopic(
-        embedding_model=embedding_model,  # BERT embeddings: sentences are turned to vectors
-        vectorizer_model=vectorizer,  # TF-IDF or CountVectorizer
-        min_topic_size=5,  # Minimum cluster size
-        verbose=True
-    )
-    topics, probs = topic_model.fit_transform(texts)  # fits the model to the dataset and returns topic labels.
-    logging.info("BERTopic model trained.")
-
-    # save topic information
-    topics_df = topic_model.get_topic_info()
-    topics_df.to_csv(os.path.join(save_path, f"{save_name}_topics.csv"), index=False)
-
-    # save topics for each response
-    doc_topics = pd.DataFrame({"Text": texts, "Topic": topics})
-    doc_topics.to_csv(os.path.join(save_path, f"{save_name}_document_topics.csv"), index=False)
-
-    logging.info("Topics saved")
-
-    # Show top words per topic
-    print("\nTop words per topic:")
-    print(topic_model.get_topic_info())
-
-    # Save visualization
-    topic_model.visualize_barchart().write_html(os.path.join(save_path, f"{save_name}_topic_chart.html"))
-    logging.info("Visualization saved")
-
-    return topic_model
-
-
-def preprocess_text_gsdmm(text):
-    """
-    - Tokenization using spaCy tokenizer.
-    - Removing stop words and 1 character words.
-    - Stemming using the nltk library’s stemmer.
-    - Removing empty responses and responses with more than 30 tokens.
-    - Removing unique token (with a term frequency = 1).
-    """
-    text = text.lower()  # lowercase
-    text = re.sub(r'\d +', "", text)  # remove numbers
-    text = text.translate(str.maketrans("", "", string.punctuation))  # remove punctuation
-    text = text.strip()  # remove whitespace
-    # tokenization
-    nlp = English()
-    tokens = nlp(text)
-    words = text.split()  # tokenization (split by spaces)
-    words = [word for word in words if word not in STOPWORDS]  # remove stopwords
-    return
-
-
-def topic_modelling_GSDMM(df, text_column, save_path, save_name):
-    """
-    The Gibbs Sampling Dirichlet Mixture Model (GSDMM) is an “altered” LDA algorithm, showing great results on short
-    texts, that makes the initial assumption: 1 topic corresponds to 1 document.
-    The words within a document are generated using the same unique topic, and not from a mixture of topics as it was
-    in the original LDA.
-    :return:
-    """
-
-    # preprocess
-    df["processed_text"] = df[text_column].astype(str).apply(preprocess_text_gsdmm)
-
-    return
 
 
 def premutations_for_array(matrix, metric_func, n_permutations=1000, print_iter=False, *args, **kwargs):

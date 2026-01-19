@@ -315,9 +315,6 @@ scenario_mapping = {
 }
 
 
-
-
-
 # pill for no phenomenology; would you take it
 Q_ZOMBIE = "Would you take the pill?"
 zombification_pill = {

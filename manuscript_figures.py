@@ -1,3 +1,12 @@
+"""
+Visualization functions for manuscript figures and supplementary materials.
+
+Generates publication-quality plots (histograms, scatter plots, stacked bars, pie charts) from processed survey
+data for the main manuscript and supplementary materials.
+
+Author: RonyHirsch
+"""
+
 import os
 import re
 import math
@@ -72,11 +81,10 @@ C_I_HOW_COLOR_MAP = {survey_mapping.ANS_C_NECESSARY: "#1a4e73",
 C_I_HOW_ORDER = [survey_mapping.ANS_NO, survey_mapping.ANS_SAME, survey_mapping.ANS_C_NECESSARY,
                  survey_mapping.ANS_I_NECESSARY, survey_mapping.ANS_THIRD]
 
-MAJORITY_COLORS = {"majority": "#33546D", #"#365367", #"#102E4A",  # "#6F1D57"
-                   "minority": "#F9F4E6"} #"#F2EAE3"}  # "#EDDAB9"  "#F2EAE3"  "#F8DAC3"  "#F8F4E9"
+MAJORITY_COLORS = {"majority": "#155665", "minority": "#C4CFCE"}
+# orig {"majority": "#33546D", "minority": "#F9F4E6"}
 
-EARTH_DANGER_CLUSTER_COLORS_MAJORITY = {0: "#FA8771", #"#F494AB",#"#954F75",  # "#F8789A"  "#FF5978"  "#C65D7B"
-                                        1: "#AD4560"} #"#FFCAA2"} #"#FFCFCB"}  # "#FCBD8B"  "#FFC876"  "#F68989"
+EARTH_DANGER_CLUSTER_COLORS_MAJORITY = {0: "#FFBE80", 1: "#9B532D"}
 
 
 def unify_data_all(exploratory_path, preregistered_path, followup_path, save_path):
@@ -112,9 +120,9 @@ def unify_data_all(exploratory_path, preregistered_path, followup_path, save_pat
         ics_df = pd.read_csv(os.path.join(main_survey[sample], ics, "ics_with_c_groups.csv"))
         eid_df = pd.read_csv(os.path.join(main_survey[sample], eid, "earth_danger_clusters.csv"))
         # need to be careful when mapping clusters to meanings here
-        if sample == "exploratory":  # Cluster 0 (yellow) is the anthropocentric one and Cluster 1 (blue) is the non
+        if sample == "exploratory":  # Cluster 0 is the anthropocentric one and Cluster 1 is the non
             eid_df["Cluster"] = eid_df["Cluster"].map({0: "anthropocentric", 1: "non-anthropocentric"})
-        else:  # in the prereg it's the opposite: Cluster 0 (yellow) is the non, and Cluster 1 (blue) is the anthropocentric
+        else:  # in the prereg it's the opposite: Cluster 0 is the non, and Cluster 1 is the anthropocentric
             eid_df["Cluster"] = eid_df["Cluster"].map({0: "non-anthropocentric", 1: "anthropocentric"})
         dfs = [df, eid_df, ics_df]
         merged = reduce(lambda left, right: left.merge(right, on=sub_id, how="left"), dfs)
@@ -2839,7 +2847,7 @@ def plot_categorical_bars(df, category_col, value_col, categories_colors,
                 else:  # middle
                     full_y = full_value / 2
                     full_va = "center"
-                    text_color = get_text_color(color)
+                    text_color = get_text_color(color)  # dark if dark, white if bright
 
                 ax.text(x_positions[i], full_y, f"{full_value:.0f}%",
                         ha='center', va=full_va, fontsize=value_fontsize, color=text_color)
@@ -3357,7 +3365,6 @@ def figure_4(preregistered_path, save_path):
         print(f"\n{q_col}:")
         print(df.groupby("Cluster")[q_col].agg(['mean', 'std', 'sem', 'count']))
 
-
     # plot per MAJORITY VOTE
     plot_cluster_preferences(
         df=df,
@@ -3445,17 +3452,18 @@ if __name__ == '__main__':
     Step 1: prepare NHB MAIN figures
     """
     manage_main_plotting(
-        main_figs_path=r"",
-        preregistered_path=r"")
+        main_figs_path=r"C..\main_figs",
+        preregistered_path=r"..\replication")
 
     """
     Step 2: plotting FOR SUPPLEMENTARY!
     """
     # combine all samples
-
-
-    save_path = r""
-    sub_df = unify_data_all(exploratory_path, preregistered_path, followup_path, save_path)
+    exploratory_path = r"..\exploratory"
+    preregistered_path = r"..\replication"
+    followup_path = r"..\follow-up"
+    save_path = r"..\supp_figs"
+    # sub_df = unify_data_all(exploratory_path, preregistered_path, followup_path, save_path)
     sub_df = pd.read_csv(os.path.join(save_path, "sub_df.csv"))
 
     manage_plotting(sub_df=sub_df, save_path=save_path)

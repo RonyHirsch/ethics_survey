@@ -1,3 +1,12 @@
+"""
+Survey response analysis pipeline.
+
+Produces all descriptive statistics, chi-square tests, clustering analyses, and data preparation files for
+R mixed-effects modeling from the processed survey data. Outputs are saved as CSVs and SVG plots.
+
+Author: RonyHirsch
+"""
+
 import os
 import pandas as pd
 import numpy as np
@@ -671,6 +680,7 @@ def ics_descriptives(analysis_dict, save_path):
         os.mkdir(result_path)
 
     df_ics = analysis_dict["ics"].copy()
+    df_ics.to_csv(os.path.join(result_path, "ics_df_raw.csv"), index=False)
     df_c_groups = calculate_ics_proportions(df_ics=df_ics, save_path=result_path)
     df_c_groups.to_csv(os.path.join(result_path, "ics_with_c_groups.csv"), index=False)
 
@@ -763,28 +773,28 @@ def perform_chi_square(df1, col1, df2, col2, id_col, save_path, save_name, save_
         if save_expected:
             expected_df.to_csv(os.path.join(save_path, f"{save_name}_chisquared_expected.csv"), index=False)
 
-    # plot
-    counts = merged.groupby([col2, col1]).size().unstack(fill_value=0)
-    grouped_props = counts.div(counts.sum(axis=1), axis=0) * 100
-    plot_ready_df = grouped_props.reset_index()
-    if not y_tick_list:
-        y_tick_list = [0, 25, 50, 75, 100]
-    if not grp2_map:
-        if all(isinstance(item, str) for item in grp2_vals):  # if all items in the list are strings, we need ints for the X axis
-            grp2_map = {grp2_vals[i]: i for i in range(len(grp2_vals))}
-        else:
-            grp2_map = {grp2_vals[i]: grp2_vals[i] for i in range(len(grp2_vals))}
-    if not col2_name:
-        col2_name = col2
-    plotter.plot_expertise_proportion_bars(df=plot_ready_df,
-                                           cols=grp1_vals, cols_colors=grp1_color_dict,
-                                           x_axis_exp_col_name=col2,
-                                           x_label=f"{col2_name}", x_map=grp2_map,
-                                           y_ticks=y_tick_list,
-                                           save_name=f"{save_name}",
-                                           save_path=save_path, plt_title=f"", plot_mean=False,
-                                           stats_df=None,
-                                           annotate_bar=True, annot_font_color="white")
+        # plot - if we want to save those
+        counts = merged.groupby([col2, col1]).size().unstack(fill_value=0)
+        grouped_props = counts.div(counts.sum(axis=1), axis=0) * 100
+        plot_ready_df = grouped_props.reset_index()
+        if not y_tick_list:
+            y_tick_list = [0, 25, 50, 75, 100]
+        if not grp2_map:
+            if all(isinstance(item, str) for item in grp2_vals):  # if all items in the list are strings, we need ints for the X axis
+                grp2_map = {grp2_vals[i]: i for i in range(len(grp2_vals))}
+            else:
+                grp2_map = {grp2_vals[i]: grp2_vals[i] for i in range(len(grp2_vals))}
+        if not col2_name:
+            col2_name = col2
+        plotter.plot_expertise_proportion_bars(df=plot_ready_df,
+                                               cols=grp1_vals, cols_colors=grp1_color_dict,
+                                               x_axis_exp_col_name=col2,
+                                               x_label=f"{col2_name}", x_map=grp2_map,
+                                               y_ticks=y_tick_list,
+                                               save_name=f"{save_name}",
+                                               save_path=save_path, plt_title=f"", plot_mean=False,
+                                               stats_df=None,
+                                               annotate_bar=True, annot_font_color="white")
     if contingency_back:
         return chisquare_result, contingency_table
     return chisquare_result
@@ -1110,8 +1120,7 @@ def kpt_per_ics(kpt_df_sensitive, df_ics_groups, save_path):
                                                  col2_name=f"{kill_col}", # this is not a mistake, it's so that the X axis will describe the case
                                                  id_col=process_survey.COL_ID, save_path=save_path,
                                                  save_name=f"kpt_sensitive_{kill_col}_by_ics",
-                                                 save_expected=False, contingency_back=True)
-        contingency.to_csv(os.path.join(save_path, f"kpt_sensitive_{kill_col}_by_ics_contingency.csv"), index=True)
+                                                 save_expected=False, contingency_back=True, write_files=False)
         results.append(result)
 
     result_df = pd.concat(results)
@@ -1142,9 +1151,6 @@ def eid_descriptives(analysis_dict, save_path):
     counts_df = df_earth[questions].apply(lambda col: col.value_counts())
     counts_df = counts_df.reset_index(drop=False, inplace=False).rename(columns={"index": "choice"}, inplace=False)
     counts_df.to_csv(os.path.join(result_path, "eid_counts.csv"), index=False)
-
-    # replace options labels
-    #counts_df.loc[:, "choice"] = counts_df["choice"].replace(survey_mapping.EARTH_DANGER_ANS_MAP)
 
     plot_data = list()
     for scenario in questions:
@@ -1214,7 +1220,6 @@ def eid_clustering(eid_df, save_path):
                                                                                                  save_name="items",
                                                                                                  k_range=range(2, 5))
     df_pivot.to_csv(os.path.join(save_path, f"earth_danger_clusters.csv"), index=True)  # index is participant code
-
 
     """
     Plot the KMeans cluster centroids:
@@ -1302,11 +1307,13 @@ def c_v_ms(analysis_dict, save_path):
     item_diff = item_diff.reset_index()
 
     # compute difference and confidence intervals
+    item_diff["mean_rating_Moral Status"] = pd.to_numeric(item_diff["mean_rating_Moral Status"], errors='coerce')
+    item_diff["mean_rating_Consciousness"] = pd.to_numeric(item_diff["mean_rating_Consciousness"], errors='coerce')
     item_diff["diff"] = item_diff["mean_rating_Moral Status"] - item_diff["mean_rating_Consciousness"]
-    item_diff["se_diff"] = np.sqrt(
+    item_diff["se_diff"] = (
         (item_diff["sd_rating_Moral Status"] ** 2 / item_diff["n_Moral Status"]) +
         (item_diff["sd_rating_Consciousness"] ** 2 / item_diff["n_Consciousness"])
-    )
+    ) ** 0.5
     item_diff["lower"] = item_diff["diff"] - 1.96 * item_diff["se_diff"]
     item_diff["upper"] = item_diff["diff"] + 1.96 * item_diff["se_diff"]
 
@@ -1335,46 +1342,9 @@ def c_v_ms(analysis_dict, save_path):
     item_diff["df_welch"] = df_num / df_den
 
     # two-sided p-values (Welch)
+    item_diff['t_stat_welch'] = pd.to_numeric(item_diff['t_stat_welch'], errors='coerce')
+    item_diff['df_welch'] = pd.to_numeric(item_diff['df_welch'], errors='coerce')
     item_diff["p_welch"] = 2 * stats.t.sf(np.abs(item_diff["t_stat_welch"]), df=item_diff["df_welch"])
-
-    """
-    Calculate also the paired option: use the within-respondent differences between consciousness and moral status 
-    ratings. It SE by using the covariance implicitly.
-    """
-    # Build respondent-by-item wide table with both topics
-    wide = long_data.pivot_table(
-        index=[process_survey.COL_ID, "Item"],
-        columns="Topic",
-        values="Rating",
-        aggfunc="mean"
-    ).reset_index()
-
-    # Drop rows missing either rating (robust if any missingness sneaks in)
-    wide = wide.dropna(subset=["Consciousness", "Moral Status"])
-
-    # Within-respondent difference for each item
-    wide["diff_i"] = wide["Moral Status"] - wide["Consciousness"]
-
-    # Aggregate paired stats per item (vectorized & compact)
-    g = wide.groupby("Item")["diff_i"]
-    paired = pd.DataFrame({
-        "n_paired": g.size(),
-        "diff_paired": g.mean(),
-        "sd_diff_paired": g.std(ddof=1)
-    })
-    paired["se_diff_paired"] = paired["sd_diff_paired"] / np.sqrt(paired["n_paired"])
-
-    # Protect against zero SE (all respondents identical): leaves t/p as NaN
-    paired["t_stat_paired"] = paired["diff_paired"] / paired["se_diff_paired"].replace(0, np.nan)
-    paired["df_paired"] = paired["n_paired"] - 1
-    paired["p_paired"] = 2 * stats.t.sf(np.abs(paired["t_stat_paired"]), df=paired["df_paired"])
-    paired["lower_paired"] = paired["diff_paired"] - 1.96 * paired["se_diff_paired"]
-    paired["upper_paired"] = paired["diff_paired"] + 1.96 * paired["se_diff_paired"]
-    paired["off_diagonal_paired"] = (paired["lower_paired"] > 0) | (paired["upper_paired"] < 0)
-    paired["direction_paired"] = np.where(paired["diff_paired"] > 0, "above the diagonal", "below the diagonal")
-
-    # Merge paired results back into your existing item_diff
-    item_diff = item_diff.merge(paired.reset_index(), on="Item", how="left")
 
     # save
     item_diff.to_csv(os.path.join(result_path, f"item_off_diagonal_differences.csv"), index=False)
@@ -1442,22 +1412,6 @@ def c_v_ms(analysis_dict, save_path):
                                                   avg_ms_value=("Moral Status", "mean")).reset_index()
     c_1_entity_stats = c_1_entity_stats.sort_values(by="num_people", ascending=False).reset_index(drop=True)
     c_1_entity_stats.to_csv(os.path.join(result_path, f"c_1_with_ms_3-4_summary.csv"), index=False)
-
-    """
-    Plot a pie for each entity such that it'll have all c=1 / ms=1 as a 100%, and proportions of ms / c ratings 
-    """
-    colors_dict = {i: C_V_MS_COLORS[survey_mapping.ANS_C_MS_LABELS_REVERSED[i]] for i in range(1, 5)}
-
-    # consciousness = 1 : moral status distribution
-    # take top 5:
-    c_1_top_5 = c_1_entity_stats["Item"].head(5).tolist()
-    save_and_plot_pies(df=df, entities=c_1_top_5, filter_prefix="c", value_prefix="ms", result_path=result_path,
-                       title_suffix="Moral Status (Consciousness = 1)", file_prefix="c1_ms", colors=colors_dict)
-
-    # moral status = 1 : consciousness distribution
-    ms_1_top_5 = ms_1_entity_stats["Item"].head(5).tolist()
-    save_and_plot_pies(df=df, entities=ms_1_top_5, filter_prefix="ms", value_prefix="c", result_path=result_path,
-                       title_suffix="Consciousness (Moral Status = 1)", file_prefix="ms1_c", colors=colors_dict)
 
     return long_data, df, result_path
 
@@ -1635,7 +1589,8 @@ def ms_c_prios_descriptives(analysis_dict, save_path):
     """
     General descriptives
     """
-    for question in list(survey_mapping.PRIOS_Q_NAME_MAP.keys()):  # yes/no questions about moral status priorities
+    existing_columns = [col for col in list(survey_mapping.PRIOS_Q_NAME_MAP.keys()) if col in ms_prios.columns]
+    for question in existing_columns:  # yes/no questions about moral status priorities
         df_q = ms_prios.loc[:, [process_survey.COL_ID, question]]
         category_counts = df_q[question].value_counts()
         category_props = df_q[question].value_counts(normalize=True)
@@ -1731,12 +1686,13 @@ def ms_features_descriptives(analysis_dict, save_path):
     """
     Now, plot
     """
-    plotter.plot_categorical_bars(categories_prop_df=df_unified, category_col="index",data_col=f"{PROP}_one",
+    df_unified = df_unified.dropna(subset=['index'])
+    plotter.plot_categorical_bars(categories_prop_df=df_unified, category_col="index", data_col=f"{PROP}_all",
                                   categories_colors=IMPORTANT_FEATURE_COLORS,
                                   save_path=result_path, save_name=f"important_features", fmt="svg",
                                   y_min=0, y_max=101, y_skip=10, delete_y=False, inch_w=22, inch_h=12,
-                                  layered=True, full_data_col=f"{PROP}_all", partial_data_col=f"{PROP}_one",
-                                  layered_alpha=0.4, add_pcnt=True, pcnt_color="#2C333A",pcnt_size=30,
+                                  layered=False, full_data_col=f"{PROP}_all", partial_data_col=None,
+                                  layered_alpha=0.4, add_pcnt=True, pcnt_color="#2C333A", pcnt_size=30,
                                   pcnt_position="top", layered_partial_pcnt_position="middle")
 
     return df_unified, most_important, result_path
@@ -1824,9 +1780,8 @@ def c_graded_descriptives(analysis_dict, save_path):
 
     df_melted = c_graded.melt(id_vars=process_survey.COL_ID, value_vars=rating_questions,
                               var_name='question', value_name='rating')
-    counts = df_melted.groupby(['rating', 'question'])[process_survey.COL_ID].nunique().unstack(
-        fill_value=0).reset_index(drop=False, inplace=False)
-    counts.to_csv(os.path.join(save_path, "consciousness_graded_rating_counts.csv"), index=False)
+    counts = df_melted.groupby(['rating', 'question'])[process_survey.COL_ID].nunique().unstack(fill_value=0).reset_index(drop=False, inplace=False)
+    counts.to_csv(os.path.join(result_path, "consciousness_graded_rating_counts.csv"), index=False)
 
     """
     Binarize agreement with each assertion: 1/2 = Disagree (0); 3/4 = Agree (1). 
@@ -1834,6 +1789,32 @@ def c_graded_descriptives(analysis_dict, save_path):
     agreed = [3, 4]
     for col in rating_questions:
         c_graded[f"binary_{col}"] = c_graded[col].isin(agreed).astype(int)
+
+    """
+    People who agreed to some degree with the graded assertion were asked survey_mapping.Q_GRADED_MATTERMORE
+    """
+    # how many were even asked
+    asked_mask = c_graded[survey_mapping.Q_GRADED_MATTERMORE].notna()
+    n_asked = asked_mask.sum()
+    n_total = len(c_graded)
+    pct_asked = (100 * n_asked / n_total) if n_total > 0 else 0
+    # out of them, yes/no
+    asked_data = c_graded.loc[asked_mask, survey_mapping.Q_GRADED_MATTERMORE]
+    value_counts = asked_data.value_counts()
+    # summarize
+    summary_data = {
+        "metric": ["total_n", f"agreed (3/4)_{survey_mapping.Q_GRADED_UNEQUAL}", "agreed_prop",
+                   f"{survey_mapping.Q_GRADED_MATTERMORE}_{survey_mapping.ANS_YES}", f"{survey_mapping.Q_GRADED_MATTERMORE}_{survey_mapping.ANS_NO}",
+                   f"{survey_mapping.Q_GRADED_MATTERMORE}_{survey_mapping.ANS_YES}_prop", f"{survey_mapping.Q_GRADED_MATTERMORE}_{survey_mapping.ANS_NO}_prop"],
+        "value": [n_total, n_asked, round(pct_asked, 2)]
+    }
+    yes_count = value_counts.get(survey_mapping.ANS_YES, 0)
+    no_count = value_counts.get(survey_mapping.ANS_NO, 0)
+    pct_yes = (100 * yes_count / n_asked) if n_asked > 0 else 0
+    pct_no = (100 * no_count / n_asked) if n_asked > 0 else 0
+    summary_data["value"].extend([yes_count, no_count, round(pct_yes, 2), round(pct_no, 2)])
+    matter_more_summary = pd.DataFrame(summary_data)
+    matter_more_summary.to_csv(os.path.join(result_path, "matter_more_summary.csv"), index=False)
 
     return c_graded, result_path
 
@@ -1881,7 +1862,7 @@ def eid_ics_rf(eid_df, df_experience, save_path):
     """
 
     exp_columns = list(survey_mapping.Q_EXP_NAME_DICT.values())
-    #exp_columns = [x for x in df_experience.columns if "_expert" in x]  # binarized option
+    #exp_columns = [x for x in df_experience.columns if "_expert" in x]  # binarized option: I didn't do that
 
     # create a df for the pipeline
     exp_relevant = df_experience.loc[:, [process_survey.COL_ID] + exp_columns]
@@ -1902,7 +1883,7 @@ def eid_ics_rf(eid_df, df_experience, save_path):
                                             categorical_cols=categorical_cols, order_cols=order_cols,
                                             save_path=save_path, save_prefix="",
                                             rare_class_threshold=5, n_permutations=1000, scoring_method="accuracy",
-                                            cv_folds=10, split_test_size=0.3, random_state=42, n_repeats=50,
+                                            cv_folds=10, split_test_size=0.3, n_repeats=50,
                                             shap_plot=True, shap_plot_colors=EARTH_DANGER_CLUSTER_COLORS)
     return
 
@@ -2146,5 +2127,3 @@ def analyze_survey(sub_df, analysis_dict, save_path, load=True):
     Note: we only model people who were SENSITIVE to the manipulation (i.e., did not answer 'all_yes' or 'all_no'). 
     """
     kpt_per_ics(kpt_df_sensitive=df_kpt_sensitive, df_ics_groups=df_ics_with_groups, save_path=kpt_path)
-
-    exit()

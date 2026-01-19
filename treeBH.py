@@ -37,9 +37,6 @@ from dataclasses import dataclass
 from typing import List, Dict, Tuple, Optional, Iterable, Union, Literal
 import numpy as np
 import pandas as pd
-import math, textwrap
-import matplotlib.pyplot as plt
-import networkx as nx
 
 
 # Delimiters used between ancestor and child labels
@@ -48,10 +45,19 @@ _SP = r"\s+"
 
 
 def _norm(s: str) -> str:
+    """
+    check if string is a valid ancestor name (non-empty, meets length or has space)
+    """
     return re.sub(r"\s+", " ", (s or "")).strip()
 
 
 def _ok_ancestor(s: str, min_len: int) -> bool:
+    """
+
+    :param s:
+    :param min_len:
+    :return:
+    """
     s = (s or "").strip()
     return bool(s) and (len(s) >= min_len or " " in s)
 
@@ -117,6 +123,9 @@ def strip_ancestors_prefix(label: str, ancestor_names: List[str], *, min_ancesto
 
 @dataclass
 class TreeIndex:
+    """
+    Lightweight index structure for tree traversal
+    """
     nodes_df: pd.DataFrame
     parent_map: Dict[int, Optional[int]]
     name_map: Dict[int, str]
@@ -953,7 +962,9 @@ def get_treebh_selections(leaves_df: pd.DataFrame, groups: np.ndarray, q: List[f
 def manage_treebh(all_save_path: str, csv_path: str, q: float = 0.05, tag: Optional[str] = None,
                   write_csvs: bool = True, plot: bool = False, plot_filename: Optional[str] = None) -> Dict[str, str]:
     """
-    Manage a full TreeBH run (Simes-only) and write outputs
+    Manage a full TreeBH run (Simes-only) and write outputs.
+    The 'treebh_input_with_treebh' is the interesting csv - this is the file containing, for each node of the tree,
+    its original p-value, its name, and its final p-value.
     """
 
     os.makedirs(all_save_path, exist_ok=True)
@@ -1224,12 +1235,15 @@ def ascii_tree_from_csv(
 
 
 if __name__ == "__main__":
-    file_path = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory"
-    tree_file_path = os.path.join(file_path, "exploratory_p_values.csv")
-    ascii_tree_from_csv(tree_file_path, out_path=os.path.join(file_path, "tree_sketch.txt"))
+    """
+    Unified tree for all p-values in the exploratory, replication, and follow-up samples 
+    """
+    file_path = r"save_path"
+    tree_file_path = os.path.join(file_path, "p_values_combined.csv")
+    ascii_tree_from_csv(tree_file_path, out_path=os.path.join(file_path, "tree_sketch_combined.txt"))
 
     paths = manage_treebh(
-        all_save_path=r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory",
+        all_save_path=file_path,
         csv_path=tree_file_path,
         q=0.05,
         tag="",

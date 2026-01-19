@@ -1,12 +1,29 @@
+"""
+Thematic coding of free-text responses to:
+- "What characterizes people with higher moral status?"
+- "What characterizes animals with higher moral status?"
+
+The thematic coding is based on the following keyword dictionaries, which are mapped to base-themes as detailed below.
+
+Keywords can be:
+- Plain words: matched with optional plural suffix
+- STEM:prefix: matches any word starting with the prefix (e.g., "STEM:empath" matches "empathy", "empathetic", etc.)
+- REGEX:pattern: raw regex injection
+
+Author: RonyHirsch
+"""
+
 import re, os
 import pandas as pd
-import matplotlib.pyplot as plt
 import survey_mapping
 
 DASHES = dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2014\u2015"), "-")
 
 
 def normalize_text(s):
+    """
+    handle case, normalize dashes, and collapse whitespace
+    """
     if not isinstance(s, str):
         s = "" if pd.isna(s) else str(s)
     s = s.casefold().translate(DASHES)
@@ -14,102 +31,206 @@ def normalize_text(s):
     return s
 
 
-BASE_THEME_DEFS = {
+# Theme definitions
+
+PEOPLE_THEME_DEFS = {
     "consciousness/sentience": "Mentions of consciousness, awareness, self-awareness, valenced experience.",
     "intelligence/cognition": "Mentions of intelligence, cognition, memory, planning, learning, language, having a brain.",
-    "capacity to suffer/feel pain": "Mentions of pain, suffering, pleasure, emotions, nervous system/receptors.",
+    "capacity to suffer/feel pain": "Mentions of pain, suffering, pleasure, emotions.",
+    "vulnerability": "Mentions of vulnerability, threat, or being at risk (e.g., marginalized, endangered, scarce).",
+    "ecological role/importance": "Mentions of ecosystem/keystone roles, biodiversity, environmental impact.",
+    "benefit or harm to other people (from people)": "Mentions of prosocial/antisocial impact on people (e.g., charitable, helpful, harmful, threatening) when talking about humans.",
+}
+
+ANIMALS_THEME_DEFS = {
+    "consciousness/sentience": "Mentions of consciousness, awareness, self-awareness, valenced experience.",
+    "intelligence/cognition": "Mentions of intelligence, cognition, memory, planning, learning, language, having a brain.",
+    "capacity to suffer/feel pain": "Mentions of pain, suffering, pleasure, emotions.",
     "similarity/kinship to humans": "Mentions of human similarity, human-like traits, closeness to humans.",
     "domestication/pets/companionship": "Mentions of pets, domestication, loyalty, relationship/affection with people.",
     "ecological role/importance": "Mentions of ecosystem/keystone roles, biodiversity, environmental impact.",
     "endangerment/rarity": "Mentions of endangerment, extinction risk, rarity, conservation priority.",
-    # benefit/harm label is set per topic (people/animals) below
+    "benefit or harm to humans (from animals)": "Mentions of usefulness/benefit to humans or (non-)danger to humans, when talking about animals.",
     "taxa-based heuristics": "Mentions that assign status by taxa examples or contrasts (e.g., mammals>insects, dog>mosquito).",
 }
 
 
-BASE_THEME_KEYWORDS = {
-    "consciousness/sentience": [
-        "conscious", "consciousness", "awareness", "self awareness", "self-awareness",
-        "sentient", "sentience", "aware", "valenced", "mindful", "feel", "feelings",
-        "experience", "experiences"
+# keywords
+
+KW_CONSCIOUSNESS_BASE = [
+    "conscious", "consciousness", "conciousness", "concious", "selfconciousness",
+    "counciousness", "counciouness", "consiousness", "consiusness", "consciously",
+    "awareness", "awareneness", "aware",
+    "experience", "experiences",
+    "self awareness", "self-awareness", "self-awareneness", "self awarness",
+    "inner-self", "inner self",
+    "sentient", "sentience", "valenced", "mind",
+]
+
+KW_INTELLIGENCE = [
+    "iq", "intelligence", "intellegance", "intelligent", "STEM:intellect", "inteligence", "inteligent", "intelegence",
+    "cognative", "cognitive", "cognition", r"REGEX:(?<!I )\bthink(?:ing|s)?\b", "smarter", "capacity for thought",
+    "plan", "planning", "learn", "learning", "learned", "STEM:memor",
+    "reason", "reasoning", "problem-solving", "problem solving",
+    "STEM:understand", "language", "wise", "wisdom"
+]
+
+KW_CAPACITY_BASE = [
+    "pleasure", "pleasures", "emotion", "emotional", "receptors",
+    "nociception", "nociceptors", "sensation", "sensations", "stress", "distress", "fear",
+    "anxiety", "cry", "cries", "scream"
+]
+
+KW_SIMILARITY = [
+    "human", "humans", "people", "person", "persons", "humanlike", "human-like",
+    "similar", "similarity", "similaryty", "closer", "like us", "closely related", "kin", "kinship",
+    "mammalian", "primate", "primates", "anthropomorphic"
+]
+
+KW_DOMESTICATION = [
+    "pet", "pets", "domestic", "domesticated", "tame", "tamed", "service",
+    "STEM:loyal", "faithful", "relationship", "affection", "friends", "friend",
+    "companion", "companionship", "bond", "bonding", "attachment", "attached",
+    "owner", "owners", "family", "household",
+]
+
+KW_ECOLOGICAL = [
+    "ecology", "ecosystem", "ecosystems", "ecological", "environment", "environmental",
+    "biodiversity", "collapse", "STEM:pollinat",
+    "bees", "bee", "chain", "food web", "food-web", "trophic", "keystone",
+    "habitat", "habitats", "predator", "predators", "species",
+]
+
+KW_ENDANGERMENT = [
+    "STEM:endanger", "STEM:extinct",
+    "priority", "rarity", "rare", "scarce", "scarcity", "vulnerable", "threatened",
+    "conservation", "conserve", "protected", "protection",
+]
+
+KW_VULNERABILITY_PEOPLE_EXTRAS = [
+    "disabilities", "disabled", "sick", "ill", "STEM:discriminat"
+]
+
+KW_BENEFIT_HARM_BASE = [
+    "beneficial", "STEM:benefit", "STEM:use", "utility", "good for humanity", "edible", "edibility",
+    "STEM:danger", "STEM:threat", "STEM:kill", "STEM:aggress", "STEM:abus", "STEM:harm",
+    "STEM:crime", "STEM:criminal", "crimimal", "service",
+    "what they bring to society", "actions towards others", "add something to the lives of others",
+    "STEM:charit", "STEM:altru", "STEM:prosocial", "greater good", "helpful",
+    "non aggressive", "non-aggressive", "nonaggressive", "not aggressive", "agressive", "do bad things",
+    "prey", "pest", "pests", "service dogs", "provide for us", "venom", "venomous", "bite", "bites", "sting", "stings",
+    "disease", "diseases", "vector", "vectors", "docile", "friendly",
+]
+
+KW_TAXA = [
+    "mammal", "mammals", "insect", "insects", "ape", "apes",
+    "dog", "dogs", "cat", "cats", "chimp", "chimps", "chimpanzee", "chimpanzees", "orang", "clam", "clams",
+    "dolphin", "dolphins", "elephant", "elephants", "lion", "lions",
+    "bee", "bees", "monkey", "monkeys", "mosquito", "mosquitoes", "mosquitos",
+    "fly", "flies", "sponge", "sponges", "amoeba", "amoebas", "amoebae",
+    "bat", "bats", "ant", "ants", "beetle", "beetles", "fish",
+    "octopus", "octopi", "octopuses", "crow", "crows", "bird", "birds",
+    "reptile", "reptiles", "rat", "rats", "primate", "primates", "rodent", "rodents",
+    "spider", "spiders", "shark", "sharks", "whale", "whales",
+    "turtle", "turtles", "frog", "frogs", "cow", "cows", "pig", "pigs",
+    "sheep", "goat", "goats", "horse", "horses", "crab", "crabs",
+    "lobster", "lobsters", "shrimp", "snail", "snails", "worm", "worms",
+    "butterfly", "butterflies", "wasp", "wasps", "cuttlefish", "squid",
+    "fox", "wolves", "wolf", "bear", "bears",
+    "STEM:evolut",
+]
+
+
+"""
+People-specific components
+"""
+
+KW_CONSCIOUSNESS_PEOPLE = KW_CONSCIOUSNESS_BASE
+
+KW_CAPACITY_PEOPLE_BASE = KW_CAPACITY_BASE
+
+# Regex to capture "feel X pain" or "pain X feel" patterns for capacity theme in people
+_FEEL_WORDS = r"(?:feel|feeling|feelings|experience|experiences|sensation|sensations|suffer|suffering|hurting)"
+_PAIN_WORDS = r"(?:pain|suffering|distress|hurt|hurts|fear|anxiety)"
+KW_CAPACITY_PEOPLE_REGEX = (
+    rf"REGEX:\b{_FEEL_WORDS}\b(?:\W+\w+){{0,4}}?\b{_PAIN_WORDS}\b"
+    rf"|\b{_PAIN_WORDS}\b(?:\W+\w+){{0,4}}?\b{_FEEL_WORDS}\b"
+)
+
+# extra keywords for people's benefit/harm theme (empathy, moral-aim phrases, cause+harm regex)
+KW_BENEFIT_HARM_PEOPLE_EXTRAS = [
+    "STEM:empath", "STEM:help", "STEM:contribut", "STEM:good", "STEM:respect",
+    "considerate", "kind", "kindness", "kindhearted", "thoughtful", "dependable", "doing what is right",
+    "impact", "greater good", "STEM:hurt", "mindful", "solve",
+    "least amount of pain", "integrity", "intergrity", "authority", "responsibility", "STEM:murder", "hitler",
+    r"REGEX:\bcause(?:s|d|ing)?\b(?:\W+\w+){0,5}?(?:\b(?:pain|suffering|harm|distress|fear)\b)"
+]
+
+
+"""
+Animal-specific components
+"""
+
+# For animals, "feel/feelings" relates to consciousness/sentience
+KW_CONSCIOUSNESS_ANIMALS = KW_CONSCIOUSNESS_BASE + ["feel", "feelings"]
+
+# For animals, "empath" stays in capacity theme
+KW_CAPACITY_ANIMALS = KW_CAPACITY_BASE + ["STEM:empath", "hurt", "hurts", "hurting", "pain", "painful", "STEM:suffer"]
+
+
+"""
+FINAL THEME DICTIONARIES for the people question and the animal question
+"""
+
+PEOPLE_THEME_KEYWORDS = {
+    "consciousness/sentience": KW_CONSCIOUSNESS_PEOPLE,
+    "intelligence/cognition": KW_INTELLIGENCE,
+    "capacity to suffer/feel pain": KW_CAPACITY_PEOPLE_BASE + [
+        KW_CAPACITY_PEOPLE_REGEX,
+        r"REGEX:\b(?:capacity|ability|able|can)\s+(?:to\s+)?suffer"
     ],
-    "intelligence/cognition": [
-        "intelligence", "intelligent", "cognitive", "think", "thinking", "smarter", "capacity for thought",
-        "plan", "planning", "learn", "learning", "learned", "memor",
-        "reason", "reasoning", "problem-solving", "problem solving",
-        "understand", "understanding", "language", "brain", "neuron", "neurons"
-    ],
-    "capacity to suffer/feel pain": [
-        "pain", "painful", "suffer", "suffering", "suffers", "suffered",
-        "pleasure", "pleasures", "emotion", "emotional", "empath",
-        "nervous", "receptors", "nociception", "nociceptors",
-        "hurt", "hurts", "hurting", "sensation", "sensations",
-        "stress", "distress", "fear", "anxiety", "cry", "cries", "scream"
-    ],
-    "similarity/kinship to humans": [
-        "human", "humans", "people", "person", "persons", "humanlike", "human-like",
-        "similar", "similarity", "closer", "like us", "closely related", "kin", "kinship",
-        "mammalian", "primate", "primates", "anthropomorphic"
-    ],
-    "domestication/pets/companionship": [
-        "pet", "pets", "domestic", "domesticated", "tame", "tamed", "service",
-        "loyal", "loyalty", "relationship", "affection", "friends", "friend",
-        "companion", "companionship", "bond", "bonding", "attachment", "attached",
-        "owner", "owners", "family", "household"
-    ],
-    "ecological role/importance": [
-        "ecosystem", "ecosystems", "ecological", "environment", "environmental",
-        "biodiversity", "collapse", "pollinator", "pollinators", "pollination", "pollinate",
-        "bees", "bee", "chain", "food web", "food-web", "trophic", "keystone",
-        "habitat", "habitats", "predator", "predators", "prey", "species"
-    ],
-    "endangerment/rarity": [
-        "endanger", "endangered", "endangerment", "extinct", "extinction",
-        "priority", "rarity", "rare", "scarce", "scarcity", "vulnerable", "threatened",
-        "conservation", "conserve", "protected", "protection"
-    ],
-    # routed to topic label below (difference between people and animals)
-    "_benefit_or_harm_BASE": [
-        "beneficial", "benefit", "useful", "usefulness", "utility", "use", "good for humanity",
-        "what they bring to society", "actions towards others", "add something to the lives of others",
-        "danger", "dangerous", "threat", "threats", "threatening",
-        "aggressive", "aggression", "abuse",
-        "non aggressive", "non-aggressive", "nonaggressive", "not aggressive",
-        "harm", "harmless", "harmful", "commit crimes", "do bad things",
-        "prey", "pest", "pests", "service dogs",
-        "venom", "venomous", "bite", "bites", "sting", "stings",
-        "disease", "diseases", "vector", "vectors",
-        "docile", "friendly", "helpful", "charitable", "altruistic", "prosocial", "greater good"
-    ],
-    "taxa-based heuristics": [
-        "mammal", "mammals", "insect", "insects",
-        "dog", "dogs", "cat", "cats", "chimp", "chimps", "orang",
-        "dolphin", "dolphins", "elephant", "elephants", "lion", "lions",
-        "bee", "bees", "mosquito", "mosquitoes", "mosquitos",
-        "fly", "flies", "sponge", "sponges", "amoeba", "amoebas", "amoebae",
-        "bat", "bats", "ant", "ants", "beetle", "beetles", "fish",
-        "octopus", "octopi", "octopuses", "crow", "crows", "bird", "birds",
-        "reptile", "reptiles", "primate", "primates", "rodent", "rodents",
-        "spider", "spiders", "shark", "sharks", "whale", "whales",
-        "turtle", "turtles", "frog", "frogs", "cow", "cows", "pig", "pigs",
-        "sheep", "goat", "goats", "horse", "horses", "crab", "crabs",
-        "lobster", "lobsters", "shrimp", "snail", "snails", "worm", "worms",
-        "butterfly", "butterflies", "wasp", "wasps", "cuttlefish", "squid",
-        "fox", "wolves", "wolf", "bear", "bears"
-    ],
+    "vulnerability": KW_ENDANGERMENT + KW_VULNERABILITY_PEOPLE_EXTRAS,
+    "ecological role/importance": KW_ECOLOGICAL,
+    "benefit or harm to other people (from people)": (
+        KW_BENEFIT_HARM_BASE + KW_BENEFIT_HARM_PEOPLE_EXTRAS + KW_DOMESTICATION + KW_TAXA
+    ),
+}
+
+ANIMALS_THEME_KEYWORDS = {
+    "consciousness/sentience": KW_CONSCIOUSNESS_ANIMALS,
+    "intelligence/cognition": KW_INTELLIGENCE,
+    "capacity to suffer/feel pain": KW_CAPACITY_ANIMALS,
+    "similarity/kinship to humans": KW_SIMILARITY,
+    "domestication/pets/companionship": KW_DOMESTICATION,
+    "ecological role/importance": KW_ECOLOGICAL,
+    "endangerment/rarity": KW_ENDANGERMENT,
+    "benefit or harm to humans (from animals)": KW_BENEFIT_HARM_BASE,
+    "taxa-based heuristics": KW_TAXA,
 }
 
 
 def _kw_to_pattern(kw):
+    """
+    Convert a keyword spec (plain, STEM:, or REGEX:) to a regex pattern string
+    """
     kw = kw.strip().lower()
 
     # allow direct regex injection
     if kw.startswith("regex:"):
         return kw[len("regex:"):]
 
-    # exact-phrase special cases we already saw
+    # stem prefix: match any word starting with this
+    if kw.startswith("stem:"):
+        stem = kw[len("stem:"):]
+        return rf"\b{re.escape(stem)}\w*\b"
+
+    # exact-phrase special cases
     if kw in {"self awareness", "self-awareness"}:
         return r"\bself[ -]?awareness\b"
+    if kw in {"self-awareneness"}:  # typo variant
+        return r"\bself[ -]?awareneness\b"
+    if kw in {"inner-self", "inner self"}:
+        return r"\binner[ -]?self\b"
     if kw in {"non aggressive", "non-aggressive", "nonaggressive", "not aggressive"}:
         return r"\b(?:non-?aggressive|not aggressive)\b"
     if kw in {"problem-solving", "problem solving"}:
@@ -118,17 +239,9 @@ def _kw_to_pattern(kw):
         return r"\bhuman-?like\b"
     if kw in {"food web", "food-web"}:
         return r"\bfood[ -]?web\b"
+    if kw in {"provide for us"}:
+        return r"\bprovide(?:s|d|ing)?\s+(?:for\s+)?(?:us|humans|people|humanity)\b"
 
-    # curated stems: treat as prefixes
-    stem_prefixes = {
-        "memor", "empath", "pollinat", "understand",
-        "benefit", "use", "threat", "aggress", "harm",
-        "help", "charit", "altru", "prosocial", "abus"
-    }
-    if kw in stem_prefixes:
-        return rf"\b{re.escape(kw)}\w*\b"
-
-    # multi-word phrase handling with light flexibility
     if " " in kw:
         # special flexible phrases
         special_phrases = {
@@ -175,31 +288,27 @@ def _kw_to_pattern(kw):
         else:
             return rf"{first_pat}\b"
 
-    # single-word handling with pluralization for common nouns
-    plural_ok = {
-        "brain", "bee", "ant", "dog", "cat", "lion", "elephant", "dolphin", "mosquito",
-        "fly", "sponge", "bat", "beetle", "fish", "crow", "bird", "reptile", "primate",
-        "rodent", "spider", "shark", "whale", "turtle", "frog", "cow", "pig", "goat",
-        "horse", "crab", "lobster", "snail", "worm", "butterfly", "wasp", "cuttlefish", "squid",
-        "fox", "wolf", "bear", "owner", "family", "species", "person", "people",
-        "crime", "thing", "action", "society", "life", "other", "threat", "disease", "vector",
-        "friend"
-    }
+    # single-word handling: allow plural forms by default, with special cases for irregular plurals
     base = re.escape(kw)
-    if kw in plural_ok:
-        if kw == "fish":
-            return r"\bfish(?:es)?\b"
-        if kw == "fly":
-            return r"\bfly\b|\bflies\b"
-        if kw == "person":
-            return r"\bperson(?:s)?\b"
-        return rf"\b{base}(?:es|s)?\b"
 
-    # default exact whole-word/phrase
-    return rf"\b{base}\b"
+    # irregular plurals
+    if kw == "fish":
+        return r"\bfish(?:es)?\b"
+    if kw == "fly":
+        return r"\bfly\b|\bflies\b"
+    if kw == "person":
+        return r"\bperson(?:s)?\b"
+    if kw == "monkey":
+        return r"\bmonkey(?:s)?\b"
+
+    # default: allow optional plural suffix
+    return rf"\b{base}(?:e?s)?\b"
 
 
 def compile_theme_patterns(theme_keywords):
+    """
+    keyword lists into a dict of theme:compiled regex
+    """
     compiled = {}
     for t, kws in theme_keywords.items():
         parts = [_kw_to_pattern(kw) for kw in kws]
@@ -208,180 +317,123 @@ def compile_theme_patterns(theme_keywords):
     return compiled
 
 
-def parse_lines(raw, column_name=None):
-    raw_lines = raw.splitlines()
-    lines = []
-    colnorm = normalize_text(column_name) if column_name else None
-    for ln in raw_lines:
-        n = normalize_text(ln)
-        if not n:
-            continue
-        if n in {"nan", "none"}:
-            continue
-        if colnorm and n == colnorm:
-            continue
-        if not re.search(r"[a-z]", n):
-            continue
-        lines.append(n)
-    return lines
-
-
 def build_themes_for_column(column_name):
     """
-    Hard-coded, topic specific themes, also creates the modifications for humans (people) vs animals
+    :return: (subject, theme_defs, theme_keywords) for a given column name
     """
     if column_name == survey_mapping.PRIOS_Q_PEOPLE_WHAT[:-1]:
-        subject = "human"
-
-        # start from base, drop similarity
-        theme_defs = {k: v for k, v in BASE_THEME_DEFS.items() if k != "similarity/kinship to humans"}
-        theme_keywords = dict(BASE_THEME_KEYWORDS)
-        theme_keywords.pop("similarity/kinship to humans", None)
-
-        """
-        In people, feel/feelings is about feeling things and not about conscious vs. not 
-        So we'll remove 'feel' and 'feelings' from consciousness/sentience 
-        (they remain counted under capacity via regex)
-        """
-        cons_list = list(theme_keywords["consciousness/sentience"])
-        theme_keywords["consciousness/sentience"] = [kw for kw in cons_list if kw not in {"feel", "feelings"}]
-
-        # rename 'endangerment/rarity' - 'vulnerability' for humans
-        vul_keywords = theme_keywords.pop("endangerment/rarity")
-        theme_keywords["vulnerability"] = vul_keywords
-
-        # update definitions accordingly
-        theme_defs.pop("endangerment/rarity", None)
-        theme_defs["vulnerability"] = "Mentions of vulnerability, threat, or being at risk (e.g., marginalized, endangered, scarce)."
-
-        # move benefit/harm label to human wording
-        base_bh = theme_keywords.pop("_benefit_or_harm_BASE")
-        bh_label = "benefit or harm to other people (from people)"
-        theme_defs[bh_label] = ("Mentions of prosocial/antisocial impact on people (e.g., charitable, helpful, harmful, threatening) when talking about humans.")
-
-        # take keywords from 'domestication/pets/companionship' and 'taxa-based heuristics' and merge into BH.
-        domo_kws = theme_keywords.pop("domestication/pets/companionship")
-        taxa_kws = theme_keywords.pop("taxa-based heuristics")
-        # remove those themes from definitions, so they don't show as separate rows
-        theme_defs.pop("domestication/pets/companionship", None)
-        theme_defs.pop("taxa-based heuristics", None)
-
-        # remove 'empath' from capacity list and add to benefit/harm FOR HUMANS only
-        cap_list = list(theme_keywords["capacity to suffer/feel pain"])
-        theme_keywords["capacity to suffer/feel pain"] = [kw for kw in cap_list if kw != "empath"]
-        FEEL_WORDS = r"(?:feel|feeling|feelings|experience|experiences|sensation|sensations|suffer|suffering|hurting)"
-        PAIN_WORDS = r"(?:pain|suffering|distress|hurt|hurts|fear|anxiety)"
-        cap_core_regex = ( rf"REGEX:\b{FEEL_WORDS}\b(?:\W+\w+){{0,4}}?\b{PAIN_WORDS}\b"
-                           rf"|\b{PAIN_WORDS}\b(?:\W+\w+){{0,4}}?\b{FEEL_WORDS}\b")
-
-        kept = [kw for kw in cap_list if kw not in {"empath"}]
-        theme_keywords["capacity to suffer/feel pain"] = kept + [cap_core_regex]
-
-        # add empathy + moral-aim phrases to benefit/harm FOR HUMANS only
-        human_bh_extras = ["empathy", "empath", "doing what is right", "greater good", "least amount of pain",
-                           "REGEX:\\bcause(?:s|d|ing)?\\b(?:\\W+\\w+){0,5}?(?:\\b(?:pain|suffering|harm|distress|fear)\\b)"]
-
-        # merge everything into benefit/harm
-        theme_keywords[bh_label] = base_bh + human_bh_extras + domo_kws + taxa_kws
-
-        return subject, theme_defs, theme_keywords
+        return "human", PEOPLE_THEME_DEFS, PEOPLE_THEME_KEYWORDS
 
     elif column_name == survey_mapping.PRIOS_Q_ANIMALS_WHAT[:-1]:
-        subject = "animal"
-        # keep all themes, rename benefit/harm to humans (from animals)
-        theme_defs = dict(BASE_THEME_DEFS)
-        theme_keywords = dict(BASE_THEME_KEYWORDS)
-        base_bh = theme_keywords.pop("_benefit_or_harm_BASE")
-        bh_label = "benefit or harm to humans (from animals)"
-        theme_defs[bh_label] = "Mentions of usefulness/benefit to humans or (non-)danger to humans, when talking about animals."
-        theme_keywords[bh_label] = base_bh
-        return subject, theme_defs, theme_keywords
+        return "animal", ANIMALS_THEME_DEFS, ANIMALS_THEME_KEYWORDS
 
     else:
-        # header mismatch
         raise ValueError(
             f"Column header not recognized: {column_name!r}. "
             f"Expected exactly {survey_mapping.PRIOS_Q_PEOPLE_WHAT[:-1]!r} or {survey_mapping.PRIOS_Q_ANIMALS_WHAT[:-1]!r}."
         )
 
 
-def analyze(raw, column_name=None):
-
-    subject, theme_defs, theme_keywords = build_themes_for_column(column_name or "")
-    theme_patterns = compile_theme_patterns(theme_keywords)
-    lines = parse_lines(raw, column_name=column_name)
-    N = len(lines)
-
-    line_hits = []  # list of dicts: {"response": <str>, "themes": [..]}
-
-    counts = {t: 0 for t in theme_defs}
-    examples = {t: [] for t in theme_defs}
-
-    for ln in lines:
-        matched_themes = []
-        for t, pat in theme_patterns.items():
-            if pat.search(ln):
-                matched_themes.append(t)
-                counts[t] += 1
-                if len(examples[t]) < 3:
-                    examples[t].append(ln)
-        line_hits.append({"response": ln, "themes": "; ".join(matched_themes)})
-
-    # Build theme-level dataframe
-    rows = []
-    for t in theme_defs:
-        n_resp = counts[t]
-        prop = round(n_resp / N, 3) if N else 0.0
-        rows.append({
-            "theme": t,
-            "definition": theme_defs[t],
-            "n_theme_responses": n_resp,
-            "N": N,
-            "proportion": prop,
-            "example_1": examples[t][0] if len(examples[t]) > 0 else "",
-            "example_2": examples[t][1] if len(examples[t]) > 1 else "",
-            "example_3": examples[t][2] if len(examples[t]) > 2 else "",
-            "subject": subject,
-        })
-
-    df = pd.DataFrame(rows).sort_values("n_theme_responses", ascending=False)
-    df_line_hits = pd.DataFrame(line_hits)
-
-    return df, N, subject, df_line_hits
+def get_themes_for_text(text, theme_patterns):
+    """
+    Given a single text response and compiled theme patterns,
+    return a semicolon-separated string of matched themes.
+    """
+    if pd.isna(text) or str(text).strip() == '':
+        return ''
+    normalized = normalize_text(str(text))
+    matched = []
+    for theme, pat in theme_patterns.items():
+        if pat.search(normalized):
+            matched.append(theme)
+    return '; '.join(matched)
 
 
-def save_outputs(df, N, subject, save_path, save_name, df_line_hits=None):
-    csv_path = os.path.join(save_path, f"{save_name}_themes.csv")
-    df.to_csv(csv_path, index=False)
+def process_original_with_themes(input_path, output_path, summary_output_dir=None):
+    """
+    Process moral_decisions_prios.csv to find themes in both human and animal questions.
+    Adds a "[column] - themes" column next to each free-text column,
+    preserving response_id and all other columns.
+    Prints tagging statistics for each free-text column.
 
-    if df_line_hits is not None:
-        perline_path = os.path.join(save_path, f"{save_name}_perline_matches.csv")
-        df_line_hits.to_csv(perline_path, index=False)
+    If summary_output_dir is provided, saves a summary CSV per question with theme counts and percentages.
+    """
+    df = pd.read_csv(input_path)
 
-    # chart
-    plt.figure(figsize=(8, 6))
-    plt.bar(df["theme"], df["n_theme_responses"])
-    plt.xticks(rotation=60, ha="right")
-    plt.ylabel(f"Responses mentioning theme (N={N})")
-    title_subject = "animals" if subject == "animal" else "people"
-    plt.title(f"Themes justifying higher moral status for {title_subject}")
-    plt.tight_layout()
-    chart_path = os.path.join(save_path, f"{save_name}_theme_bar_chart.png")
-    plt.savefig(chart_path, dpi=200)
-    plt.close()
-    return csv_path, chart_path
+    # columns to process: (column_name_in_file, column_name_for_build_themes)
+    columns_to_process = [
+        (survey_mapping.PRIOS_Q_PEOPLE_WHAT, survey_mapping.PRIOS_Q_PEOPLE_WHAT[:-1]),
+        (survey_mapping.PRIOS_Q_ANIMALS_WHAT, survey_mapping.PRIOS_Q_ANIMALS_WHAT[:-1])
+    ]
+
+    print("\n" + "=" * 60)
+    print("THEMATIC CODING STATISTICS")
+    print("=" * 60)
+
+    for col_in_file, col_for_themes in columns_to_process:
+        if col_in_file not in df.columns:
+            print(f"\nColumn not found in file: {col_in_file!r}, skipping.")
+            continue
+
+        # build themes for this column
+        subject, theme_defs, theme_keywords = build_themes_for_column(col_for_themes)
+        theme_patterns = compile_theme_patterns(theme_keywords)
+
+        # create themes column
+        themes_col_name = f"{col_in_file[:-1]} - themes"
+        df[themes_col_name] = df[col_in_file].apply(
+            lambda x: get_themes_for_text(x, theme_patterns)
+        )
+
+        # reorder: place themes column right after the source column
+        cols = list(df.columns)
+        source_idx = cols.index(col_in_file)
+        cols.remove(themes_col_name)
+        cols.insert(source_idx + 1, themes_col_name)
+        df = df[cols]
+
+        # compute statistics
+        non_empty_mask = df[col_in_file].notna() & (df[col_in_file].str.strip() != '')
+        total_responses = non_empty_mask.sum()
+        tagged_mask = non_empty_mask & (df[themes_col_name] != '')
+        tagged_count = tagged_mask.sum()
+        tagged_pct = (tagged_count / total_responses * 100) if total_responses > 0 else 0
+
+        # print statistics
+        print(f"\n{col_for_themes}:")
+        print(f"  Total free-text responses: {total_responses}")
+        print(f"  Tagged with at least one theme: {tagged_count} ({tagged_pct:.1f}%)")
+        print(f"  Untagged: {total_responses - tagged_count} ({100 - tagged_pct:.1f}%)")
+
+        # generate summary CSV if output directory provided
+        if summary_output_dir is not None:
+            theme_counts = []
+            for theme in theme_keywords.keys():
+                # count responses containing this theme
+                count = df.loc[non_empty_mask, themes_col_name].str.contains(re.escape(theme), na=False).sum()
+                pct = (count / total_responses * 100) if total_responses > 0 else 0
+                theme_counts.append({
+                    'theme': theme,
+                    'count': count,
+                    'percentage': round(pct, 1)
+                })
+
+            summary_df = pd.DataFrame(theme_counts)
+            summary_filename = f"theme_summary_{subject}.csv"
+            summary_path = os.path.join(summary_output_dir, summary_filename)
+            summary_df.to_csv(summary_path, index=False)
+            print(f"  Summary saved: {summary_path}")
+
+    print("\n" + "=" * 60)
+
+    df.to_csv(output_path, index=False)
+    print(f"\nSaved: {output_path}")
+    return df
 
 
 if __name__ == "__main__":
-    p = r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all\exploratory\moral_consideration_prios"
-    file_path = os.path.join(p, "moral_decisions_prios_forSupp.csv")
-    df_data = pd.read_csv(file_path)
-    for col in df_data.columns:
-        if col not in (survey_mapping.PRIOS_Q_PEOPLE_WHAT[:-1], survey_mapping.PRIOS_Q_ANIMALS_WHAT[:-1]):
-            print(f"Skipping unrecognized column: {col!r}")
-            continue
-        col_series = df_data[col]
-        lines = [(str(v) if pd.notna(v) else "") for v in col_series.tolist()]
-        df_doc = '"""\n' + "\n".join(lines) + '\n"""'
-        df, N, subject, df_line_hits = analyze(df_doc, column_name=col)
-        csv_path, chart_path = save_outputs(df, N, subject, save_path=p, save_name=col, df_line_hits=df_line_hits)
+    p = r"...\moral_consideration_prios"
+
+    input_file = os.path.join(p, "moral_decisions_prios.csv")
+    output_file = os.path.join(p, "moral_decisions_prios_with_themes.csv")
+    process_original_with_themes(input_file, output_file, summary_output_dir=p)
