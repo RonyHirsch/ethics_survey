@@ -1,3 +1,12 @@
+"""
+Survey data preprocessing pipeline.
+
+Processes raw survey data, applies quality filters, corrects technical glitches, and splits the unified sample
+into exploratory (30%) and replication (70%) datasets using iterative stratification to preserve demographic balance.
+
+Author: RonyHirsch
+"""
+
 import os
 import pickle
 import warnings
@@ -26,6 +35,9 @@ CONSENT_YES = "I consent, begin the study"  # providing consent
 
 
 def convert_columns(df):
+    """
+    numeric and datetime columns to appropriate dtypes
+    """
     for column in df.columns:
         try:
             # Try to convert to numeric
@@ -302,6 +314,9 @@ def correct_prolific(df, prolific_data_path, save_path, exclude=False):
 
 
 def processed_paid_sample(subject_data_path, prolific_save_path, prolific_data_path, exclude_age_mismatch=False):
+    """
+    paid Prolific sample: load, clean, verify against Prolific demographics, and save
+    """
 
     # extract the data
     subject_data_raw = pd.read_csv(subject_data_path)
@@ -334,6 +349,9 @@ def processed_paid_sample(subject_data_path, prolific_save_path, prolific_data_p
 
 
 def processed_free_sample(subject_data_path, free_save_path):
+    """
+    free distribution sample: load, clean, and save
+    """
 
     # extract the data
     subject_data_raw = pd.read_csv(subject_data_path)
@@ -607,14 +625,5 @@ def manage_analysis(all_save_path, sample="exploratory"):
 
 
 if __name__ == '__main__':
-    # pre-process data and split to exploratory and replication samples.
-    #manage_processing(prolific_data_path=r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\prolific",
-    #                  free_data_path=r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\free",
-    #                  all_save_path=r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all",
-    #                  load=False,
-    #                  exclude_age_mismatch=False)
-
-    # analyze the relevant sample
-    manage_analysis(all_save_path=r"C:\Users\Rony\Documents\projects\ethics\survey_analysis\data\analysis_data\all",
-                    sample="exploratory")
+    manage_analysis(all_save_path=r"...\data", sample="replication")
 
