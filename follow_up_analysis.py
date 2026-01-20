@@ -1,3 +1,12 @@
+"""
+Follow-up survey data preprocessing and analysis pipeline.
+
+Processes raw exports from the follow-up sample. Structured similarly to process_survey.py but tailored to the
+follow-up sample.
+
+Author: RonyHirsch
+"""
+
 import os
 import pickle
 import warnings
@@ -19,8 +28,6 @@ MIN_DUR_SEC = 300  # 300 seconds = 5 minutes
 COL_BOT = "Q_RecaptchaScore"  # captcha score
 BOT_PASS = 0.8  # in the captcha,  1 = not a robot
 AGE_CONSENT = 18
-
-
 
 def convert_columns(df):
     for column in df.columns:
@@ -397,11 +404,9 @@ def manage_analysis(prolific_sub_dict, prolific_sub_df, all_save_path):
 
 
 if __name__ == '__main__':
-    # pre-process data and split to exploratory and replication samples.
     prolific_sub_dict, prolific_sub_df = manage_processing(
-        prolific_data_path=r"\survey_analysis\data\2025_10_25_follow-up",
+        prolific_data_path=r"...\follow-up",
         exclude_age_mismatch=False)
-
     manage_analysis(prolific_sub_dict=prolific_sub_dict, prolific_sub_df=prolific_sub_df,
-                    all_save_path=r"\survey_analysis\data\2025_10_25_follow-up\processed")
+                    all_save_path=r"...\follow-up\processed")
 
