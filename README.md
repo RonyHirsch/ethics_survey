@@ -101,7 +101,7 @@ freetext_explorer.py       ← Standalone thematic coding module
 ---
 
 
-## Citation
+## Cite
 
 Hirschhorn, R., Negro, N., & Mudrik, L. (2026). The perceived role of consciousness in moral status attributions.
 [doi.org/10.17605/OSF.IO/XXXXX]()
