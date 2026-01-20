@@ -42,13 +42,6 @@ The survey examined how the people perceive the relationship between consciousne
 |--------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `freetext_explorer.py` | Thematic coding of free-text responses about two specific questions probing what characterizes people/non-human animals with higher moral status (for people who thought some deserved higher moral status than others). Uses keyword dictionaries with support for stems and regex patterns to identify themes in open-ended (but mostly very short) responses. |
 
-
-### Free-Text Analysis
-
-| Script | Description |
-|--------|-------------|
-| `freetext_explorer.py` | Thematic coding of free-text responses about moral status determinants. Uses keyword dictionaries with support for stems and regex patterns to identify themes (consciousness, intelligence, suffering capacity, ecological role, etc.) in open-ended responses. |
-
 ### Interactive Website Data Generation
 
 | Script | Description |
@@ -61,31 +54,31 @@ The survey examined how the people perceive the relationship between consciousne
 ## Script Dependencies
 
 ```
-survey_mapping.py          ← Referenced by all scripts
-        │
-        ├─────────────────────┐──────────────────────┐
-        │                     │                      │
-        ▼                     │                      ▼
-process_survey.py             │              survey_website.py
-        │                     │                      │
-        ▼                     ▼                      ▼
-analyze_survey.py ──► follow_up_analysis.py  cross_questions.py
-        │                                            │
-        ├──► helper_funcs.py                         ▼
-        │         │                          [Website JSON files]
-        │         ▼
-        │    plotter.py
-        │
-        ├──► treeBH.py
-        │
-        ▼
+survey_mapping.py          <-- Referenced by all scripts
+        |
+        |---------------------+-----------------------+
+        |                     |                       |
+        v                     |                       v
+process_survey.py             |               survey_website.py
+        |                     |                       |
+        v                     v                       v
+analyze_survey.py ---> follow_up_analysis.py   cross_questions.py
+        |                                             |
+        |---> helper_funcs.py                         v
+        |         |                           [Website JSON files]
+        |         v
+        |    plotter.py
+        |
+        |---> treeBH.py
+        |
+        v
 manuscript_figures.py
-        │
-        ▼
+        |
+        v
    plotter.py
 
 
-freetext_explorer.py       ← Standalone thematic coding module
+freetext_explorer.py       <-- Standalone thematic coding module
 ```
 
 ---
@@ -99,7 +92,28 @@ freetext_explorer.py       ← Standalone thematic coding module
 4. **Processed Data** → `survey_website.py` + `cross_questions.py` → Privacy-preserving JSON for interactive website
 
 ---
+## Data Availability and Code Reproducibility
 
+The code in this repository operates on the data hosted on our [preregistered Open Science Framework (OSF) project]().
+The available data files do not include parameters removed to maintain respondents' privacy (e.g., demographics).
+
+Thus, while I present the codes I ran here for transparency and completion, the following analyses **cannot** be reproduced from the publicly available data:
+
+- Demographic breakdowns and cross-tabulations
+- Sample stratification procedures
+- The full data preprocessing pipeline (`process_survey.py`)
+
+The following **can** be reproduced:
+
+- Consciousness and moral status attribution analyses
+- Earth-in-Danger clustering and preference patterns
+- ICS group classifications
+- KPT moral scenario analyses
+- C vs MS correlation analyses
+- Free-text thematic coding (`freetext_explorer.py`)
+- Statistical tests on non-demographic variables
+
+---
 
 ## Cite
 
