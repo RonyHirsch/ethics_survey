@@ -1,5 +1,5 @@
 # The perceived role of consciousness in moral status attributions
-This repo contains all codes for processing, analyzing, and visualizing data from our large-scale survey on public perceptions of consciousness and moral status [(Hirschhorn, Negro & Mudrik, 2026)](). 
+This repo contains all codes for processing, analyzing, and visualizing data from our large-scale survey on public perceptions of consciousness and moral status [(Hirschhorn, Negro & Mudrik, 2026)](https://doi.org/10.31234/osf.io/ve6c5_v1). 
 
 The interactive website containing all survey questions and results can be found [here](https://ronyhirsch.github.io/minds-matter/?utm_source=github&utm_campaign=ethics_survey_readme). 
 
@@ -118,7 +118,7 @@ The following **can** be reproduced:
 ## Cite
 
 Hirschhorn, R., Negro, N., & Mudrik, L. (2026). The perceived role of consciousness in moral status attributions.
-[doi.org/10.17605/OSF.IO/XXXXX]()
+[doi.org/10.31234/osf.io/ve6c5_v1](https://doi.org/10.31234/osf.io/ve6c5_v1)
 
 ---
 
