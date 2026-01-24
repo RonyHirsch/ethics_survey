@@ -91,6 +91,18 @@ EXPERIENCE_SOURCE_OPTIONS = {
     'animal_types': ANIMAL_TYPES_OPTIONS,
 }
 
+# Moral Features options (multiselect question about what's important for moral considerations)
+MORAL_FEATURES_OPTIONS = [
+    'Language',
+    'Sensory abilities (detecting things through the senses)',
+    'Feelings of pleasure and suffering',
+    'Planning, goals',
+    'Self-awareness',
+    'Something it is like to be that creature/system',
+    'Thinking',
+    'Other'
+]
+
 # Short labels for the ANS_ALLNOS options (for display)
 ANS_ALLNOS_SHORT_LABELS = {
     survey_mapping.ANS_ALLNOS_KILL: "Wouldn't kill any creature",
@@ -715,56 +727,68 @@ def generate_multiselect_demo_crosstab(df, multiselect_col, demo_col, options, t
 def generate_crosstabs_for_filter(df, allowed_countries):
     """
     Generate all crosstabs for a single filter (subset of data).
+
+    Args:
+        df: DataFrame subset
+        allowed_countries: List of country names allowed for this subset
+
+    Returns:
+        dict of crosstabs
     """
     crosstabs = {}
-    
+
     # Helper to add crosstab if valid
     def add_crosstab(key, col1, col2, suppress=True):
         ct = get_crosstab(df, col1, col2, suppress=suppress)
         if ct is not None and len(ct) > 0:
             crosstabs[key] = ct
-    
-    # survey × demographics
+
+    # =========================================================================
+    # 1. Survey Questions × Demographics
+    # =========================================================================
     for topic_key, topic_info in SURVEY_QUESTIONS.items():
         for q_key, q_col in topic_info['columns'].items():
             if q_col not in df.columns:
                 continue
-            
+
             # Special handling for kill_all_nos (multi-select question)
             is_multiselect = (topic_key == 'kill' and q_key == 'kill_all_nos')
-            
+
             for demo_key, demo_col in DEMOGRAPHIC_COLS.items():
                 if demo_col not in df.columns:
                     continue
-                
+
                 # Special handling for multi-select × employment/country
                 if is_multiselect and demo_key in ('employment', 'country'):
                     if demo_key == 'country' and len(allowed_countries) == 0:
                         continue
-                    
+
                     work_df = df
                     if demo_key == 'country':
                         work_df = df[df[demo_col].isin(allowed_countries)]
-                    
+
                     key = make_crosstab_key('survey', f'{topic_key}_{q_key}', 'demo', demo_key)
                     ms_ct = generate_multiselect_demo_crosstab(work_df, q_col, demo_col, ANS_ALLNOS_OPTIONS)
                     if ms_ct is not None:
-                        ms_ct['note'] = 'NOTE: Only respondents who answered "No" to ALL killing questions were asked this question. Respondents could select multiple options.'
+                        ms_ct[
+                            'note'] = 'NOTE: Only respondents who answered "No" to ALL killing questions were asked this question. Respondents could select multiple options.'
                         crosstabs[key] = ms_ct
                     continue
-                
+
                 # Special handling for multi-select × other demographics (gender, age, education)
                 if is_multiselect and demo_key in ('gender', 'age', 'education'):
                     key = make_crosstab_key('survey', f'{topic_key}_{q_key}', 'demo', demo_key)
                     # Age and Education are fixed categories - no suppression needed
                     # Age, Education, and Gender are fixed categories - no suppression needed
                     should_suppress = demo_key not in ('age', 'education', 'gender')
-                    ms_ct = generate_multiselect_crosstab(df, q_col, demo_col, ANS_ALLNOS_OPTIONS, suppress=should_suppress)
+                    ms_ct = generate_multiselect_crosstab(df, q_col, demo_col, ANS_ALLNOS_OPTIONS,
+                                                          suppress=should_suppress)
                     if ms_ct is not None:
-                        ms_ct['note'] = 'NOTE: Only respondents who answered "No" to ALL killing questions were asked this question. Respondents could select multiple options.'
+                        ms_ct[
+                            'note'] = 'NOTE: Only respondents who answered "No" to ALL killing questions were asked this question. Respondents could select multiple options.'
                         crosstabs[key] = ms_ct
                     continue
-                
+
                 # Special handling for country/employment - compute allowed values PER PANEL
                 # This avoids the binary suppression issue where a value with enough
                 # respondents in one panel gets suppressed because another panel is too small
@@ -772,53 +796,53 @@ def generate_crosstabs_for_filter(df, allowed_countries):
                     # For country, check if we have allowed countries
                     if demo_key == 'country' and len(allowed_countries) == 0:
                         continue
-                    
+
                     # Get valid data for both columns
                     valid_df = df[[q_col, demo_col]].dropna()
                     if len(valid_df) < K_THRESHOLD:
                         continue
-                    
+
                     # Calculate TRUE row totals from ALL data (for panel headers)
                     survey_values = valid_df[q_col].unique()
                     true_row_totals = {}
                     for sv in survey_values:
                         true_row_totals[str(sv)] = int((valid_df[q_col] == sv).sum())
-                    
+
                     # Build per-panel data
                     # Each panel (survey answer value) gets its own top values
                     result = {}
                     displayed_row_totals = {}
                     displayed_col_totals = {}
                     all_values_seen = set()
-                    
+
                     for survey_val in survey_values:
                         sv_str = str(survey_val)
                         panel_df = valid_df[valid_df[q_col] == survey_val]
-                        
+
                         # Get top values FOR THIS PANEL
                         # For both country and employment, use get_allowed_countries logic
                         # (it works for any categorical column - gets top N values >= k_threshold)
                         panel_values = get_allowed_countries(panel_df, demo_col, MAX_COUNTRIES, K_THRESHOLD)
-                        
+
                         result[sv_str] = {}
                         displayed_row_totals[sv_str] = 0
-                        
+
                         for val in panel_values:
                             count = int((panel_df[demo_col] == val).sum())
                             result[sv_str][val] = count
                             displayed_row_totals[sv_str] += count
                             all_values_seen.add(val)
-                            
+
                             # Track column totals
                             if val not in displayed_col_totals:
                                 displayed_col_totals[val] = 0
                             displayed_col_totals[val] += count
-                    
+
                     # Calculate true column totals (for all values that appear in any panel)
                     true_col_totals = {}
                     for val in all_values_seen:
                         true_col_totals[val] = int((valid_df[demo_col] == val).sum())
-                    
+
                     # Only add if we have data
                     if result and any(panel_data for panel_data in result.values()):
                         key = make_crosstab_key('survey', f'{topic_key}_{q_key}', 'demo', demo_key)
@@ -834,26 +858,26 @@ def generate_crosstabs_for_filter(df, allowed_countries):
                             '_is_binary_cols': False,  # Country/Employment are not binary
                             '_all_suppressed': False,
                         }
-                
+
                 # Special handling for gender - also generate Male/Female-only version
                 elif demo_key == 'gender':
                     # Generate full gender crosstab (for demo × demo crossings, etc.)
                     # Gender is a fixed category - no suppression needed
                     key = make_crosstab_key('survey', f'{topic_key}_{q_key}', 'demo', demo_key)
                     add_crosstab(key, q_col, demo_col, suppress=False)
-                    
+
                     # Generate Male/Female-only crosstab for survey × gender
                     # First, get respondents with valid data for BOTH columns
                     valid_df = df[[q_col, demo_col]].dropna()
-                    
+
                     # Calculate actual totals from those with valid data
                     mf_valid = valid_df[valid_df[demo_col].isin(['Male', 'Female'])]
                     other_valid = valid_df[~valid_df[demo_col].isin(['Male', 'Female'])]
-                    
+
                     n_mf = len(mf_valid)
                     n_other = len(other_valid)
                     n_total_valid = len(valid_df)  # Total with valid data for both columns
-                    
+
                     if n_mf >= K_THRESHOLD:
                         mf_key = make_crosstab_key('survey', f'{topic_key}_{q_key}', 'demo', 'gender_mf')
                         # Get crosstab with gender as ROWS (first dimension) so Male/Female become panels
@@ -874,46 +898,135 @@ def generate_crosstabs_for_filter(df, allowed_countries):
                     # (unlike Country/Employment where showing small N could identify individuals)
                     should_suppress = demo_key not in ('age', 'education')
                     add_crosstab(key, q_col, demo_col, suppress=should_suppress)
-    
-    # survey × experience
+
+    # =========================================================================
+    # 2. Survey Questions × Experience Levels
+    # =========================================================================
     for topic_key, topic_info in SURVEY_QUESTIONS.items():
         for q_key, q_col in topic_info['columns'].items():
             if q_col not in df.columns:
                 continue
-            
+
             # Special handling for kill_all_nos (multi-select question)
-            is_multiselect = (topic_key == 'kill' and q_key == 'kill_all_nos')
-                
+            is_multiselect_kill = (topic_key == 'kill' and q_key == 'kill_all_nos')
+            # Special handling for moral_features (multi-select questions)
+            is_moral_features = (topic_key == 'moral_features')
+
             for exp_key, exp_col in EXPERIENCE_LEVEL_COLS.items():
                 if exp_col not in df.columns:
                     continue
-                
-                if is_multiselect:
+
+                if is_multiselect_kill:
                     # Multi-select × experience level - experience levels are fixed categories
                     key = make_crosstab_key('survey', f'{topic_key}_{q_key}', 'exp', exp_key)
                     ms_ct = generate_multiselect_crosstab(df, q_col, exp_col, ANS_ALLNOS_OPTIONS, suppress=False)
                     if ms_ct is not None:
-                        ms_ct['note'] = 'NOTE: Only respondents who answered "No" to ALL killing questions were asked this question. Respondents could select multiple options.'
+                        ms_ct[
+                            'note'] = 'NOTE: Only respondents who answered "No" to ALL killing questions were asked this question. Respondents could select multiple options.'
+                        crosstabs[key] = ms_ct
+                elif is_moral_features:
+                    # Moral Features × experience level - multiselect format
+                    key = make_crosstab_key('survey', f'{topic_key}_{q_key}', 'exp', exp_key)
+                    ms_ct = generate_multiselect_crosstab(df, q_col, exp_col, MORAL_FEATURES_OPTIONS, suppress=False)
+                    if ms_ct is not None:
+                        if q_key == 'moral_most_important':
+                            ms_ct[
+                                'note'] = 'NOTE: Data excludes Follow-up sample (not asked this question). Only asked if multiple features were marked as "Important".'
+                            ms_ct['excludes_followup'] = True
                         crosstabs[key] = ms_ct
                 else:
                     # Survey × experience level - experience levels are fixed categories
                     key = make_crosstab_key('survey', f'{topic_key}_{q_key}', 'exp', exp_key)
                     add_crosstab(key, q_col, exp_col, suppress=False)
-    
-    # survey × survey
+
+    # =========================================================================
+    # 2b. Moral Features Combined × Experience Levels
+    # =========================================================================
+    # Generate combined data (Important + Most Important stacked) crossed with experience levels
+    important_col = SURVEY_QUESTIONS['moral_features']['columns'].get('moral_important')
+    most_col = SURVEY_QUESTIONS['moral_features']['columns'].get('moral_most_important')
+
+    if important_col in df.columns:
+        for exp_key, exp_col in EXPERIENCE_LEVEL_COLS.items():
+            if exp_col not in df.columns:
+                continue
+
+            key = make_crosstab_key('survey', 'moral_features_combined', 'exp', exp_key)
+
+            # Generate combined data structure for stacked bars
+            combined_data = {'type': 'moral_features_combined', 'data': {}, '_totals': {}}
+
+            # Get valid rows
+            valid_df = df[[important_col, exp_col]].dropna()
+            if len(valid_df) < K_THRESHOLD:
+                continue
+
+            # For each experience level value
+            for exp_val in sorted(valid_df[exp_col].dropna().unique()):
+                exp_str = str(int(exp_val)) if pd.notna(exp_val) else str(exp_val)
+                exp_df = valid_df[valid_df[exp_col] == exp_val]
+                combined_data['_totals'][exp_str] = int(len(exp_df))
+                combined_data['data'][exp_str] = {'important': {}, 'most_important': {}}
+
+                # Count "Important" selections (inclusive)
+                for option in MORAL_FEATURES_OPTIONS:
+                    escaped_option = re.escape(option)
+                    mask = exp_df[important_col].astype(str).str.contains(escaped_option, regex=True, na=False)
+                    count = int(mask.sum())
+                    if count > 0:
+                        combined_data['data'][exp_str]['important'][option] = count
+
+                # Count "Most Important" selections
+                # IMPORTANT: If someone selected only ONE feature in "Important",
+                # that IS their "Most Important" (they weren't asked the follow-up question)
+                # EXCEPTION: Follow-up sample was never asked this question at all
+                if most_col in df.columns:
+                    # Get rows for this experience level with valid important data
+                    exp_mask = df[exp_col] == exp_val
+                    exp_subset = df[exp_mask].copy()
+
+                    # Check if this subset has ANY valid most_important responses
+                    # If ALL are NaN, this is likely Follow-up sample - don't do fillna
+                    has_any_most_important = exp_subset[most_col].notna().any()
+
+                    if has_any_most_important:
+                        # Fill missing most_important with important value (for single-selection respondents)
+                        # Only for non-Follow-up samples where SOME respondents were asked
+                        exp_subset['most_important_filled'] = exp_subset[most_col].fillna(exp_subset[important_col])
+                    else:
+                        # No valid most_important responses - don't fill (likely Follow-up sample)
+                        exp_subset['most_important_filled'] = exp_subset[most_col]
+
+                    # Now count from filled column
+                    most_filled_df = exp_subset[['most_important_filled']].dropna()
+                    for option in MORAL_FEATURES_OPTIONS:
+                        mask = most_filled_df['most_important_filled'].astype(str) == option
+                        count = int(mask.sum())
+                        if count > 0:
+                            combined_data['data'][exp_str]['most_important'][option] = count
+
+            if combined_data['data']:
+                combined_data[
+                    'note'] = 'NOTE: Data excludes Follow-up sample (not asked this question).\nNOTE: Only asked if multiple features were marked as "Important for Moral Considerations".'
+                combined_data['excludes_followup'] = True
+                crosstabs[key] = combined_data
+
+    # =========================================================================
+    # 3. Survey × Survey (selected pairs only)
+    # =========================================================================
     for topic1, q1_key, topic2, q2_key in SURVEY_SURVEY_PAIRS:
         col1 = get_survey_col(topic1, q1_key)
         col2 = get_survey_col(topic2, q2_key)
-        
+
         if col1 is None or col2 is None:
             continue
         if col1 not in df.columns or col2 not in df.columns:
             continue
-        
+
         # Check if either question is the multi-select kill_all_nos
         is_q1_multiselect = (topic1 == 'kill' and q1_key == 'kill_all_nos')
         is_q2_multiselect = (topic2 == 'kill' and q2_key == 'kill_all_nos')
-        
+
         if is_q1_multiselect or is_q2_multiselect:
             # Multi-select handling: the other variable becomes panels, multi-select becomes stacked bar data
             if is_q1_multiselect:
@@ -922,69 +1035,74 @@ def generate_crosstabs_for_filter(df, allowed_countries):
             else:
                 multiselect_col, crossing_col = col2, col1
                 key = make_crosstab_key('survey', f'{topic1}_{q1_key}', 'survey', f'{topic2}_{q2_key}')
-            
+
             # For survey×survey crossings, don't suppress values <5 since there's no privacy concern
             ms_ct = generate_multiselect_crosstab(df, multiselect_col, crossing_col, ANS_ALLNOS_OPTIONS, suppress=False)
             if ms_ct is not None:
-                ms_ct['note'] = 'NOTE: Only respondents who answered "No" to ALL killing questions were asked this question. Respondents could select multiple options.'
+                ms_ct[
+                    'note'] = 'NOTE: Only respondents who answered "No" to ALL killing questions were asked this question. Respondents could select multiple options.'
                 ms_ct['multiselect_var'] = 'kill_all_nos'  # Mark which variable is multiselect
                 crosstabs[key] = ms_ct
             continue
-        
+
         key = make_crosstab_key('survey', f'{topic1}_{q1_key}', 'survey', f'{topic2}_{q2_key}')
         # For survey×survey crossings, don't suppress values <5 since there's no privacy concern
         # (these are predefined answer options, not demographics)
         ct = get_crosstab(df, col1, col2, suppress=False)
         if ct is not None and len(ct) > 0:
             crosstabs[key] = ct
-    
-    # experience × experience
+
+    # =========================================================================
+    # 4. Experience Level × Experience Level
+    # =========================================================================
     exp_keys = list(EXPERIENCE_LEVEL_COLS.keys())
     for i, exp1_key in enumerate(exp_keys):
-        for exp2_key in exp_keys[i+1:]:  # Only upper triangle to avoid duplicates
+        for exp2_key in exp_keys[i + 1:]:  # Only upper triangle to avoid duplicates
             exp1_col = EXPERIENCE_LEVEL_COLS[exp1_key]
             exp2_col = EXPERIENCE_LEVEL_COLS[exp2_key]
-            
+
             if exp1_col not in df.columns or exp2_col not in df.columns:
                 continue
-            
+
             key = make_crosstab_key('exp', exp1_key, 'exp', exp2_key)
             add_crosstab(key, exp1_col, exp2_col)
-    
-    # experience × demographics
+
+    # =========================================================================
+    # 5. Experience Level × Demographics (safe pairs only)
+    # =========================================================================
     safe_demo_for_exp = ['gender', 'age', 'education']  # NOT country, NOT employment
-    
+
     for exp_key, exp_col in EXPERIENCE_LEVEL_COLS.items():
         if exp_col not in df.columns:
             continue
-            
+
         for demo_key in safe_demo_for_exp:
             demo_col = DEMOGRAPHIC_COLS[demo_key]
             if demo_col not in df.columns:
                 continue
-            
+
             # Check it's not forbidden
             if is_forbidden('exp', exp_key, 'demo', demo_key):
                 continue
-            
+
             key = make_crosstab_key('exp', exp_key, 'demo', demo_key)
             # Age, Education, and Gender are fixed categories - no suppression needed
             should_suppress = demo_key not in ('age', 'education', 'gender')
             add_crosstab(key, exp_col, demo_col, suppress=should_suppress)
-            
+
             # For gender, also generate Male/Female-only version with gender as panels
             if demo_key == 'gender':
                 # Get respondents with valid data for BOTH columns
                 valid_df = df[[exp_col, demo_col]].dropna()
-                
+
                 # Calculate actual totals
                 mf_valid = valid_df[valid_df[demo_col].isin(['Male', 'Female'])]
                 other_valid = valid_df[~valid_df[demo_col].isin(['Male', 'Female'])]
-                
+
                 n_mf = len(mf_valid)
                 n_other = len(other_valid)
                 n_total_valid = len(valid_df)
-                
+
                 if n_mf >= K_THRESHOLD:
                     mf_key = make_crosstab_key('exp', exp_key, 'demo', 'gender_mf')
                     # Get crosstab with gender as ROWS (first dimension) so Male/Female become panels
@@ -998,8 +1116,10 @@ def generate_crosstabs_for_filter(df, allowed_countries):
                             'n_removed': n_other,
                             'note': f'NOTE: Other genders were removed due to small N (N={n_other} removed)' if n_other > 0 else None
                         }
-    
-    # demographics × demographics
+
+    # =========================================================================
+    # 6. Demographics × Demographics (safe pairs only - same as existing)
+    # =========================================================================
     safe_demo_pairs = [
         ('gender', 'age'),
         ('gender', 'education'),
@@ -1007,44 +1127,46 @@ def generate_crosstabs_for_filter(df, allowed_countries):
         ('education', 'employment'),
         ('gender', 'employment'),
     ]
-    
+
     for demo1_key, demo2_key in safe_demo_pairs:
         demo1_col = DEMOGRAPHIC_COLS[demo1_key]
         demo2_col = DEMOGRAPHIC_COLS[demo2_key]
-        
+
         if demo1_col not in df.columns or demo2_col not in df.columns:
             continue
-        
+
         key = make_crosstab_key('demo', demo1_key, 'demo', demo2_key)
         # Employment/Country need suppression; age/education/gender don't
         variable_categories = ('employment', 'country')
         should_suppress = demo1_key in variable_categories or demo2_key in variable_categories
         add_crosstab(key, demo1_col, demo2_col, suppress=should_suppress)
-    
-    # experience × survey
+
+    # =========================================================================
+    # 7. Experience Sources × Survey Questions (selected pairs only)
+    # =========================================================================
     # ALL experience sources use multiselect crosstabs with the generate_multiselect_crosstab function
     # This is critical because some options contain commas (e.g., "Professional (work involving ethical decisions, law/medicine/social work)")
     # and naive comma-splitting would break them
     for src_key, topic_key, q_key in EXPERIENCE_SOURCE_SURVEY_PAIRS:
         src_col = EXPERIENCE_SOURCE_COLS.get(src_key)
         survey_col = get_survey_col(topic_key, q_key)
-        
+
         if src_col is None or survey_col is None:
             continue
         if src_col not in df.columns or survey_col not in df.columns:
             continue
-        
+
         key = make_crosstab_key('survey', f'{topic_key}_{q_key}', 'expsrc', src_key)
-        
+
         try:
             temp_df = df[[survey_col, src_col]].dropna()
             if len(temp_df) < K_THRESHOLD:
                 continue
-            
+
             # Use predefined options from EXPERIENCE_SOURCE_OPTIONS
             # This avoids comma-splitting issues for categories that contain commas
             options = EXPERIENCE_SOURCE_OPTIONS.get(src_key, [])
-            
+
             if not options:
                 # Fallback: try to extract options from data (only safe for animal_types which has no internal commas)
                 if src_key == 'animal_types':
@@ -1058,7 +1180,7 @@ def generate_crosstabs_for_filter(df, allowed_countries):
                 else:
                     print(f"  Warning: No predefined options for {src_key}, skipping")
                     continue
-            
+
             # Generate multiselect crosstab with survey answers as panels
             ms_ct = generate_multiselect_crosstab(df, src_col, survey_col, options, suppress=False)
             if ms_ct and ms_ct.get('data'):
@@ -1068,46 +1190,52 @@ def generate_crosstabs_for_filter(df, allowed_countries):
         except Exception as e:
             print(f"  Warning: Could not process {src_key} × {topic_key}_{q_key}: {e}")
             continue
-    
-    # simple experience × binary (we use regular crosstabs)
+
+    # =========================================================================
+    # 7b. Simple Experience Questions × Survey Questions (e.g., pets)
+    # =========================================================================
+    # For simple Yes/No questions, we use regular crosstabs
     # EXCEPT for kill_all_nos which is multiselect
     for simple_key, topic_key, q_key in EXPERIENCE_SIMPLE_SURVEY_PAIRS:
         simple_col = EXPERIENCE_SIMPLE_COLS.get(simple_key)
         survey_col = get_survey_col(topic_key, q_key)
-        
+
         if simple_col is None or survey_col is None:
             continue
         if simple_col not in df.columns or survey_col not in df.columns:
             continue
-        
+
         # Use expsrc prefix so it appears under Experience Sources in the UI
         key = make_crosstab_key('survey', f'{topic_key}_{q_key}', 'expsrc', simple_key)
-        
+
         # Special handling for kill_all_nos (multi-select question)
         is_multiselect = (topic_key == 'kill' and q_key == 'kill_all_nos')
         if is_multiselect:
             # Use multiselect crosstab with pets (Yes/No) as the crossing variable
             ms_ct = generate_multiselect_crosstab(df, survey_col, simple_col, ANS_ALLNOS_OPTIONS)
             if ms_ct and ms_ct.get('data'):
-                ms_ct['note'] = 'NOTE: Only respondents who answered "No" to ALL killing questions were asked this question. Respondents could select multiple options.'
+                ms_ct[
+                    'note'] = 'NOTE: Only respondents who answered "No" to ALL killing questions were asked this question. Respondents could select multiple options.'
                 crosstabs[key] = ms_ct
         else:
             add_crosstab(key, survey_col, simple_col)
-    
-    # experience × attributions
+
+    # =========================================================================
+    # 8. Experience Levels × Attributions (selected pairs only)
+    # =========================================================================
     for exp_key, topic_key, q_key in EXPERIENCE_ATTRIBUTION_PAIRS:
         exp_col = EXPERIENCE_LEVEL_COLS.get(exp_key)
         survey_col = get_survey_col(topic_key, q_key)
-        
+
         if exp_col is None or survey_col is None:
             continue
         if exp_col not in df.columns or survey_col not in df.columns:
             continue
-        
+
         key = make_crosstab_key('survey', f'{topic_key}_{q_key}', 'exp', exp_key)
         # Experience levels are fixed categories - no suppression needed
         add_crosstab(key, survey_col, exp_col, suppress=False)
-    
+
     return crosstabs
 
 
